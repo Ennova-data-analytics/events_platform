@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    container_name: ennova-events-db-local
+    environment:
+      - POSTGRES_USER=ennova_test
+      - POSTGRES_PASSWORD=ennova123
+      - POSTGRES_DB=ennova_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - ennova-pg-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  ennova-pg-data:
