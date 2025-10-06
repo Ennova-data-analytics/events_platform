@@ -31,8 +31,17 @@ onMounted(async () => {
   }
 });
 
-const handleUpdateEvent = (eventData) => {
+const handleUpdateEvent = async (eventData, imageFile) => {
   const eventId = route.params.id;
-  eventStore.updateEvent(eventId, eventData);
-};
+  
+  try {
+    await eventStore.updateEvent(eventId, eventData);
+    
+    if (imageFile && imageFile.length > 0) {
+      await eventStore.uploadEventImage(eventId, imageFile[0]);
+    }
+    
+  } catch (error) {
+    console.error("Failed to update event:", error);
+  }}
 </script>

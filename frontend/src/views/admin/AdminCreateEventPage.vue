@@ -18,24 +18,19 @@ const eventStore = useEventStore();
 const router = useRouter();
 
 
-// const handleCreateEvent = (eventData) => {
-//   eventStore.createEvent(eventData);
-// };
 
 const handleCreateEvent = async (eventData, imageFile) => {
   console.log("handleCreateEvent received imageFile:", imageFile); 
   try {
     console.log("Calling eventStore.createEvent...");
-    const newEvent = await eventStore.createEvent(eventData); // This works
+    const newEvent = await eventStore.createEvent(eventData); 
     console.log("...createEvent finished. Received new event object:", newEvent);
 
-    // --- THE PROBLEM IS ALMOST CERTAINLY HERE ---
-    if (newEvent && newEvent.event_id && imageFile) {
+   if (newEvent && newEvent.event_id && imageFile && imageFile.length > 0) {
       console.log(`Uploading image for new event ID: ${newEvent.event_id}`);
-      await eventStore.uploadEventImage(newEvent.event_id, imageFile);
+      await eventStore.uploadEventImage(newEvent.event_id, imageFile[0]);
       console.log("...image upload finished.");
     }
-    // --- END PROBLEM AREA ---
     
     router.push({ name: 'admin-events' });
   } catch (error) {
