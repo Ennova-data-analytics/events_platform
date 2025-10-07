@@ -50,14 +50,12 @@ const handleUpdateEvent = async (eventData, imageFile) => {
     console.log('imageFile exists?', !!imageFile);
     console.log('imageFile.length > 0?', imageFile?.length > 0);
     
-    if (imageFile && imageFile.length > 0) {
-      console.log('ATTEMPTING IMAGE UPLOAD with file:', imageFile[0]);
-      await eventStore.uploadEventImage(eventId, imageFile[0]);
+    if (imageFile) {
+      console.log('ATTEMPTING IMAGE UPLOAD with file:', imageFile);
+      await eventStore.uploadEventImage(eventId, imageFile);
       console.log('Image upload completed');
-
     } else {
-      console.log('IMAGE UPLOAD SKIPPED - Condition not met');
-
+      console.log('IMAGE UPLOAD SKIPPED - No file provided');
     }
     
   } catch (error) {
