@@ -81,9 +81,11 @@ class Event(EventBase):
 
     creator: "User" = None 
     @field_serializer('image_url')
-    def serialise_image_url(self, image_url_key: str, _info):
-        if image_url_key:
-            return s3_service.generate_predesigned_url(image_url_key)
+    def serialise_image_url(self, image_url: str, _info):
+        if image_url:
+            if image_url.startswith('http'):
+                return image_url
+            return s3_service.generate_predesigned_url(image_url)
         return None 
     
     model_config = ConfigDict(from_attributes=True)
