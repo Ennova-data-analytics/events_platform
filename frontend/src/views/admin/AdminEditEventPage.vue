@@ -33,12 +33,31 @@ onMounted(async () => {
 
 const handleUpdateEvent = async (eventData, imageFile) => {
   const eventId = route.params.id;
+
+  console.log('=== UPDATE EVENT DEBUG ===');
+  console.log('Event ID:', eventId);
+  console.log('Event Data:', eventData);
+  console.log('Image File (raw):', imageFile);
+  console.log('Image File type:', typeof imageFile);
+  console.log('Is Array?:', Array.isArray(imageFile));
+  console.log('Array length:', imageFile?.length);
+  console.log('First element:', imageFile?.[0]);
   
   try {
     await eventStore.updateEvent(eventId, eventData);
+    console.log('Event updated successfully');
+    console.log('Checking image upload condition...');
+    console.log('imageFile exists?', !!imageFile);
+    console.log('imageFile.length > 0?', imageFile?.length > 0);
     
     if (imageFile && imageFile.length > 0) {
+      console.log('ATTEMPTING IMAGE UPLOAD with file:', imageFile[0]);
       await eventStore.uploadEventImage(eventId, imageFile[0]);
+      console.log('Image upload completed');
+
+    } else {
+      console.log('IMAGE UPLOAD SKIPPED - Condition not met');
+
     }
     
   } catch (error) {

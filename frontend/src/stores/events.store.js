@@ -86,10 +86,22 @@ export const useEventStore = defineStore('events', () => {
     }
 
     async function uploadEventImage(eventId, imageFile) {
+        console.log('=== STORE uploadEventImage DEBUG ===');
+        console.log('Event ID:', eventId);
+        console.log('Image File:', imageFile);
+        console.log('File name:', imageFile?.name);
+        console.log('File size:', imageFile?.size);
+        console.log('File type:', imageFile?.type);
         try {
-            await AdminService.uploadEventImage(eventId, imageFile);
+            console.log('Calling AdminService.uploadEventImage...');
+            const result = await AdminService.uploadEventImage(eventId, imageFile);
+            console.log('Upload successful, result:', result);
+            return result 
         } catch (err) {
             console.error('Failed to upload event image:', err);
+            console.error('Error details:', err.response?.data);
+            console.error('Error status:', err.response?.status);
+            throw err;
         }
     }
 

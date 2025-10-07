@@ -124,10 +124,19 @@ onMounted(async () => {
 });
 
 const handleSubmit = () => {
+  console.log('=== EVENT FORM SUBMIT DEBUG ===');
+  console.log('Image File ref value:', imageFile.value);
+  console.log('Image File type:', typeof imageFile.value);
+  console.log('Is Array?:', Array.isArray(imageFile.value));
+  console.log('Length:', imageFile.value?.length);
  
   const fileToSend = imageFile.value;
+  console.log('File to send:', fileToSend);
+
 
  
   emit('submit', editableEvent.value, fileToSend);
+  console.log('Emitted submit event');
+
 };
 </script>
