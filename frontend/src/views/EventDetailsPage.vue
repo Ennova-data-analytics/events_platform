@@ -11,12 +11,32 @@
     <div v-else-if="eventStore.currentEvent">
       <v-row>
         <v-col cols="12" md="8">
-          <v-img 
-            :src="eventStore.currentEvent.image_url || 'https://cdn.vuetifyjs.com/images/cards/docks.jpg'" 
-            height="400px" 
-            cover 
+          <v-img
+            :src="eventStore.currentEvent.image_url || 'https://cdn.vuetifyjs.com/images/cards/docks.jpg'"
+            height="400px"
+            cover
             class="rounded-lg"
-          ></v-img>
+            :gradient="'to top, rgba(0,0,0,.3), rgba(0,0,0,0)'"
+          >
+            <template v-slot:placeholder>
+              <v-row class="fill-height ma-0" align="center" justify="center">
+                <v-progress-circular
+                  indeterminate
+                  color="grey-lighten-4"
+                  size="64"
+                ></v-progress-circular>
+              </v-row>
+            </template>
+
+            <template v-slot:error>
+              <v-row class="fill-height ma-0 bg-grey-lighten-3" align="center" justify="center">
+                <div class="text-center">
+                  <v-icon size="64" color="grey">mdi-image-broken-variant</v-icon>
+                  <p class="text-grey mt-2">Failed to load image</p>
+                </div>
+              </v-row>
+            </template>
+          </v-img>
         </v-col>
         
         <v-col cols="12" md="4">

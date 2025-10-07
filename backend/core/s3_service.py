@@ -1,4 +1,5 @@
 import boto3
+import mimetypes
 from botocore.client import Config
 from core.config import settings
 
@@ -15,9 +16,25 @@ s3_client = boto3.client(
         ))
 
 def upload_file_to_s3(file_obj, object_name: str) -> str:
-    """Uploads a file-like object to an S3 and returns its public URL"""
-    s3_client.upload_fileobj(file_obj, settings.S3_BUCKET_NAME, object_name)
-    return object_name
+    """Uploads a file-like object to R2 and returns its public URL"""
+    content_type, _ = mimetypes.guess_type(object_name)
+    if not content_type:
+        content_type = 'application/octet-stream'
+
+    extra_args = {
+        'CacheControl': 'public, max-age=31536000', 
+        'ContentType': content_type
+    }
+
+    s3_client.upload_fileobj(
+        file_obj,
+        settings.S3_BUCKET_NAME,
+        object_name,
+        ExtraArgs=extra_args
+    )
+
+    public_url = f"{settings.R2_PUBLIC_DOMAIN}/{object_name}"
+    return public_url
 
 def generate_predesigned_url(object_name: str) -> str:
     """Generates a predesigned URL to share a private S3 object"""

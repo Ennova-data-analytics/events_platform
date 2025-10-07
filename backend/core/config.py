@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     R2_API_TOKEN_VALUE: str
     ACCOUNT_ID: str 
 
+    R2_PUBLIC_DOMAIN: str 
+
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

@@ -75,9 +75,9 @@ def upload_event_image(event_id: int, file: UploadFile = File(...), db: Session 
     file_extension = file.filename.split('.')[-1]
     unique_filename = f"event_images/event_{event_id}_{int(datetime.now().timestamp())}.{file_extension}"
 
-    image_key = s3_service.upload_file_to_s3(file.file, unique_filename)
+    image_url = s3_service.upload_file_to_s3(file.file, unique_filename)
 
-    db_event.image_url = image_key
+    db_event.image_url = image_url
     db.commit()
     db.refresh(db_event)
 
