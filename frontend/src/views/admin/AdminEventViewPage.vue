@@ -32,13 +32,13 @@
                       <div v-for="(value, key) in item.form_responses" :key="key" class="mb-2 d-flex align-center">
                         <strong class="text-capitalize mr-2">{{ key.replace(/_/g, ' ') }}:</strong>
                         <span>{{ value }}</span>
-                        <template v-if="typeof value === 'string' && value.startsWith('user_uploads/')">
+                        <template v-if="typeof value === 'string' && isFileUrl(value)">
                           <v-btn
                             class="ml-2"
                             variant="tonal"
                             size="small"
                             prepend-icon="mdi-download"
-                            @click="getViewableUrl(value)"
+                            @click="viewFile(value)"
                           >
                             View File
                           </v-btn>
@@ -79,13 +79,13 @@
                                     <div v-for="(value, key) in item.form_responses" :key="key" class="mb-2 d-flex align-center">
                                         <strong class="text-capitalize mr-2">{{ key.replace(/_/g, ' ') }}:</strong>
                                         <span>{{ value }}</span>
-                                        <template v-if="typeof value === 'string' && value.startsWith('user_uploads/')">
+                                        <template v-if="typeof value === 'string' && isFileUrl(value)">
                                             <v-btn
                                                 class="ml-2"
                                                 variant="tonal"
                                                 size="small"
                                                 prepend-icon="mdi-download"
-                                                @click="getViewableUrl(value)"
+                                                @click="viewFile(value)"
                                             >
                                                 View File
                                             </v-btn>
@@ -131,10 +131,6 @@ const approvedAttendees = computed(() => allAttendees.value.filter(a => a.status
 const paidAttendees = computed(() => allAttendees.value.filter(a => a.status === 'Paid'));
 const rejectedAttendees = computed(() => allAttendees.value.filter(a => a.status === 'Rejected'));
 
-const filteredAttendees = (status) => {
-  return allAttendees.value.filter(a => a.status.toLowerCase().replace(' ', '') === status);
-};
-
 const attendeeHeaders = ref([
   { title: 'Full Name', key: 'user.full_name' },
   { title: 'Email', key: 'user.email' },
@@ -179,12 +175,23 @@ async function handleApproval(attendee, action) {
     snackbar.value = { show: true, text: `Failed to ${action} applicant.`, color: 'error' };
   }
 }
-async function getViewableUrl(fileKey) {
+function isFileUrl(value) {
+  if (!value) return false;
+  if (value.startsWith('http')) return true;
+  if (value.startsWith('user_uploads/')) return true;
+  return false;
+}
+
+async function viewFile(fileValue) {
   try {
-    const response = await UploadService.getPresignedUrl(fileKey);
-    window.open(response.data.url, '_blank'); 
+    if (fileValue.startsWith('http')) {
+      window.open(fileValue, '_blank');
+    } else {
+      const response = await UploadService.getPresignedUrl(fileValue);
+      window.open(response.data.url, '_blank');
+    }
   } catch (error) {
-    console.error("Could not get presigned URL", error);
+    console.error("Could not open file", error);
     snackbar.value = { show: true, text: 'Could not open file.', color: 'error' };
   }
 }
