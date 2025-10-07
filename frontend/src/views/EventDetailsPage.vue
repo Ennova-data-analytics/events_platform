@@ -75,9 +75,16 @@
       </v-row>
       
       <v-row class="mt-8">
-        <v-col>
-          <h2 class="text-h5">About this event</h2>
-          <p class="mt-4" style="white-space: pre-wrap;">{{ eventStore.currentEvent.description }}</p>
+        <v-col cols="12">
+          <v-card elevation="2" class="pa-8">
+            <h2 class="text-h4 font-weight-bold mb-6">About this event</h2>
+            <v-divider class="mb-6"></v-divider>
+            
+            <div 
+              class="event-description" 
+              v-html="parsedDescription"
+            ></div>
+          </v-card>
         </v-col>
       </v-row>
     </div>
@@ -172,7 +179,22 @@ import { useEventStore } from '@/stores/events.store.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 import { FormTemplateService } from '@/services/FormTemplateService.js';
 import { UploadService } from '@/services/UploadService.js';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
+marked.setOptions({
+  breaks: true,        
+  gfm: true,          
+  headerIds: false,   
+});
+
+const parsedDescription = computed(() => {
+  if (!eventStore.currentEvent?.description) return '';
+  
+  const rawHtml = marked.parse(eventStore.currentEvent.description);
+  
+  return DOMPurify.sanitize(rawHtml);
+});
 
 const route = useRoute();
 const eventStore = useEventStore();
@@ -299,3 +321,210 @@ function handlePayment() {
   alert('Payment flow is not yet implemented.');
 }
 </script>
+
+<style scoped>
+/* Markdown content styling */
+.event-description {
+  font-size: 16px;
+  line-height: 1.8;
+  color: #2c3e50;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+/* Headings */
+.event-description :deep(h1) {
+  font-size: 28px;
+  font-weight: 700;
+  margin-top: 32px;
+  margin-bottom: 16px;
+  color: #1a1a1a;
+  line-height: 1.3;
+}
+
+.event-description :deep(h2) {
+  font-size: 24px;
+  font-weight: 600;
+  margin-top: 28px;
+  margin-bottom: 14px;
+  color: #1a1a1a;
+  line-height: 1.3;
+}
+
+.event-description :deep(h3) {
+  font-size: 20px;
+  font-weight: 600;
+  margin-top: 24px;
+  margin-bottom: 12px;
+  color: #2a2a2a;
+  line-height: 1.4;
+}
+
+/* Remove top margin from first heading */
+.event-description :deep(h1:first-child),
+.event-description :deep(h2:first-child),
+.event-description :deep(h3:first-child) {
+  margin-top: 0;
+}
+
+/* Paragraphs */
+.event-description :deep(p) {
+  margin-bottom: 16px;
+  color: #2c3e50;
+}
+
+/* First paragraph gets larger text */
+.event-description :deep(p:first-of-type) {
+  font-size: 18px;
+  font-weight: 400;
+  color: #1a1a1a;
+}
+
+/* Lists */
+.event-description :deep(ul),
+.event-description :deep(ol) {
+  margin: 16px 0;
+  padding-left: 28px;
+}
+
+.event-description :deep(li) {
+  margin-bottom: 10px;
+  line-height: 1.7;
+}
+
+.event-description :deep(ul li) {
+  list-style-type: disc;
+}
+
+.event-description :deep(ol li) {
+  list-style-type: decimal;
+}
+
+/* Nested lists */
+.event-description :deep(ul ul),
+.event-description :deep(ol ol),
+.event-description :deep(ul ol),
+.event-description :deep(ol ul) {
+  margin: 8px 0;
+}
+
+/* Bold and Italic */
+.event-description :deep(strong) {
+  font-weight: 600;
+  color: #000;
+}
+
+.event-description :deep(em) {
+  font-style: italic;
+}
+
+/* Links */
+.event-description :deep(a) {
+  color: #1976d2;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.event-description :deep(a:hover) {
+  color: #1565c0;
+  text-decoration: underline;
+}
+
+/* Blockquotes */
+.event-description :deep(blockquote) {
+  border-left: 4px solid #1976d2;
+  padding-left: 16px;
+  margin: 20px 0;
+  font-style: italic;
+  color: #555;
+  background-color: #f5f9fc;
+  padding: 16px;
+  border-radius: 4px;
+}
+
+/* Code */
+.event-description :deep(code) {
+  background-color: #f5f5f5;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', Consolas, monospace;
+  font-size: 14px;
+  color: #c7254e;
+}
+
+.event-description :deep(pre) {
+  background-color: #f5f5f5;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 16px 0;
+}
+
+.event-description :deep(pre code) {
+  background: none;
+  padding: 0;
+  color: #333;
+}
+
+/* Horizontal rules */
+.event-description :deep(hr) {
+  border: none;
+  border-top: 2px solid #e0e0e0;
+  margin: 32px 0;
+}
+
+/* Tables */
+.event-description :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+}
+
+.event-description :deep(th),
+.event-description :deep(td) {
+  border: 1px solid #ddd;
+  padding: 12px;
+  text-align: left;
+}
+
+.event-description :deep(th) {
+  background-color: #f5f5f5;
+  font-weight: 600;
+}
+
+.event-description :deep(tr:hover) {
+  background-color: #fafafa;
+}
+
+/* Images */
+.event-description :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 16px 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 960px) {
+  .event-description {
+    font-size: 15px;
+  }
+  
+  .event-description :deep(h1) {
+    font-size: 24px;
+  }
+  
+  .event-description :deep(h2) {
+    font-size: 20px;
+  }
+  
+  .event-description :deep(h3) {
+    font-size: 18px;
+  }
+  
+  .event-description :deep(p:first-of-type) {
+    font-size: 16px;
+  }
+}
+</style>

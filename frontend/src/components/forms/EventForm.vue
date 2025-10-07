@@ -12,6 +12,9 @@
       label="Description"
       variant="outlined"
       class="mb-4"
+      rows="12"
+      hint="Supports Markdown: **bold**, *italic*, ## headings, - lists, [links](url)"
+      persistent-hint
     />
     
     <v-row>
