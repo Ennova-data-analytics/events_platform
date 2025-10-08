@@ -38,11 +38,6 @@
                 title="Year of Study" 
                 :subtitle="authStore.user.study_year || 'Not specified'"
               ></v-list-item>
-              <v-list-item 
-                prepend-icon="mdi-file-document-outline" 
-                title="Curriculum Vitae (CV)" 
-                :subtitle="authStore.user.cv_url ? 'File uploaded' : 'No CV uploaded'"
-              ></v-list-item>
             </v-list>
             <v-divider></v-divider>
             <v-card-actions>
