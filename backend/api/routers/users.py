@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, status, UploadFile, File
 from core import s3_service
 from sqlalchemy.orm import Session
 from domain import schemas, models
-from domain.use_cases import users_uc
-from api import deps 
+from domain.use_cases import users_uc, db_users
+from api import deps
 import uuid
 from datetime import datetime
 
@@ -19,6 +19,17 @@ def create_user_account(user: schemas.UserCreate, db: Session = Depends(deps.get
 def read_users_me(current_user: models.User = Depends(deps.get_current_user)):
     """Get the profile of the current authenticated user"""
     return current_user
+
+@router.patch("/me", response_model=schemas.User)
+def update_user_profile(
+    user_update: schemas.UserUpdate,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User = Depends(deps.get_current_user)
+):
+    """Update the current user's profile information"""
+    update_data = user_update.model_dump(exclude_unset=True)
+    updated_user = db_users.update_user_profile(db=db, user=current_user, update_data=update_data)
+    return updated_user
 
 @router.post("/me/cv", response_model=schemas.User)
 def upload_user_cv(file: UploadFile = File(...), db: Session = Depends(deps.get_db), current_user: models.User = Depends(deps.get_current_user)):

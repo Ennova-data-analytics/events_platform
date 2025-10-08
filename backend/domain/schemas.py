@@ -10,7 +10,12 @@ class UserBase(BaseModel):
     study_year: str | None = None
 
 class UserCreate(UserBase):
-    password: str 
+    password: str
+
+class UserUpdate(BaseModel):
+    full_name: str | None = None
+    degree: str | None = None
+    study_year: str | None = None 
 
 class Role(BaseModel):
     role_id: int 
