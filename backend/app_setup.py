@@ -12,7 +12,7 @@ def create_app() -> FastAPI:
     app.include_router(admin.router, prefix="/admin", tags=["Admin"])
     app.include_router(form_templates.router, prefix="/form-templates", tags=["Form Templates"])
     app.include_router(uploads.router, prefix="/uploads", tags=["Uploads"])
-    app.include_router(notifications.router, prefix="/api", tags=["Notifications"])
+    app.include_router(notifications.router, prefix="", tags=["Notifications"])
 
 
 

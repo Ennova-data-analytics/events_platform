@@ -173,7 +173,7 @@ async function handleNotificationClick(notification) {
 
   if (notification.related_entity_type === 'event' && notification.related_entity_id) {
     menuOpen.value = false
-    router.push(`/events/${notification.related_entity_id}`)
+    router.push(`/event/${notification.related_entity_id}`)
   }
 }
 
