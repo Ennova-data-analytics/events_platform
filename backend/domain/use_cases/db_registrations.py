@@ -1,7 +1,11 @@
-from sqlalchemy.orm import Session 
-from fastapi import HTTPException, status 
-from domain import models 
-import uuid 
+from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
+from domain import models
+from domain.use_cases import db_notifications
+import uuid
+import logging
+
+logger = logging.getLogger(__name__) 
 
 def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_responses: dict | None = None):
     """Handles db operations for creating a new registration"""
@@ -38,6 +42,11 @@ def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_res
     db.add(db_registration)
     db.commit()
     db.refresh(db_registration)
+
+    try:
+        db_notifications.notify_registration_created(db=db, registration=db_registration)
+    except Exception as e:
+        logger.error(f"Failed to create notification: {str(e)}")
 
     return db_registration
 

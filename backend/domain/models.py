@@ -42,6 +42,7 @@ class User(Base):
     registrations = relationship("Registration", back_populates="user")
     feedback = relationship("Feedback", back_populates="user")
     created_events = relationship("Event", back_populates="creator")
+    notifications = relationship("InAppNotification", back_populates="user", cascade="all, delete-orphan", order_by="desc(InAppNotification.created_at)")
 
 class Role(Base):
     __tablename__ = "roles"
@@ -116,7 +117,7 @@ class Feedback(Base):
     feedback_id = Column(Integer, primary_key=True)
     event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="SET NULL"))
-    
+
     respondent_type = Column(String(50), nullable=False)
     satisfaction_score = Column(Integer)
     comments = Column(Text)
@@ -124,3 +125,24 @@ class Feedback(Base):
 
     user = relationship("User", back_populates="feedback")
     event = relationship("Event", back_populates="feedback")
+
+
+class InAppNotification(Base):
+    __tablename__ = "in_app_notifications"
+
+    notification_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False, index=True)
+
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    notification_type = Column(String(50), nullable=False)
+
+    related_entity_type = Column(String(50))
+    related_entity_id = Column(Integer)
+
+    is_read = Column(Boolean, default=False, nullable=False, index=True)
+    read_at = Column(TIMESTAMP(timezone=True))
+
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="notifications")

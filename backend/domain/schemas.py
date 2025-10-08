@@ -125,3 +125,25 @@ class FormTemplate(FormTemplateBase):
 
 
 Event.model_rebuild()
+
+class InAppNotificationBase(BaseModel):
+    title: str
+    message: str
+    notification_type: str
+    related_entity_type: str | None = None
+    related_entity_id: int | None = None
+
+class InAppNotificationCreate(InAppNotificationBase):
+    user_id: uuid.UUID
+
+class InAppNotification(InAppNotificationBase):
+    notification_id: int
+    user_id: uuid.UUID
+    is_read: bool
+    read_at: datetime | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class NotificationMarkAsRead(BaseModel):
+    notification_ids: list[int]

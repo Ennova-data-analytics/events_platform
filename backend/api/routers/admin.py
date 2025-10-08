@@ -1,8 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status 
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+import logging
 
-from domain import schemas, models 
-from api import deps 
+from domain import schemas, models
+from domain.use_cases import db_notifications
+from api import deps
+
+logger = logging.getLogger(__name__) 
 
 router = APIRouter()
 
@@ -12,10 +16,17 @@ def approve_registration(registration_id: int, db: Session = Depends(deps.get_db
     reg = db.query(models.Registration).filter(models.Registration.registration_id==registration_id).first()
     if not reg:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration not found")
-    
+
     reg.status = 'Approved'
     db.commit()
     db.refresh(reg)
+
+    # Create in-app notification
+    try:
+        db_notifications.notify_registration_approved(db=db, registration=reg)
+    except Exception as e:
+        logger.error(f"Failed to create notification for registration {registration_id}: {str(e)}")
+        # Don't fail the approval if notification fails
 
     return reg 
 
@@ -25,9 +36,16 @@ def reject_registration(registration_id: int, db: Session = Depends(deps.get_db)
     reg = db.query(models.Registration).filter(models.Registration.registration_id==registration_id).first()
     if not reg:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration not found")
-    
+
     reg.status = 'Rejected'
     db.commit()
     db.refresh(reg)
+
+    # Create in-app notification
+    try:
+        db_notifications.notify_registration_rejected(db=db, registration=reg)
+    except Exception as e:
+        logger.error(f"Failed to create notification for registration {registration_id}: {str(e)}")
+        # Don't fail the rejection if notification fails
 
     return reg 
