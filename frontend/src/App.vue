@@ -11,7 +11,6 @@
 
       <AppFooter />
 
-      <!-- Support Button -->
       <v-btn
         icon="mdi-bug-outline"
         color="primary"

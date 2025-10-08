@@ -19,6 +19,7 @@
       <v-btn to="/register" text>Sign Up</v-btn>
     </template>
     <template v-else>
+      <NotificationBell />
       <v-btn to="/profile" text>Profile</v-btn>
       <v-btn v-if="authStore.isOrganiser" to="/admin" text>Admin</v-btn>
       <v-btn @click="authStore.logout()" text>Logout</v-btn>
@@ -29,6 +30,7 @@
 <script setup>
 import logoUrl from '@/assets/ennova-logo-white.png';
 import { useAuthStore } from '@/stores/auth.store'
+import NotificationBell from '@/components/NotificationBell.vue'
 
 const authStore = useAuthStore();
 </script>
