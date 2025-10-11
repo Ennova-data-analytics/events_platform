@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 import logging
 
 from domain import schemas, models
-from domain.use_cases import db_notifications
+from domain.services import notification_service
 from api import deps
 
 logger = logging.getLogger(__name__) 
@@ -21,9 +21,9 @@ def approve_registration(registration_id: int, db: Session = Depends(deps.get_db
     db.commit()
     db.refresh(reg)
 
-    # Create in-app notification
+    # Send in-app and email notification
     try:
-        db_notifications.notify_registration_approved(db=db, registration=reg)
+        notification_service.send_registration_approved_notification(db=db, registration=reg)
     except Exception as e:
         logger.error(f"Failed to create notification for registration {registration_id}: {str(e)}")
         # Don't fail the approval if notification fails
@@ -41,9 +41,9 @@ def reject_registration(registration_id: int, db: Session = Depends(deps.get_db)
     db.commit()
     db.refresh(reg)
 
-    # Create in-app notification
+    # Send in-app and email notification
     try:
-        db_notifications.notify_registration_rejected(db=db, registration=reg)
+        notification_service.send_registration_rejected_notification(db=db, registration=reg)
     except Exception as e:
         logger.error(f"Failed to create notification for registration {registration_id}: {str(e)}")
         # Don't fail the rejection if notification fails

@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from domain import models
-from domain.use_cases import db_notifications
+from domain.services import notification_service
 import uuid
 import logging
 
@@ -44,7 +44,7 @@ def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_res
     db.refresh(db_registration)
 
     try:
-        db_notifications.notify_registration_created(db=db, registration=db_registration)
+        notification_service.send_registration_created_notification(db=db, registration=db_registration)
     except Exception as e:
         logger.error(f"Failed to create notification: {str(e)}")
 

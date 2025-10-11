@@ -14,7 +14,12 @@ class Settings(BaseSettings):
     R2_API_TOKEN_VALUE: str
     ACCOUNT_ID: str 
 
-    R2_PUBLIC_DOMAIN: str 
+    R2_PUBLIC_DOMAIN: str
+
+    RESEND_API_KEY: str
+    RESEND_FROM_EMAIL: str
+    RESEND_FROM_NAME: str = "Ennova Events"
+    EMAIL_NOTIFICATIONS_ENABLED: bool = True 
 
     model_config = SettingsConfigDict(env_file=".env")
 
