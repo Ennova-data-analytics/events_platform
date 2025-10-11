@@ -20,7 +20,7 @@ def send_registration_approved_notification(
 
     try:
         event_date = event.event_date_start.strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
-        event_url = f"https://ennova-events.com/events/{event.event_id}"  
+        event_url = f"https://ennova-events.com/event/{event.event_id}"  
 
         html_content, text_content = email_templates.render_registration_approved_email(
             user_name=user.full_name or user.email.split("@")[0],
