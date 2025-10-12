@@ -73,7 +73,7 @@ def get_user_notifications(
     )
 
     if unread_only:
-        query = query.filter(models.InAppNotification.is_read == False)
+        query = query.filter(not models.InAppNotification.is_read)
 
     notifications = query.order_by(
         models.InAppNotification.created_at.desc()
@@ -86,7 +86,7 @@ def get_unread_count(db: Session, user_id: uuid.UUID) -> int:
     """Get count of unread notifications for a user"""
     return db.query(models.InAppNotification).filter(
         models.InAppNotification.user_id == user_id,
-        models.InAppNotification.is_read == False
+        not models.InAppNotification.is_read
     ).count()
 
 
@@ -109,7 +109,7 @@ def mark_as_read(
     updated_count = db.query(models.InAppNotification).filter(
         models.InAppNotification.notification_id.in_(notification_ids),
         models.InAppNotification.user_id == user_id,
-        models.InAppNotification.is_read == False
+        not models.InAppNotification.is_read
     ).update(
         {
             "is_read": True,
@@ -129,7 +129,7 @@ def mark_all_as_read(db: Session, user_id: uuid.UUID) -> int:
     """Mark all notifications as read for a user"""
     updated_count = db.query(models.InAppNotification).filter(
         models.InAppNotification.user_id == user_id,
-        models.InAppNotification.is_read == False
+        not models.InAppNotification.is_read
     ).update(
         {
             "is_read": True,
@@ -238,4 +238,26 @@ def notify_registration_created(
         notification_type="registration_created",
         related_entity_type="event",
         related_entity_id=event.event_id
+    )
+
+
+def notify_payment_confirmed(
+    db: Session,
+    registration: models.Registration
+) -> models.InAppNotification:
+    """Create notification when payment is confirmed"""
+    event = registration.event
+    user = registration.user
+
+    title = "Payment Confirmed ✓"
+    message = f"Your payment for '{event.event_name}' has been confirmed! You're all set."
+
+    return create_notification(
+        db=db,
+        user_id=user.user_id,
+        title=title,
+        message=message,
+        notification_type="registration_update",
+        related_entity_type="registration",
+        related_entity_id=registration.registration_id
     )

@@ -199,6 +199,7 @@ import { useEventStore } from '@/stores/events.store.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 import { FormTemplateService } from '@/services/FormTemplateService.js';
 import { UploadService } from '@/services/UploadService.js';
+import ApiClient from '@/services/ApiClient.js';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
@@ -249,11 +250,26 @@ const registrationStatus = computed(() => {
   return registration ? registration.status : 'not_registered';
 });
 
-onMounted(() => {
+onMounted(async () => {
   const eventId = route.params.id;
-  eventStore.fetchEventById(eventId);
+  await eventStore.fetchEventById(eventId);
+
   if (authStore.isAuthenticated) {
-    authStore.fetchCurrentUser();
+    await authStore.fetchCurrentUser();
+  }
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const paymentStatus = urlParams.get('payment');
+
+  if (paymentStatus === 'success') {
+    showSuccess.value = true;
+    successMessage.value = 'Payment successful! Your registration is confirmed.';
+    await authStore.fetchCurrentUser();
+    window.history.replaceState({}, '', window.location.pathname);
+  } else if (paymentStatus === 'cancelled') {
+    showError.value = true;
+    eventStore.error = 'Payment was cancelled. Please try again when ready.';
+    window.history.replaceState({}, '', window.location.pathname);
   }
 });
 
@@ -336,14 +352,38 @@ async function submitApplicationWithForm() {
   }
 }
 
-function handlePayment() {
-  console.log('Redirecting to payment...');
-  alert('Payment flow is not yet implemented.');
+async function handlePayment() {
+  try {
+    isSubmitting.value = true;
+
+    const registration = authStore.user.registrations.find(
+      r => r.event.event_id === eventStore.currentEvent.event_id && r.status === 'Approved'
+    );
+
+    if (!registration) {
+      alert('Registration not found or not approved');
+      return;
+    }
+
+    const response = await ApiClient.post(
+      `/payments/registrations/${registration.registration_id}/create-checkout-session`
+    );
+
+    if (response.data.checkout_url) {
+      window.location.href = response.data.checkout_url;
+    }
+
+  } catch (error) {
+    console.error('Error creating checkout session:', error);
+    eventStore.error = 'Failed to initiate payment. Please try again.';
+    showError.value = true;
+  } finally {
+    isSubmitting.value = false;
+  }
 }
 </script>
 
 <style scoped>
-/* Markdown content styling */
 .event-description {
   font-size: 16px;
   line-height: 1.8;
@@ -352,7 +392,6 @@ function handlePayment() {
   overflow-wrap: break-word;
 }
 
-/* Headings */
 .event-description :deep(h1) {
   font-size: 28px;
   font-weight: 700;
@@ -380,27 +419,23 @@ function handlePayment() {
   line-height: 1.4;
 }
 
-/* Remove top margin from first heading */
 .event-description :deep(h1:first-child),
 .event-description :deep(h2:first-child),
 .event-description :deep(h3:first-child) {
   margin-top: 0;
 }
 
-/* Paragraphs */
 .event-description :deep(p) {
   margin-bottom: 16px;
   color: #2c3e50;
 }
 
-/* First paragraph gets larger text */
 .event-description :deep(p:first-of-type) {
   font-size: 18px;
   font-weight: 400;
   color: #1a1a1a;
 }
 
-/* Lists */
 .event-description :deep(ul),
 .event-description :deep(ol) {
   margin: 16px 0;
@@ -420,7 +455,6 @@ function handlePayment() {
   list-style-type: decimal;
 }
 
-/* Nested lists */
 .event-description :deep(ul ul),
 .event-description :deep(ol ol),
 .event-description :deep(ul ol),
@@ -428,7 +462,6 @@ function handlePayment() {
   margin: 8px 0;
 }
 
-/* Bold and Italic */
 .event-description :deep(strong) {
   font-weight: 600;
   color: #000;
@@ -451,7 +484,6 @@ function handlePayment() {
   text-decoration: underline;
 }
 
-/* Blockquotes */
 .event-description :deep(blockquote) {
   border-left: 4px solid #1976d2;
   padding-left: 16px;
@@ -463,7 +495,6 @@ function handlePayment() {
   border-radius: 4px;
 }
 
-/* Code */
 .event-description :deep(code) {
   background-color: #f5f5f5;
   padding: 2px 6px;
@@ -487,14 +518,12 @@ function handlePayment() {
   color: #333;
 }
 
-/* Horizontal rules */
 .event-description :deep(hr) {
   border: none;
   border-top: 2px solid #e0e0e0;
   margin: 32px 0;
 }
 
-/* Tables */
 .event-description :deep(table) {
   width: 100%;
   border-collapse: collapse;
@@ -517,7 +546,6 @@ function handlePayment() {
   background-color: #fafafa;
 }
 
-/* Images */
 .event-description :deep(img) {
   max-width: 100%;
   height: auto;
@@ -525,7 +553,6 @@ function handlePayment() {
   margin: 16px 0;
 }
 
-/* Responsive adjustments */
 @media (max-width: 960px) {
   .event-description {
     font-size: 15px;

@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     RESEND_FROM_NAME: str = "Ennova Events"
     EMAIL_NOTIFICATIONS_ENABLED: bool = True 
 
+    STRIPE_SECRET_KEY: str 
+    STRIPE_PUBLISHABLE_KEY: str 
+    STRIPE_WEBHOOK_SECRET: str
+    FRONTEND_URL: str = "https://ennova-events.com"
+
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

@@ -215,3 +215,66 @@ Thank you for your interest!
 """
 
     return html_content, text_content
+
+
+def render_payment_confirmed_email(
+    user_name: str,
+    event_name: str,
+    event_date: str,
+    event_location: str,
+    price: float,
+    event_url: str = None
+) -> tuple[str, str]:
+    """
+    Render payment confirmation email
+
+    Returns:
+        Tuple of (html_content, text_content)
+    """
+    content = f"""
+        <h2>Payment Confirmed! 🎉</h2>
+        <p>Hi {user_name},</p>
+        <p>Great news! Your payment of <strong>€{price:.2f}</strong> has been successfully processed.</p>
+
+        <div class="event-details">
+            <h3>Event Details</h3>
+            <p><strong>Event:</strong> {event_name}</p>
+            <p><strong>Date:</strong> {event_date}</p>
+            <p><strong>Location:</strong> {event_location}</p>
+            <p><strong>Amount Paid:</strong> €{price:.2f}</p>
+        </div>
+
+        <p>Your spot is now confirmed! We look forward to seeing you there.</p>
+
+        {f'<a href="{event_url}" class="button">View Event Details</a>' if event_url else ""}
+
+        <p>If you have any questions, please contact us.</p>
+    """
+
+    base = Template(get_base_template())
+    html_content = base.render(
+        header_title="Payment Confirmed",
+        content=content
+    )
+
+    text_content = f"""
+Payment Confirmed!
+
+Hi {user_name},
+
+Great news! Your payment of €{price:.2f} has been successfully processed.
+
+Event Details:
+- Event: {event_name}
+- Date: {event_date}
+- Location: {event_location}
+- Amount Paid: €{price:.2f}
+
+Your spot is now confirmed! We look forward to seeing you there.
+
+{f"View event: {event_url}" if event_url else ""}
+
+If you have any questions, please contact us.
+"""
+
+    return html_content, text_content

@@ -38,6 +38,7 @@ class Registration(BaseModel):
     registration_date: datetime
     event: EventSummary
     form_responses: dict | None = None
+    stripe_payment_intent_id: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -99,3 +99,37 @@ def send_registration_created_notification(
         )
     except Exception as e:
         logger.error(f"Failed to send registration created email to {user.email}: {str(e)}")
+
+
+def send_payment_confirmed_notification(
+    db: Session,
+    registration: models.Registration
+):
+    """Send both in-app and email notification for payment confirmation"""
+    event = registration.event
+    user = registration.user
+
+    db_notifications.notify_payment_confirmed(db=db, registration=registration)
+
+    try:
+        event_date = event.event_date_start.strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
+        event_url = f"https://ennova-events.com/event/{event.event_id}"
+
+        html_content, text_content = email_templates.render_payment_confirmed_email(
+            user_name=user.full_name or user.email.split("@")[0],
+            event_name=event.event_name,
+            event_date=event_date,
+            event_location=event.location or "TBD",
+            price=float(event.price_euros) if event.price_euros else None,
+            event_url=event_url
+        )
+
+        email_service.send_email(
+            to_email=user.email,
+            to_name=user.full_name or user.email.split("@")[0],
+            subject=f"Payment Confirmed: {event.event_name}",
+            html_content=html_content,
+            text_content=text_content
+        )
+    except Exception as e:
+        logger.error(f"Failed to send payment confirmation email to {user.email}: {str(e)}")
