@@ -111,7 +111,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { EventService } from '@/services/EventService.js';
 import { AdminService } from '@/services/AdminService.js';
@@ -119,12 +119,16 @@ import { UploadService } from '@/services/UploadService.js';
 
 
 const route = useRoute();
-const tab = ref('pending'); 
+const tab = ref('pending');
 const allAttendees = ref([]);
 const eventTitle = ref('');
 const isLoading = ref(false);
 const expanded = ref([]);
 const snackbar = ref({ show: false, text: '', color: '' });
+
+watch(tab, () => {
+  expanded.value = [];
+});
 
 const pendingAttendees = computed(() => allAttendees.value.filter(a => a.status === 'Pending Approval'));
 const approvedAttendees = computed(() => allAttendees.value.filter(a => a.status === 'Approved'));
@@ -150,6 +154,7 @@ async function fetchAttendees() {
   try {
     const response = await EventService.getEventRegistrations(eventId);
     allAttendees.value = response.data;
+    expanded.value = []; 
   } catch (error) {
     console.error("Failed to fetch attendees:", error);
     snackbar.value = { show: true, text: 'Failed to load attendees.', color: 'error' };
