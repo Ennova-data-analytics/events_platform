@@ -21,7 +21,7 @@
     />
 
     <div class="d-flex justify-center mb-4">
-      <router-link to="/reset-password" class="text-caption text-primary" style="text-decoration: none;">
+      <router-link to="/forgot-password" class="text-caption text-primary" style="text-decoration: none;">
         Forgot your password, you can reset it now!
       </router-link>
     </div>

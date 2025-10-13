@@ -278,3 +278,56 @@ If you have any questions, please contact us.
 """
 
     return html_content, text_content
+
+
+def render_password_reset_email(
+    user_name: str,
+    reset_url: str
+) -> tuple[str, str]:
+    """
+    Render password reset email
+    
+    Returns:
+        Tuple of (html_content, text_content)
+    """
+    content = f"""
+        <h2>Password Reset Request</h2>
+        <p>Hi {user_name},</p>
+        <p>We received a request to reset your password for your Events Platform account.</p>
+        <p>Click the button below to reset your password. This link will expire in <strong>1 hour</strong>.</p>
+        
+        <a href="{reset_url}" class="button">Reset Password</a>
+        
+        <p>If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.</p>
+        
+        <p>For security reasons, this link can only be used once.</p>
+        
+        <p style="color: #666; font-size: 12px; margin-top: 20px;">
+            If the button doesn't work, copy and paste this link into your browser:<br>
+            {reset_url}
+        </p>
+    """
+    
+    base = Template(get_base_template())
+    html_content = base.render(
+        header_title="Password Reset",
+        content=content
+    )
+    
+    text_content = f"""
+Password Reset Request
+
+Hi {user_name},
+
+We received a request to reset your password for your Events Platform account.
+
+Click the link below to reset your password. This link will expire in 1 hour.
+
+{reset_url}
+
+If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.
+
+For security reasons, this link can only be used once.
+"""
+    
+    return html_content, text_content

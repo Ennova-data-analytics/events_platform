@@ -33,3 +33,27 @@ def login_for_access_token(db: Session = Depends(deps.get_db), form_data: OAuth2
 
     return {"access_token": access_token, "token_type": "bearer", "user": user}
 
+@router.post("/password-reset/request", response_model=schemas.PasswordResetResponse)
+def request_password_reset(reset_request: schemas.PasswordResetRequest, db: Session = Depends(deps.get_db)):
+    """Request a password reset email"""
+    logger.info(f"Password reset requested for email = {reset_request.email}")
+
+    users_uc.request_password_reset(db, email=reset_request.email)
+
+    return {
+        "message": "If an account exists with that email, a password reset link has been sent"
+    }
+
+@router.post("/password-reset/confirm", response_model=schemas.PasswordResetResponse)
+def confirm_password_reset(reset_confirm: schemas.PasswordResetConfirm, db: Session = Depends(deps.get_db)):
+    """Reset password using a valid token"""
+    logger.info(f"Password reset confirmation attempted with token = {reset_confirm.token[:10]}...")
+
+    users_uc.reset_password(db, token=reset_confirm.token, new_password=reset_confirm.new_password)
+
+    return {
+        "message": "Password has been successfully reset. You can now log in with your new password"
+    }
+
+
+

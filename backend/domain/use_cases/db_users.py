@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session, joinedload
 from domain import models, schemas 
 from core.security import get_password_hash
+import uuid
 
 def get_user_by_email(db: Session, email: str):
     """Fetches a single user by email, including their roles and registrations with event details"""
@@ -31,7 +32,7 @@ def create_user(db: Session, user: schemas.UserCreate):
     db.refresh(db_user)
     return db_user
 
-def update_user_profile(db: Session, user: models.User, update_data: dict):
+def update_user_profile(db: Session, user: schemas.User, update_data: dict):
     """Updates a user's profile information"""
     for key, value in update_data.items():
         if hasattr(user, key) and value is not None:
@@ -40,3 +41,7 @@ def update_user_profile(db: Session, user: models.User, update_data: dict):
     db.commit()
     db.refresh(user)
     return user
+
+def get_user_by_id(db: Session, user_id: uuid.UUID) -> models.User | None:
+    """Get a user by their ID"""
+    return db.query(models.User).filter(models.User.user_id == user_id).first()

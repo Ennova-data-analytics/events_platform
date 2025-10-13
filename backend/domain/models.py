@@ -146,3 +146,14 @@ class InAppNotification(Base):
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
 
     user = relationship("User", back_populates="notifications")
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+    
+    token_id = Column(Integer, primary_key=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="CASCADE"), nullable=False, index=True)
+    token = Column(String(255), unique=True, nullable=False, index=True)
+    expires_at = Column(TIMESTAMP(timezone=True), nullable=False)
+    used_at = Column(TIMESTAMP(timezone=True))
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    
+    user = relationship("User")

@@ -148,3 +148,14 @@ class InAppNotification(InAppNotificationBase):
 
 class NotificationMarkAsRead(BaseModel):
     notification_ids: list[int]
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+class PasswordResetConfirm(BaseModel):
+    token: str 
+    new_password: str 
+class PasswordResetResponse(BaseModel):
+    message: str 
+
+
