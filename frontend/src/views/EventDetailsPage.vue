@@ -44,7 +44,7 @@
           <div class="mt-4">
             <p class="text-h6 font-weight-regular">
               <v-icon>mdi-calendar</v-icon>
-              {{ new Date(eventStore.currentEvent.event_date_start).toLocaleString('en-GB') }}
+              {{ new Date(eventStore.currentEvent.event_date_start).toLocaleDateString('en-GB') }}
             </p>
             <p class="text-h6 font-weight-regular mt-2">
               <v-icon>mdi-map-marker</v-icon>
