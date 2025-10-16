@@ -107,6 +107,31 @@
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000">
       {{ snackbar.text }}
     </v-snackbar>
+
+    <v-dialog v-model="confirmDialog.show" max-width="500">
+      <v-card>
+        <v-card-title class="text-h5">
+          {{ confirmDialog.action === 'approve' ? 'Approve' : 'Reject' }} Candidate?
+        </v-card-title>
+        <v-card-text>
+          Are you sure you want to {{ confirmDialog.action }} <strong>{{ confirmDialog.attendeeName }}</strong>?
+          This action will send a notification to the candidate.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="confirmDialog.show = false">
+            Cancel
+          </v-btn>
+          <v-btn
+            :color="confirmDialog.action === 'approve' ? 'success' : 'error'"
+            variant="flat"
+            @click="confirmApproval"
+          >
+            {{ confirmDialog.action === 'approve' ? 'Approve' : 'Reject' }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -125,6 +150,12 @@ const eventTitle = ref('');
 const isLoading = ref(false);
 const expanded = ref([]);
 const snackbar = ref({ show: false, text: '', color: '' });
+const confirmDialog = ref({
+  show: false,
+  action: '',
+  attendee: null,
+  attendeeName: ''
+});
 
 watch(tab, () => {
   expanded.value = [];
@@ -163,10 +194,22 @@ async function fetchAttendees() {
   }
 }
 
-async function handleApproval(attendee, action) {
+function handleApproval(attendee, action) {
+  confirmDialog.value = {
+    show: true,
+    action: action,
+    attendee: attendee,
+    attendeeName: attendee.user?.full_name || attendee.user?.email || 'this candidate'
+  };
+}
+
+async function confirmApproval() {
+  const { attendee, action } = confirmDialog.value;
+  confirmDialog.value.show = false;
+
   const actionVerb = action === 'approve' ? 'Approving' : 'Rejecting';
   const successVerb = action === 'approve' ? 'Approved' : 'Rejected';
-  
+
   try {
     if (action === 'approve') {
       await AdminService.approveRegistration(attendee.registration_id);
