@@ -15,13 +15,14 @@
       <p>No upcoming events found. Please check back later!</p>
     </div>
 
-    <v-row v-else>
-      <v-col 
-        v-for="ev in eventStore.events" 
-        :key="ev.event_id" 
-        cols="12" 
-        sm="6" 
+    <v-row v-else class="mt-2">
+      <v-col
+        v-for="ev in eventStore.events"
+        :key="ev.event_id"
+        cols="12"
+        sm="6"
         md="4"
+        class="mb-4"
       >
         <EventCard :event="{
           id: ev.event_id,

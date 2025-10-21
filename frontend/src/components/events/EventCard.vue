@@ -4,6 +4,7 @@
     hover
     :to="{ name: 'event-details', params: { id: event.id } }"
     style="cursor: pointer;"
+    elevation="2"
   >
     <v-img
       class="align-end text-white"

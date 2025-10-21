@@ -13,11 +13,12 @@
 
       <v-btn
         icon="mdi-bug-outline"
-        color="primary"
+        color="#ff5252"
         :size="$vuetify.display.mobile ? 'default' : 'large'"
         position="fixed"
         location="bottom right"
         class="support-btn"
+        elevation="8"
         @click="openSupportEmail"
       >
         <v-icon>mdi-bug-outline</v-icon>
@@ -42,6 +43,7 @@ const openSupportEmail = () => {
 
 <style scoped>
 .support-btn {
-  margin: 0 16px 80px 0;
+  margin: 0 16px 16px 0;
+  z-index: 1000;
 }
 </style>
