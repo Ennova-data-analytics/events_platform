@@ -98,6 +98,21 @@ const routes = [
         path: 'forms/edit/:id',
         name: 'admin-form-edit',
         component: () => import('../views/admin/AdminFormEditPage.vue')
+      },
+      {
+        path: 'email-templates',
+        name: 'admin-email-templates',
+        component: () => import('../views/admin/AdminEmailTemplatesListPage.vue')
+      },
+      {
+        path: 'email-templates/create',
+        name: 'admin-email-template-create',
+        component: () => import('../views/admin/AdminEmailTemplateEditPage.vue')
+      },
+      {
+        path: 'email-templates/edit/:id',
+        name: 'admin-email-template-edit',
+        component: () => import('../views/admin/AdminEmailTemplateEditPage.vue')
       }
     ]
   }

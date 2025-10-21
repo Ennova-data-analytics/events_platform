@@ -72,6 +72,71 @@
         ></v-select>
       </v-col>
     </v-row>
+
+    <v-divider class="my-4"></v-divider>
+    <h3 class="text-subtitle-1 mb-3">Custom Email Templates (Optional)</h3>
+
+    <v-row>
+      <v-col cols="12" sm="6">
+        <v-select
+          v-model="editableEvent.email_template_approved_id"
+          :items="approvedTemplates"
+          item-title="template_name"
+          item-value="template_id"
+          label="Registration Approved Email"
+          variant="outlined"
+          clearable
+          no-data-text="No templates available"
+          hint="Sent when registration is approved"
+          persistent-hint
+        ></v-select>
+      </v-col>
+      <v-col cols="12" sm="6">
+        <v-select
+          v-model="editableEvent.email_template_rejected_id"
+          :items="rejectedTemplates"
+          item-title="template_name"
+          item-value="template_id"
+          label="Registration Rejected Email"
+          variant="outlined"
+          clearable
+          no-data-text="No templates available"
+          hint="Sent when registration is rejected"
+          persistent-hint
+        ></v-select>
+      </v-col>
+    </v-row>
+
+    <v-row>
+      <v-col cols="12" sm="6">
+        <v-select
+          v-model="editableEvent.email_template_received_id"
+          :items="receivedTemplates"
+          item-title="template_name"
+          item-value="template_id"
+          label="Registration Received Email"
+          variant="outlined"
+          clearable
+          no-data-text="No templates available"
+          hint="Sent when registration is first submitted"
+          persistent-hint
+        ></v-select>
+      </v-col>
+      <v-col cols="12" sm="6">
+        <v-select
+          v-model="editableEvent.email_template_payment_id"
+          :items="paymentTemplates"
+          item-title="template_name"
+          item-value="template_id"
+          label="Payment Confirmed Email"
+          variant="outlined"
+          clearable
+          no-data-text="No templates available"
+          hint="Sent when payment is confirmed"
+          persistent-hint
+        ></v-select>
+      </v-col>
+    </v-row>
     
     <v-row>
       <v-col cols="12">
@@ -95,6 +160,7 @@
 <script setup>
 import { ref, watch, computed, onMounted } from 'vue';
 import { FormTemplateService } from '@/services/FormTemplateService.js';
+import { EmailTemplateService } from '@/services/EmailTemplateService.js';
 
 const props = defineProps({
   initialData: { type: Object, default: () => ({}) },
@@ -104,9 +170,13 @@ const props = defineProps({
 const emit = defineEmits(['submit']);
 
 const editableEvent = ref({});
-const imageFile = ref([]); 
+const imageFile = ref([]);
 
 const formTemplates = ref([]);
+const approvedTemplates = ref([]);
+const rejectedTemplates = ref([]);
+const receivedTemplates = ref([]);
+const paymentTemplates = ref([]);
 const isEditMode = computed(() => props.initialData && props.initialData.event_id);
 
 watch(() => props.initialData, (newData) => {
@@ -119,10 +189,20 @@ watch(() => props.initialData, (newData) => {
 
 onMounted(async () => {
   try {
-    const response = await FormTemplateService.getAllTemplates();
-    formTemplates.value = response.data;
+    const [formResponse, emailResponse] = await Promise.all([
+      FormTemplateService.getAllTemplates(),
+      EmailTemplateService.getAllTemplates()
+    ]);
+    formTemplates.value = formResponse.data;
+
+    // Filter email templates by type
+    const allEmailTemplates = emailResponse.data;
+    approvedTemplates.value = allEmailTemplates.filter(t => t.template_type === 'registration_approved');
+    rejectedTemplates.value = allEmailTemplates.filter(t => t.template_type === 'registration_rejected');
+    receivedTemplates.value = allEmailTemplates.filter(t => t.template_type === 'registration_received');
+    paymentTemplates.value = allEmailTemplates.filter(t => t.template_type === 'payment_confirmed');
   } catch (error) {
-    console.error("Failed to fetch form templates:", error);
+    console.error("Failed to fetch templates:", error);
   }
 });
 

@@ -7,6 +7,9 @@ export const AdminService = {
     rejectRegistration(registrationId) {
         return ApiClient.post(`/admin/registrations/${registrationId}/reject`);
     },
+    revertRegistrationToPending(registrationId) {
+        return ApiClient.post(`/admin/registrations/${registrationId}/revert-to-pending`);
+    },
     uploadEventImage(eventId, imageFile) {
         console.log('=== AdminService.uploadEventImage DEBUG ===');
         console.log('Creating FormData for event:', eventId);

@@ -63,7 +63,7 @@
         <!-- Other Tabs: Approved, Paid, Rejected -->
         <v-window-item v-for="status in ['approved', 'paid', 'rejected']" :key="status" :value="status">
             <v-data-table
-                :headers="attendeeHeaders"
+                :headers="status === 'approved' || status === 'rejected' ? attendeeHeadersWithRevert : attendeeHeaders"
                 :items="status === 'approved' ? approvedAttendees : (status === 'paid' ? paidAttendees : rejectedAttendees)"
                 :loading="isLoading"
                 item-value="registration_id"
@@ -99,6 +99,10 @@
                         </td>
                     </tr>
                 </template>
+
+                <template v-slot:item.actions="{ item }">
+                  <v-btn @click="handleRevert(item)" icon="mdi-undo" color="warning" variant="text" size="small" title="Revert to Pending"></v-btn>
+                </template>
             </v-data-table>
         </v-window-item>
       </v-window>
@@ -132,6 +136,31 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <v-dialog v-model="revertDialog.show" max-width="500">
+      <v-card>
+        <v-card-title class="text-h5">
+          Revert to Pending Approval?
+        </v-card-title>
+        <v-card-text>
+          Are you sure you want to revert <strong>{{ revertDialog.attendeeName }}</strong> back to pending approval?
+          No notification will be sent to the candidate.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="revertDialog.show = false">
+            Cancel
+          </v-btn>
+          <v-btn
+            color="warning"
+            variant="flat"
+            @click="confirmRevert"
+          >
+            Revert to Pending
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -153,6 +182,11 @@ const snackbar = ref({ show: false, text: '', color: '' });
 const confirmDialog = ref({
   show: false,
   action: '',
+  attendee: null,
+  attendeeName: ''
+});
+const revertDialog = ref({
+  show: false,
   attendee: null,
   attendeeName: ''
 });
@@ -178,6 +212,7 @@ const attendeeHeaders = ref([
 
 ]);
 const pendingHeaders = ref([...attendeeHeaders.value, { title: 'Actions', key: 'actions', sortable: false, align: 'end' }]);
+const attendeeHeadersWithRevert = ref([...attendeeHeaders.value, { title: 'Actions', key: 'actions', sortable: false, align: 'end' }]);
 
 async function fetchAttendees() {
   isLoading.value = true;
@@ -221,6 +256,28 @@ async function confirmApproval() {
   } catch (error) {
     console.error(`${actionVerb} failed:`, error);
     snackbar.value = { show: true, text: `Failed to ${action} applicant.`, color: 'error' };
+  }
+}
+
+function handleRevert(attendee) {
+  revertDialog.value = {
+    show: true,
+    attendee: attendee,
+    attendeeName: attendee.user?.full_name || attendee.user?.email || 'this candidate'
+  };
+}
+
+async function confirmRevert() {
+  const { attendee } = revertDialog.value;
+  revertDialog.value.show = false;
+
+  try {
+    await AdminService.revertRegistrationToPending(attendee.registration_id);
+    snackbar.value = { show: true, text: 'Registration reverted to pending approval.', color: 'success' };
+    await fetchAttendees();
+  } catch (error) {
+    console.error('Revert failed:', error);
+    snackbar.value = { show: true, text: 'Failed to revert registration.', color: 'error' };
   }
 }
 function isFileUrl(value) {

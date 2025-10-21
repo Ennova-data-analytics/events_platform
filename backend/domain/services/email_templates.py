@@ -1,4 +1,5 @@
 from jinja2 import Template
+from domain import models
 
 
 def get_base_template() -> str:
@@ -73,20 +74,58 @@ def get_base_template() -> str:
 """
 
 
+def render_custom_email(
+    template: models.EmailTemplate,
+    context: dict
+) -> tuple[str, str]:
+    """
+    Render email using a custom template
+    """
+    html_template = Template(template.html_content)
+    html_content = html_template.render(**context)
+
+    text_content = None
+    if template.text_content:
+        text_template = Template(template.text_content)
+        text_content = text_template.render(**context)
+
+    return html_content, text_content
+
+
+def get_email_subject(template: models.EmailTemplate, context: dict, default_subject: str) -> str:
+    """
+    Get email subject from template or use default
+    """
+    if template and template.subject_template:
+        subject_template = Template(template.subject_template)
+        return subject_template.render(**context)
+    return default_subject
+
+
 def render_registration_approved_email(
     user_name: str,
     event_name: str,
     event_date: str,
     event_location: str,
     price: float = None,
-    event_url: str = None
+    event_url: str = None,
+    custom_template: models.EmailTemplate = None
 ) -> tuple[str, str]:
     """
     Render registration approved email
-
-    Returns:
-        Tuple of (html_content, text_content)
     """
+    if custom_template and custom_template.template_type == 'registration_approved':
+        context = {
+            'user_name': user_name,
+            'event_name': event_name,
+            'event_date': event_date,
+            'event_location': event_location,
+            'price': price,
+            'event_url': event_url,
+            'header_title': 'Registration Approved'
+        }
+        return render_custom_email(custom_template, context)
+
     content = f"""
         <h2>Congratulations, {user_name}! 🎉</h2>
         <p>Your registration for <strong>{event_name}</strong> has been approved!</p>
@@ -138,9 +177,19 @@ If you have any questions, please don't hesitate to contact us.
 def render_registration_rejected_email(
     user_name: str,
     event_name: str,
-    reason: str = None
+    reason: str = None,
+    custom_template: models.EmailTemplate = None
 ) -> tuple[str, str]:
     """Render registration rejected email"""
+    if custom_template and custom_template.template_type == 'registration_rejected':
+        context = {
+            'user_name': user_name,
+            'event_name': event_name,
+            'reason': reason,
+            'header_title': 'Registration Update'
+        }
+        return render_custom_email(custom_template, context)
+
     content = f"""
         <h2>Registration Update</h2>
         <p>Dear {user_name},</p>
@@ -176,9 +225,19 @@ We appreciate your interest and encourage you to register for future events.
 def render_registration_received_email(
     user_name: str,
     event_name: str,
-    event_date: str
+    event_date: str,
+    custom_template: models.EmailTemplate = None
 ) -> tuple[str, str]:
     """Render registration received confirmation email"""
+    if custom_template and custom_template.template_type == 'registration_received':
+        context = {
+            'user_name': user_name,
+            'event_name': event_name,
+            'event_date': event_date,
+            'header_title': 'Registration Received'
+        }
+        return render_custom_email(custom_template, context)
+
     content = f"""
         <h2>Registration Received ✓</h2>
         <p>Dear {user_name},</p>
@@ -223,14 +282,24 @@ def render_payment_confirmed_email(
     event_date: str,
     event_location: str,
     price: float,
-    event_url: str = None
+    event_url: str = None,
+    custom_template: models.EmailTemplate = None
 ) -> tuple[str, str]:
     """
     Render payment confirmation email
-
-    Returns:
-        Tuple of (html_content, text_content)
     """
+    if custom_template and custom_template.template_type == 'payment_confirmed':
+        context = {
+            'user_name': user_name,
+            'event_name': event_name,
+            'event_date': event_date,
+            'event_location': event_location,
+            'price': price,
+            'event_url': event_url,
+            'header_title': 'Payment Confirmed'
+        }
+        return render_custom_email(custom_template, context)
+
     content = f"""
         <h2>Payment Confirmed! 🎉</h2>
         <p>Hi {user_name},</p>
@@ -286,9 +355,6 @@ def render_password_reset_email(
 ) -> tuple[str, str]:
     """
     Render password reset email
-    
-    Returns:
-        Tuple of (html_content, text_content)
     """
     content = f"""
         <h2>Password Reset Request</h2>

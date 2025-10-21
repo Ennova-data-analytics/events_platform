@@ -73,6 +73,26 @@ class FormTemplate(Base):
     fields = Column(JSONB, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
 
+
+class EmailTemplate(Base):
+    __tablename__ = "email_templates"
+    template_id = Column(Integer, primary_key=True)
+    template_name = Column(String(255), nullable=False)
+    description = Column(Text)
+
+    # Template types: 'registration_approved', 'registration_rejected', 'registration_received', 'payment_confirmed'
+    template_type = Column(String(50), nullable=False)
+
+    # HTML and text templates using Jinja2 syntax
+    html_content = Column(Text, nullable=False)
+    text_content = Column(Text)
+
+    # Customizable subject line
+    subject_template = Column(String(500))
+
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
 class Event(Base):
     __tablename__ = "events"
     event_id = Column(Integer, primary_key=True)
@@ -84,11 +104,18 @@ class Event(Base):
     status = Column(String(50), nullable=False, default='Draft')
     capacity = Column(Integer)
     price_euros = Column(DECIMAL(10, 2), default=0.00)
-    
+
     image_url = Column(Text, nullable=True)
     form_template_id = Column(Integer, ForeignKey('form_templates.template_id', ondelete="SET NULL"))
+
+    # Separate email templates for each type
+    email_template_approved_id = Column(Integer, ForeignKey('email_templates.template_id', ondelete="SET NULL"))
+    email_template_rejected_id = Column(Integer, ForeignKey('email_templates.template_id', ondelete="SET NULL"))
+    email_template_received_id = Column(Integer, ForeignKey('email_templates.template_id', ondelete="SET NULL"))
+    email_template_payment_id = Column(Integer, ForeignKey('email_templates.template_id', ondelete="SET NULL"))
+
     created_by_user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id'))
-    
+
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -96,6 +123,12 @@ class Event(Base):
     contacts = relationship("Contact", secondary=event_contacts, back_populates="events")
     registrations = relationship("Registration", back_populates="event", cascade="all, delete-orphan")
     feedback = relationship("Feedback", back_populates="event", cascade="all, delete-orphan")
+
+    # Relationships to email templates
+    email_template_approved = relationship("EmailTemplate", foreign_keys=[email_template_approved_id])
+    email_template_rejected = relationship("EmailTemplate", foreign_keys=[email_template_rejected_id])
+    email_template_received = relationship("EmailTemplate", foreign_keys=[email_template_received_id])
+    email_template_payment = relationship("EmailTemplate", foreign_keys=[email_template_payment_id])
 
 class Registration(Base):
     __tablename__ = "registrations"

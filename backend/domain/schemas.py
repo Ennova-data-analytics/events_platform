@@ -66,14 +66,18 @@ class TokenData(BaseModel):
     email: EmailStr | None = None 
 
 class EventBase(BaseModel):
-    event_name: str 
-    description: str | None = None 
-    event_date_start: datetime 
-    location: str | None = None 
-    capacity: int | None = None 
-    price_euros: float | None = None 
+    event_name: str
+    description: str | None = None
+    event_date_start: datetime
+    location: str | None = None
+    capacity: int | None = None
+    price_euros: float | None = None
     image_url: str | None = None
     form_template_id: int | None = None
+    email_template_approved_id: int | None = None
+    email_template_rejected_id: int | None = None
+    email_template_received_id: int | None = None
+    email_template_payment_id: int | None = None
 
 class EventCreate(EventBase):
     pass 
@@ -153,9 +157,31 @@ class PasswordResetRequest(BaseModel):
     email: EmailStr
 
 class PasswordResetConfirm(BaseModel):
-    token: str 
-    new_password: str 
+    token: str
+    new_password: str
 class PasswordResetResponse(BaseModel):
-    message: str 
+    message: str
+
+
+class EmailTemplateBase(BaseModel):
+    template_name: str
+    description: str | None = None
+    template_type: str
+    html_content: str
+    text_content: str | None = None
+    subject_template: str | None = None
+
+class EmailTemplateCreate(EmailTemplateBase):
+    pass
+
+class EmailTemplateUpdate(EmailTemplateBase):
+    pass
+
+class EmailTemplate(EmailTemplateBase):
+    template_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True) 
 
 

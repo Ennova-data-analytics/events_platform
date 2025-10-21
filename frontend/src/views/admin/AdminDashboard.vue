@@ -11,6 +11,7 @@
         <v-list-item prepend-icon="mdi-view-dashboard" title="Dashboard" to="/admin"></v-list-item>
         <v-list-item prepend-icon="mdi-calendar-multiple" title="Manage Events" to="/admin/events"></v-list-item>
         <v-list-item prepend-icon="mdi-form-select" title="Form Templates" to="/admin/forms"></v-list-item>
+        <v-list-item prepend-icon="mdi-email-edit" title="Email Templates" to="/admin/email-templates"></v-list-item>
 
       </v-list>
     </v-navigation-drawer>
