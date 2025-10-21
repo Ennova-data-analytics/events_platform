@@ -2,23 +2,23 @@
   <v-card class="mx-auto" hover>
     <v-img
       class="align-end text-white"
-      height="200"
+      :height="$vuetify.display.mobile ? 150 : 200"
       :src="event.image_url"
       cover
     >
-      <v-card-title>{{ event.name }}</v-card-title>
+      <v-card-title :class="$vuetify.display.mobile ? 'text-body-1' : ''">{{ event.name }}</v-card-title>
     </v-img>
 
-    <v-card-subtitle class="pt-4">
+    <v-card-subtitle :class="$vuetify.display.mobile ? 'pt-2 text-caption' : 'pt-4'">
       {{ new Date(event.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) }}
     </v-card-subtitle>
 
-    <v-card-text>
-      <div>
+    <v-card-text :class="$vuetify.display.mobile ? 'py-2' : ''">
+      <div :class="$vuetify.display.mobile ? 'text-caption' : ''">
         <v-icon size="small" class="mr-1">mdi-map-marker-outline</v-icon>
         {{ event.location }}
       </div>
-      <div class="mt-2 text-truncate">
+      <div :class="['mt-2', 'text-truncate', $vuetify.display.mobile ? 'text-caption' : '']">
         {{ event.description }}
       </div>
     </v-card-text>
@@ -28,6 +28,7 @@
       <v-btn
         color="primary"
         variant="text"
+        :size="$vuetify.display.mobile ? 'small' : 'default'"
         :to="{ name: 'event-details', params: { id: event.id } }"
       >
         Details

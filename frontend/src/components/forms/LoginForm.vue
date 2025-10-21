@@ -9,6 +9,7 @@
       type="email"
       prepend-inner-icon="mdi-email-outline"
       variant="outlined"
+      :density="$vuetify.display.mobile ? 'compact' : 'default'"
       class="mb-2"
     />
 
@@ -18,6 +19,7 @@
       type="password"
       prepend-inner-icon="mdi-lock-outline"
       variant="outlined"
+      :density="$vuetify.display.mobile ? 'compact' : 'default'"
     />
 
     <div class="d-flex justify-center mb-4">
@@ -27,7 +29,7 @@
     </div>
 
 
-    <v-btn type="submit" block class="mt-2" color="primary" size="large">
+    <v-btn type="submit" block class="mt-2" color="primary" :size="$vuetify.display.mobile ? 'default' : 'large'">
       Login
     </v-btn>
 

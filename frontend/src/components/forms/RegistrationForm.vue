@@ -9,6 +9,7 @@
       label="Full Name"
       prepend-inner-icon="mdi-account-outline"
       variant="outlined"
+      :density="$vuetify.display.mobile ? 'compact' : 'default'"
       class="mb-2"
     ></v-text-field>
 
@@ -18,6 +19,7 @@
       type="email"
       prepend-inner-icon="mdi-email-outline"
       variant="outlined"
+      :density="$vuetify.display.mobile ? 'compact' : 'default'"
       class="mb-2"
     ></v-text-field>
 
@@ -26,6 +28,7 @@
       label="Degree"
       prepend-inner-icon="mdi-briefcase-outline"
       variant="outlined"
+      :density="$vuetify.display.mobile ? 'compact' : 'default'"
       class="mb-2"
     ></v-text-field>
 
@@ -34,6 +37,7 @@
       label="Year of Study"
       prepend-inner-icon="mdi-school-outline"
       variant="outlined"
+      :density="$vuetify.display.mobile ? 'compact' : 'default'"
       class="mb-2"
     ></v-text-field>
 
@@ -44,6 +48,7 @@
       type="password"
       prepend-inner-icon="mdi-lock-outline"
       variant="outlined"
+      :density="$vuetify.display.mobile ? 'compact' : 'default'"
       class="mb-2"
     ></v-text-field>
     

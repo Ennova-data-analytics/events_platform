@@ -13,7 +13,7 @@
         <v-col cols="12" md="8">
           <v-img
             :src="eventStore.currentEvent.image_url || 'https://cdn.vuetifyjs.com/images/cards/docks.jpg'"
-            height="400px"
+            :height="$vuetify.display.mobile ? '250px' : '400px'"
             cover
             class="rounded-lg"
             :gradient="'to top, rgba(0,0,0,.3), rgba(0,0,0,0)'"
@@ -40,45 +40,45 @@
         </v-col>
         
         <v-col cols="12" md="4">
-          <h1 class="text-h3 font-weight-bold">{{ eventStore.currentEvent.event_name }}</h1>
-          <div class="mt-4">
-            <p class="text-h6 font-weight-regular">
+          <h1 :class="$vuetify.display.mobile ? 'text-h4 font-weight-bold mt-4' : 'text-h3 font-weight-bold'">{{ eventStore.currentEvent.event_name }}</h1>
+          <div :class="$vuetify.display.mobile ? 'mt-3' : 'mt-4'">
+            <p :class="$vuetify.display.mobile ? 'text-body-1 font-weight-regular' : 'text-h6 font-weight-regular'">
               <v-icon>mdi-calendar</v-icon>
               {{ new Date(eventStore.currentEvent.event_date_start).toLocaleDateString('en-GB') }}
             </p>
-            <p class="text-h6 font-weight-regular mt-2">
+            <p :class="$vuetify.display.mobile ? 'text-body-1 font-weight-regular mt-2' : 'text-h6 font-weight-regular mt-2'">
               <v-icon>mdi-map-marker</v-icon>
               {{ eventStore.currentEvent.location }}
             </p>
           </div>
 
-          <div class="mt-8">
-            <v-btn v-if="!authStore.isAuthenticated" to="/login" color="primary" size="large" block>
+          <div :class="$vuetify.display.mobile ? 'mt-4' : 'mt-8'">
+            <v-btn v-if="!authStore.isAuthenticated" to="/login" color="primary" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
               Login to Apply
             </v-btn>
             <v-btn
               v-else-if="registrationStatus === 'not_registered'"
               color="primary"
-              size="large"
+              :size="$vuetify.display.mobile ? 'default' : 'large'"
               block
               @click="handleRegistration"
               :loading="eventStore.isLoading"
             >
               Apply to Register ({{ eventStore.currentEvent.price_euros > 0 ? `€${eventStore.currentEvent.price_euros}` : 'Free' }})
             </v-btn>
-            <v-chip v-else-if="registrationStatus === 'Pending Approval'" color="info" variant="tonal" size="large" block>
+            <v-chip v-else-if="registrationStatus === 'Pending Approval'" color="info" variant="tonal" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
               <v-icon start>mdi-clock-outline</v-icon>
               Application Pending Review
             </v-chip>
-            <v-btn v-else-if="registrationStatus === 'Approved'" color="warning" size="large" block @click="handlePayment">
+            <v-btn v-else-if="registrationStatus === 'Approved'" color="warning" :size="$vuetify.display.mobile ? 'default' : 'large'" block @click="handlePayment">
               <v-icon start>mdi-credit-card-outline</v-icon>
               Pay Now to Confirm Spot
             </v-btn>
-            <v-chip v-else-if="registrationStatus === 'Paid'" color="success" variant="tonal" size="large" block>
+            <v-chip v-else-if="registrationStatus === 'Paid'" color="success" variant="tonal" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
               <v-icon start>mdi-check-circle</v-icon>
               Registered & Confirmed
             </v-chip>
-            <v-chip v-else-if="registrationStatus === 'Rejected'" color="error" variant="tonal" size="large" block>
+            <v-chip v-else-if="registrationStatus === 'Rejected'" color="error" variant="tonal" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
               <v-icon start>mdi-close-circle</v-icon>
               Application Not Approved
             </v-chip>
@@ -94,10 +94,10 @@
         </v-col>
       </v-row>
       
-      <v-row class="mt-8">
+      <v-row :class="$vuetify.display.mobile ? 'mt-4' : 'mt-8'">
         <v-col cols="12">
-          <v-card elevation="2" class="pa-8">
-            <h2 class="text-h4 font-weight-bold mb-6">About this event</h2>
+          <v-card elevation="2" :class="$vuetify.display.mobile ? 'pa-4' : 'pa-8'">
+            <h2 :class="$vuetify.display.mobile ? 'text-h5 font-weight-bold mb-4' : 'text-h4 font-weight-bold mb-6'">About this event</h2>
             <v-divider class="mb-6"></v-divider>
             
             <div 

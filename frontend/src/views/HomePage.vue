@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h1 class="text-h4 font-weight-bold mb-4">Upcoming Events</h1>
+    <h1 :class="$vuetify.display.mobile ? 'text-h5 font-weight-bold mb-3' : 'text-h4 font-weight-bold mb-4'">Upcoming Events</h1>
     
     <div v-if="eventStore.isLoading" class="text-center mt-16">
       <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>

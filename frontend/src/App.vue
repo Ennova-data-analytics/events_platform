@@ -4,7 +4,7 @@
       <AppNavbar />
 
       <v-main>
-        <v-container>
+        <v-container fluid class="pa-2 pa-md-4">
           <router-view />
         </v-container>
       </v-main>
@@ -14,7 +14,7 @@
       <v-btn
         icon="mdi-bug-outline"
         color="primary"
-        size="large"
+        :size="$vuetify.display.mobile ? 'default' : 'large'"
         position="fixed"
         location="bottom right"
         class="support-btn"
