@@ -1,6 +1,6 @@
 <template>
   <v-card
-    class="mx-auto"
+    class="mx-auto event-card"
     hover
     :to="{ name: 'event-details', params: { id: event.id } }"
     style="cursor: pointer;"
@@ -64,5 +64,9 @@ defineProps({
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.event-card {
+  border: 2px solid rgb(var(--v-theme-primary)) !important;
 }
 </style>
