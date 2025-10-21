@@ -1,5 +1,10 @@
 <template>
-  <v-card class="mx-auto" hover>
+  <v-card
+    class="mx-auto"
+    hover
+    :to="{ name: 'event-details', params: { id: event.id } }"
+    style="cursor: pointer;"
+  >
     <v-img
       class="align-end text-white"
       :height="$vuetify.display.mobile ? 150 : 200"
@@ -29,7 +34,6 @@
         color="primary"
         variant="text"
         :size="$vuetify.display.mobile ? 'small' : 'default'"
-        :to="{ name: 'event-details', params: { id: event.id } }"
       >
         Details
       </v-btn>
