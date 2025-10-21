@@ -11,13 +11,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/registrations/{registration_id}/approve", response_model=schemas.Registration)
-def approve_registration(registration_id: int, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
-    """Approve a pending registration"""
+def approve_registration(
+    registration_id: int,
+    approval_data: schemas.RegistrationApprove,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """Approve a pending registration with optional custom amount"""
     reg = db.query(models.Registration).filter(models.Registration.registration_id==registration_id).first()
     if not reg:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration not found")
 
     reg.status = 'Approved'
+
+    # Set custom amount if provided, otherwise it remains None (will use event price)
+    if approval_data.custom_amount_euros is not None:
+        reg.custom_amount_euros = approval_data.custom_amount_euros
+
     db.commit()
     db.refresh(reg)
 

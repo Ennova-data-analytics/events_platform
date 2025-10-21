@@ -135,10 +135,11 @@ class Registration(Base):
     registration_id = Column(Integer, primary_key=True)
     event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="CASCADE"), nullable=False)
-    
+
     status = Column(String(50), nullable=False, default='Pending Approval')
     stripe_payment_intent_id = Column(String(255), unique=True)
     form_responses = Column(JSONB)
+    custom_amount_euros = Column(DECIMAL(10, 2))
     registration_date = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
 
     user = relationship("User", back_populates="registrations")

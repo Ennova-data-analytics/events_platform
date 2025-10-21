@@ -39,6 +39,7 @@ class Registration(BaseModel):
     event: EventSummary
     form_responses: dict | None = None
     stripe_payment_intent_id: str | None = None
+    custom_amount_euros: float | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -106,6 +107,9 @@ class RegistrationWithUser(Registration):
 
 class RegistrationCreate(BaseModel):
     form_responses: dict | None = None
+
+class RegistrationApprove(BaseModel):
+    custom_amount_euros: float | None = None
 
 class FormField(BaseModel):
     name: str

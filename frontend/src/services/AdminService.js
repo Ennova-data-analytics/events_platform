@@ -1,8 +1,11 @@
 import ApiClient from "./ApiClient";
 
 export const AdminService = {
-    approveRegistration(registrationId) {
-        return ApiClient.post(`/admin/registrations/${registrationId}/approve`);
+    approveRegistration(registrationId, customAmount = null) {
+        const payload = {
+            custom_amount_euros: (customAmount !== null && customAmount !== undefined && customAmount !== '') ? customAmount : null
+        };
+        return ApiClient.post(`/admin/registrations/${registrationId}/approve`, payload);
     },
     rejectRegistration(registrationId) {
         return ApiClient.post(`/admin/registrations/${registrationId}/reject`);

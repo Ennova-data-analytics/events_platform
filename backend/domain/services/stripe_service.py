@@ -12,9 +12,11 @@ class StripeService:
     def create_checkout_session(registration: models.Registration, db: Session) -> dict:
         """Create a Stripe checkout session for a registration payment"""
         event = registration.event
-        user = registration.user 
+        user = registration.user
 
-        amount_cents = int(event.price_euros * 100)
+        # Use custom amount if set, otherwise use event price
+        price_euros = registration.custom_amount_euros if registration.custom_amount_euros is not None else event.price_euros
+        amount_cents = int(price_euros * 100)
         try:
             checkout_session = stripe.checkout.Session.create(
                 payment_method_types=['card'],

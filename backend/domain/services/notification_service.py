@@ -25,12 +25,15 @@ def send_registration_approved_notification(
         # Use type-specific custom template if set
         custom_template = event.email_template_approved if hasattr(event, 'email_template_approved') else None
 
+        # Use custom amount if set, otherwise use event price
+        price = registration.custom_amount_euros if registration.custom_amount_euros is not None else event.price_euros
+
         html_content, text_content = email_templates.render_registration_approved_email(
             user_name=user.full_name or user.email.split("@")[0],
             event_name=event.event_name,
             event_date=event_date,
             event_location=event.location or "TBD",
-            price=float(event.price_euros) if event.price_euros else None,
+            price=float(price) if price else None,
             event_url=event_url,
             custom_template=custom_template
         )
@@ -162,12 +165,15 @@ def send_payment_confirmed_notification(
         # Use type-specific custom template if set
         custom_template = event.email_template_payment if hasattr(event, 'email_template_payment') else None
 
+        # Use custom amount if set, otherwise use event price
+        price = registration.custom_amount_euros if registration.custom_amount_euros is not None else event.price_euros
+
         html_content, text_content = email_templates.render_payment_confirmed_email(
             user_name=user.full_name or user.email.split("@")[0],
             event_name=event.event_name,
             event_date=event_date,
             event_location=event.location or "TBD",
-            price=float(event.price_euros) if event.price_euros else None,
+            price=float(price) if price else None,
             event_url=event_url,
             custom_template=custom_template
         )

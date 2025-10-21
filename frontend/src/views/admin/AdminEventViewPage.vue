@@ -118,8 +118,23 @@
           {{ confirmDialog.action === 'approve' ? 'Approve' : 'Reject' }} Candidate?
         </v-card-title>
         <v-card-text>
-          Are you sure you want to {{ confirmDialog.action }} <strong>{{ confirmDialog.attendeeName }}</strong>?
-          This action will send a notification to the candidate.
+          <p class="mb-4">
+            Are you sure you want to {{ confirmDialog.action }} <strong>{{ confirmDialog.attendeeName }}</strong>?
+            This action will send a notification to the candidate.
+          </p>
+
+          <v-text-field
+            v-if="confirmDialog.action === 'approve'"
+            v-model.number="customAmount"
+            label="Amount to charge (€)"
+            type="number"
+            step="0.01"
+            min="0"
+            :hint="eventPrice !== null ? `Event price: €${eventPrice}. Leave empty to use event price.` : 'Leave empty to use event price.'"
+            persistent-hint
+            density="comfortable"
+            class="mt-2"
+          ></v-text-field>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
@@ -176,6 +191,8 @@ const route = useRoute();
 const tab = ref('pending');
 const allAttendees = ref([]);
 const eventTitle = ref('');
+const eventPrice = ref(null);
+const customAmount = ref(null);
 const isLoading = ref(false);
 const expanded = ref([]);
 const snackbar = ref({ show: false, text: '', color: '' });
@@ -214,13 +231,24 @@ const attendeeHeaders = ref([
 const pendingHeaders = ref([...attendeeHeaders.value, { title: 'Actions', key: 'actions', sortable: false, align: 'end' }]);
 const attendeeHeadersWithRevert = ref([...attendeeHeaders.value, { title: 'Actions', key: 'actions', sortable: false, align: 'end' }]);
 
+async function fetchEventDetails() {
+  const eventId = route.params.id;
+  try {
+    const response = await EventService.getEvent(eventId);
+    eventTitle.value = response.data.event_name;
+    eventPrice.value = response.data.price_euros;
+  } catch (error) {
+    console.error("Failed to fetch event details:", error);
+  }
+}
+
 async function fetchAttendees() {
   isLoading.value = true;
   const eventId = route.params.id;
   try {
     const response = await EventService.getEventRegistrations(eventId);
     allAttendees.value = response.data;
-    expanded.value = []; 
+    expanded.value = [];
   } catch (error) {
     console.error("Failed to fetch attendees:", error);
     snackbar.value = { show: true, text: 'Failed to load attendees.', color: 'error' };
@@ -230,6 +258,7 @@ async function fetchAttendees() {
 }
 
 function handleApproval(attendee, action) {
+  customAmount.value = null; // Reset custom amount
   confirmDialog.value = {
     show: true,
     action: action,
@@ -247,7 +276,7 @@ async function confirmApproval() {
 
   try {
     if (action === 'approve') {
-      await AdminService.approveRegistration(attendee.registration_id);
+      await AdminService.approveRegistration(attendee.registration_id, customAmount.value);
     } else {
       await AdminService.rejectRegistration(attendee.registration_id);
     }
@@ -302,6 +331,7 @@ async function viewFile(fileValue) {
 }
 
 onMounted(() => {
+  fetchEventDetails();
   fetchAttendees();
 });
 </script>
