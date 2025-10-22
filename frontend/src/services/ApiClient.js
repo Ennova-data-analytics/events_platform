@@ -15,13 +15,26 @@ ApiClient.interceptors.request.use(
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
-        
+
         console.log('Sending request with headers:', config.headers);
 
 
         return config;
     },
     (error) => {
+        return Promise.reject(error);
+    }
+);
+
+ApiClient.interceptors.response.use(
+    (response) => {
+        return response;
+    },
+    (error) => {
+        if (error.response?.status === 401) {
+            const authStore = useAuthStore();
+            authStore.logout();
+        }
         return Promise.reject(error);
     }
 );
