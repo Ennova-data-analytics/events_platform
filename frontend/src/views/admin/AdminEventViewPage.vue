@@ -3,6 +3,16 @@
     <div class="d-flex align-center mb-4">
       <v-btn icon="mdi-arrow-left" variant="text" to="/admin/events" class="mr-2"></v-btn>
       <h1 class="text-h5">Manage Attendees: {{ eventTitle }}</h1>
+      <v-spacer></v-spacer>
+      <v-btn
+        :color="signupsEnabled ? 'success' : 'error'"
+        variant="tonal"
+        @click="toggleSignups"
+        :loading="isTogglingSignups"
+        prepend-icon="mdi-account-plus"
+      >
+        {{ signupsEnabled ? 'Signups Enabled' : 'Signups Disabled' }}
+      </v-btn>
     </div>
 
     <v-tabs v-model="tab" bg-color="surface" class="mb-4">
@@ -209,6 +219,8 @@ const hasFeedbackTemplate = ref(false);
 const feedbackSectionKey = ref(0);
 const isLoading = ref(false);
 const expanded = ref([]);
+const signupsEnabled = ref(true);
+const isTogglingSignups = ref(false);
 const snackbar = ref({ show: false, text: '', color: '' });
 const confirmDialog = ref({
   show: false,
@@ -251,6 +263,7 @@ async function fetchEventDetails() {
     const response = await EventService.getEventById(eventIdValue);
     eventTitle.value = response.data.event_name;
     eventPrice.value = response.data.price_euros;
+    signupsEnabled.value = response.data.signups_enabled ?? true;
     hasFeedbackTemplate.value = !!response.data.feedback_template_id;
     // Force FeedbackSection to re-render when feedback template changes
     feedbackSectionKey.value++;
@@ -344,6 +357,24 @@ async function viewFile(fileValue) {
   } catch (error) {
     console.error("Could not open file", error);
     snackbar.value = { show: true, text: 'Could not open file.', color: 'error' };
+  }
+}
+
+async function toggleSignups() {
+  isTogglingSignups.value = true;
+  try {
+    const response = await EventService.toggleSignups(route.params.id);
+    signupsEnabled.value = response.data.signups_enabled;
+    snackbar.value = {
+      show: true,
+      text: `Signups ${signupsEnabled.value ? 'enabled' : 'disabled'} successfully.`,
+      color: 'success'
+    };
+  } catch (error) {
+    console.error("Failed to toggle signups:", error);
+    snackbar.value = { show: true, text: 'Failed to toggle signups.', color: 'error' };
+  } finally {
+    isTogglingSignups.value = false;
   }
 }
 

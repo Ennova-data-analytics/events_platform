@@ -19,8 +19,15 @@ def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_res
             status_code=status.HTTP_409_CONFLICT,
             detail="You are already registered for this event"
         )
-    
+
     event = db.query(models.Event).filter(models.Event.event_id == event_id).first()
+
+    if not event.signups_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Signups are currently disabled for this event"
+        )
+
     if event.capacity is not None:
         current_registrations = db.query(models.Registration).filter(
             models.Registration.event_id == event_id,

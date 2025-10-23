@@ -114,6 +114,7 @@ class Event(Base):
     status = Column(String(50), nullable=False, default='Draft')
     capacity = Column(Integer)
     price_euros = Column(DECIMAL(10, 2), default=0.00)
+    signups_enabled = Column(Boolean, default=True, nullable=False)
 
     image_url = Column(Text, nullable=True)
     form_template_id = Column(Integer, ForeignKey('form_templates.template_id', ondelete="SET NULL"))

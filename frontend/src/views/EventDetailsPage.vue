@@ -56,6 +56,10 @@
             <v-btn v-if="!authStore.isAuthenticated" to="/login" color="primary" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
               Login to Apply
             </v-btn>
+            <v-chip v-else-if="!eventStore.currentEvent.signups_enabled" color="warning" variant="tonal" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
+              <v-icon start>mdi-close-circle-outline</v-icon>
+              Signups Closed
+            </v-chip>
             <v-btn
               v-else-if="registrationStatus === 'not_registered'"
               color="primary"
@@ -295,9 +299,15 @@ function validateForm() {
 async function handleRegistration() {
   const event = eventStore.currentEvent;
   console.log('handleRegistration called. Event object:', event);
-  
+
   if (!event) {
     console.error('handleRegistration: No current event found.');
+    return;
+  }
+
+  if (!event.signups_enabled) {
+    eventStore.error = "Signups are currently closed for this event.";
+    showError.value = true;
     return;
   }
 
@@ -307,7 +317,7 @@ async function handleRegistration() {
     try {
       const response = await FormTemplateService.getTemplateById(event.form_template_id);
       customForm.value = response.data;
-      formResponses.value = {}; 
+      formResponses.value = {};
       formFiles.value = {};
       isFormModalVisible.value = true;
       console.log('Modal should now be visible.');

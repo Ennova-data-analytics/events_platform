@@ -71,13 +71,26 @@ def upload_event_image(event_id: int, file: UploadFile = File(...), db: Session 
     db_event = db_events.get_event(db, event_id=event_id)
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
-    
+
     file_extension = file.filename.split('.')[-1]
     unique_filename = f"event_images/event_{event_id}_{int(datetime.now().timestamp())}.{file_extension}"
 
     image_url = s3_service.upload_file_to_s3(file.file, unique_filename)
 
     db_event.image_url = image_url
+    db.commit()
+    db.refresh(db_event)
+
+    return db_event
+
+@router.patch("/{event_id}/toggle-signups", response_model=schemas.Event, tags=["Admin"])
+def toggle_event_signups(event_id: int, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
+    """Toggle signups enabled/disabled for an event"""
+    db_event = db_events.get_event(db, event_id=event_id)
+    if not db_event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    db_event.signups_enabled = not db_event.signups_enabled
     db.commit()
     db.refresh(db_event)
 

@@ -27,5 +27,9 @@ export const EventService = {
 
   getEventRegistrations(eventId) {
     return ApiClient.get(`/events/${eventId}/registrations`);
+  },
+
+  toggleSignups(eventId) {
+    return ApiClient.patch(`/events/${eventId}/toggle-signups`);
   }
 };
