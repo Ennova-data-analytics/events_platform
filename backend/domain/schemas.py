@@ -79,6 +79,7 @@ class EventBase(BaseModel):
     email_template_rejected_id: int | None = None
     email_template_received_id: int | None = None
     email_template_payment_id: int | None = None
+    feedback_template_id: int | None = None
 
 class EventCreate(EventBase):
     pass 
@@ -186,6 +187,56 @@ class EmailTemplate(EmailTemplateBase):
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(from_attributes=True) 
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Feedback Template Schemas
+class FeedbackTemplateBase(BaseModel):
+    template_name: str
+    description: str | None = None
+    fields: list[FormField]
+
+class FeedbackTemplateCreate(FeedbackTemplateBase):
+    pass
+
+class FeedbackTemplateUpdate(FeedbackTemplateBase):
+    pass
+
+class FeedbackTemplate(FeedbackTemplateBase):
+    template_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Feedback Schemas
+class FeedbackBase(BaseModel):
+    form_responses: dict
+
+class FeedbackCreate(FeedbackBase):
+    is_anonymous: bool = False
+
+class Feedback(FeedbackBase):
+    feedback_id: int
+    event_id: int
+    user_id: uuid.UUID | None = None
+    feedback_template_id: int | None = None
+    is_anonymous: bool
+    submitted_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class FeedbackWithUser(Feedback):
+    user: User | None = None
+
+
+# Feedback Statistics Schema
+class FeedbackStats(BaseModel):
+    total_responses: int
+    total_registrations: int | None = None
+    response_rate: float | None = None
+    field_statistics: dict
+    recent_responses: list[Feedback]
 
 

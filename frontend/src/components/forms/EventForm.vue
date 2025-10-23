@@ -73,6 +73,23 @@
       </v-col>
     </v-row>
 
+    <v-row>
+      <v-col cols="12">
+        <v-select
+          v-model="editableEvent.feedback_template_id"
+          :items="feedbackTemplates"
+          item-title="template_name"
+          item-value="template_id"
+          label="Feedback Form Template (Optional)"
+          variant="outlined"
+          clearable
+          no-data-text="No feedback templates available"
+          hint="Attendees can submit feedback via QR code"
+          persistent-hint
+        ></v-select>
+      </v-col>
+    </v-row>
+
     <v-divider class="my-4"></v-divider>
     <h3 class="text-subtitle-1 mb-3">Custom Email Templates (Optional)</h3>
 
@@ -161,6 +178,7 @@
 import { ref, watch, computed, onMounted } from 'vue';
 import { FormTemplateService } from '@/services/FormTemplateService.js';
 import { EmailTemplateService } from '@/services/EmailTemplateService.js';
+import { FeedbackTemplateService } from '@/services/FeedbackTemplateService.js';
 
 const props = defineProps({
   initialData: { type: Object, default: () => ({}) },
@@ -173,6 +191,7 @@ const editableEvent = ref({});
 const imageFile = ref([]);
 
 const formTemplates = ref([]);
+const feedbackTemplates = ref([]);
 const approvedTemplates = ref([]);
 const rejectedTemplates = ref([]);
 const receivedTemplates = ref([]);
@@ -189,11 +208,13 @@ watch(() => props.initialData, (newData) => {
 
 onMounted(async () => {
   try {
-    const [formResponse, emailResponse] = await Promise.all([
+    const [formResponse, emailResponse, feedbackResponse] = await Promise.all([
       FormTemplateService.getAllTemplates(),
-      EmailTemplateService.getAllTemplates()
+      EmailTemplateService.getAllTemplates(),
+      FeedbackTemplateService.getAllTemplates()
     ]);
     formTemplates.value = formResponse.data;
+    feedbackTemplates.value = feedbackResponse.data;
 
     // Filter email templates by type
     const allEmailTemplates = emailResponse.data;

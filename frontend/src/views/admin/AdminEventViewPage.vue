@@ -108,6 +108,16 @@
       </v-window>
     </v-card>
 
+    <!-- Feedback Section -->
+    <div class="mt-6">
+      <FeedbackSection
+        v-if="eventId"
+        :key="feedbackSectionKey"
+        :event-id="parseInt(eventId)"
+        :has-feedback-template="hasFeedbackTemplate"
+      />
+    </div>
+
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000">
       {{ snackbar.text }}
     </v-snackbar>
@@ -180,19 +190,23 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, onActivated, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { EventService } from '@/services/EventService.js';
 import { AdminService } from '@/services/AdminService.js';
 import { UploadService } from '@/services/UploadService.js';
+import FeedbackSection from '@/components/feedback/FeedbackSection.vue';
 
 
 const route = useRoute();
+const eventId = computed(() => route.params.id);
 const tab = ref('pending');
 const allAttendees = ref([]);
 const eventTitle = ref('');
 const eventPrice = ref(null);
 const customAmount = ref(null);
+const hasFeedbackTemplate = ref(false);
+const feedbackSectionKey = ref(0);
 const isLoading = ref(false);
 const expanded = ref([]);
 const snackbar = ref({ show: false, text: '', color: '' });
@@ -232,11 +246,14 @@ const pendingHeaders = ref([...attendeeHeaders.value, { title: 'Actions', key: '
 const attendeeHeadersWithRevert = ref([...attendeeHeaders.value, { title: 'Actions', key: 'actions', sortable: false, align: 'end' }]);
 
 async function fetchEventDetails() {
-  const eventId = route.params.id;
+  const eventIdValue = route.params.id;
   try {
-    const response = await EventService.getEvent(eventId);
+    const response = await EventService.getEventById(eventIdValue);
     eventTitle.value = response.data.event_name;
     eventPrice.value = response.data.price_euros;
+    hasFeedbackTemplate.value = !!response.data.feedback_template_id;
+    // Force FeedbackSection to re-render when feedback template changes
+    feedbackSectionKey.value++;
   } catch (error) {
     console.error("Failed to fetch event details:", error);
   }
@@ -330,7 +347,19 @@ async function viewFile(fileValue) {
   }
 }
 
+// Watch for route changes to refresh data
+watch(() => route.params.id, () => {
+  fetchEventDetails();
+  fetchAttendees();
+});
+
 onMounted(() => {
+  fetchEventDetails();
+  fetchAttendees();
+});
+
+// Refresh when component is reactivated (e.g., navigating back from edit page)
+onActivated(() => {
   fetchEventDetails();
   fetchAttendees();
 });

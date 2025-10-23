@@ -93,6 +93,16 @@ class EmailTemplate(Base):
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
+class FeedbackTemplate(Base):
+    __tablename__ = "feedback_templates"
+    template_id = Column(Integer, primary_key=True)
+    template_name = Column(String(255), nullable=False)
+    description = Column(Text)
+    fields = Column(JSONB, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
 class Event(Base):
     __tablename__ = "events"
     event_id = Column(Integer, primary_key=True)
@@ -114,6 +124,8 @@ class Event(Base):
     email_template_received_id = Column(Integer, ForeignKey('email_templates.template_id', ondelete="SET NULL"))
     email_template_payment_id = Column(Integer, ForeignKey('email_templates.template_id', ondelete="SET NULL"))
 
+    feedback_template_id = Column(Integer, ForeignKey('feedback_templates.template_id', ondelete="SET NULL"))
+
     created_by_user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id'))
 
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
@@ -129,6 +141,9 @@ class Event(Base):
     email_template_rejected = relationship("EmailTemplate", foreign_keys=[email_template_rejected_id])
     email_template_received = relationship("EmailTemplate", foreign_keys=[email_template_received_id])
     email_template_payment = relationship("EmailTemplate", foreign_keys=[email_template_payment_id])
+
+    # Relationship to feedback template
+    feedback_template = relationship("FeedbackTemplate", foreign_keys=[feedback_template_id])
 
 class Registration(Base):
     __tablename__ = "registrations"
@@ -152,13 +167,14 @@ class Feedback(Base):
     event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="SET NULL"))
 
-    respondent_type = Column(String(50), nullable=False)
-    satisfaction_score = Column(Integer)
-    comments = Column(Text)
+    feedback_template_id = Column(Integer, ForeignKey('feedback_templates.template_id', ondelete="SET NULL"))
+    form_responses = Column(JSONB)
+    is_anonymous = Column(Boolean, default=False)
     submitted_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
 
     user = relationship("User", back_populates="feedback")
     event = relationship("Event", back_populates="feedback")
+    template = relationship("FeedbackTemplate")
 
 
 class InAppNotification(Base):

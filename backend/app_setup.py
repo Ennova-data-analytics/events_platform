@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from api.routers import users, auth, events, admin, form_templates, uploads, notifications, payments, email_templates
+from api.routers import users, auth, events, admin, form_templates, uploads, notifications, payments, email_templates, feedback_templates, feedback
 from middleware import setup_middleware
 
 def create_app() -> FastAPI:
@@ -12,6 +12,8 @@ def create_app() -> FastAPI:
     app.include_router(admin.router, prefix="/admin", tags=["Admin"])
     app.include_router(form_templates.router, prefix="/form-templates", tags=["Form Templates"])
     app.include_router(email_templates.router, prefix="/email-templates", tags=["Email Templates"])
+    app.include_router(feedback_templates.router, prefix="/feedback-templates", tags=["Feedback Templates"])
+    app.include_router(feedback.router, prefix="/events", tags=["Feedback"])
     app.include_router(uploads.router, prefix="/uploads", tags=["Uploads"])
     app.include_router(notifications.router, prefix="", tags=["Notifications"])
     app.include_router(payments.router, prefix="/payments", tags=["Payments"])

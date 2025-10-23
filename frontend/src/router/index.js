@@ -50,9 +50,8 @@ const routes = [
   },
   {
     path: '/feedback/:id',
-    name: 'feedback',
-    component: () => import('../views/FeedbackPage.vue'),
-    meta: { requiresAuth: true }
+    name: 'public-feedback',
+    component: () => import('../views/PublicFeedbackFormPage.vue')
   },
   {
     path: '/admin',
@@ -113,6 +112,26 @@ const routes = [
         path: 'email-templates/edit/:id',
         name: 'admin-email-template-edit',
         component: () => import('../views/admin/AdminEmailTemplateEditPage.vue')
+      },
+      {
+        path: 'feedback-templates',
+        name: 'admin-feedback-templates',
+        component: () => import('../views/admin/AdminFeedbackTemplatesListPage.vue')
+      },
+      {
+        path: 'feedback-templates/create',
+        name: 'admin-feedback-template-create',
+        component: () => import('../views/admin/AdminFeedbackTemplateEditPage.vue')
+      },
+      {
+        path: 'feedback-templates/edit/:id',
+        name: 'admin-feedback-template-edit',
+        component: () => import('../views/admin/AdminFeedbackTemplateEditPage.vue')
+      },
+      {
+        path: 'events/:id/feedback',
+        name: 'admin-event-feedback',
+        component: () => import('../views/admin/AdminEventFeedbackPage.vue')
       }
     ]
   }
