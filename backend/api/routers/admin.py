@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import logging
+import time
 
 from domain import schemas, models
-from domain.services import notification_service
+from domain.services import notification_service, email_service, email_templates
 from api import deps
 
-logger = logging.getLogger(__name__) 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -71,3 +72,85 @@ def revert_registration_to_pending(registration_id: int, db: Session = Depends(d
     db.refresh(reg)
 
     return reg
+
+
+@router.post("/events/{event_id}/send-bulk-email", response_model=schemas.BulkEmailResponse)
+def send_bulk_email_to_attendees(
+    event_id: int,
+    email_data: schemas.BulkEmailRequest,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """Send bulk email to attendees with specific registration statuses (e.g., Approved, Paid)"""
+
+    event = db.query(models.Event).filter(models.Event.event_id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    valid_statuses = ['Pending Approval', 'Approved', 'Paid', 'Rejected']
+    for status_value in email_data.recipient_statuses:
+        if status_value not in valid_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status: {status_value}. Must be one of {valid_statuses}"
+            )
+
+    registrations = db.query(models.Registration).filter(
+        models.Registration.event_id == event_id,
+        models.Registration.status.in_(email_data.recipient_statuses)
+    ).all()
+
+    if not registrations:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No registrations found with status(es): {', '.join(email_data.recipient_statuses)}"
+        )
+
+    emails_sent = 0
+    failed_emails = []
+
+    for idx, reg in enumerate(registrations):
+        try:
+            user = db.query(models.User).filter(models.User.user_id == reg.user_id).first()
+            if not user or not user.email:
+                logger.warning(f"No user or email found for registration {reg.registration_id}")
+                failed_emails.append(f"Registration ID {reg.registration_id} (no email)")
+                continue
+
+            html_content, text_content = email_templates.render_bulk_email(
+                user_name=user.full_name or user.email,
+                event_name=event.event_name,
+                header_title=email_data.subject,
+                body_content=email_data.body
+            )
+
+            success = email_service.email_service.send_email(
+                to_email=user.email,
+                to_name=user.full_name or user.email,
+                subject=email_data.subject,
+                html_content=html_content,
+                text_content=text_content
+            )
+
+            if success:
+                emails_sent += 1
+            else:
+                failed_emails.append(user.email)
+
+           
+            if idx < len(registrations) - 1:
+                time.sleep(0.6)
+
+        except Exception as e:
+            logger.error(f"Failed to send email for registration {reg.registration_id}: {str(e)}")
+            if user and user.email:
+                failed_emails.append(user.email)
+            else:
+                failed_emails.append(f"Registration ID {reg.registration_id}")
+
+    return schemas.BulkEmailResponse(
+        success=emails_sent > 0,
+        emails_sent=emails_sent,
+        total_recipients=len(registrations),
+        failed_emails=failed_emails
+    )

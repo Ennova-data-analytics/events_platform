@@ -241,3 +241,17 @@ class FeedbackStats(BaseModel):
     recent_responses: list[Feedback]
 
 
+class BulkEmailRequest(BaseModel):
+    event_id: int
+    recipient_statuses: list[str]
+    subject: str
+    body: str  
+
+
+class BulkEmailResponse(BaseModel):
+    success: bool
+    emails_sent: int
+    total_recipients: int
+    failed_emails: list[str] = []
+
+

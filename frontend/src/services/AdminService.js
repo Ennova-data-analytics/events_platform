@@ -27,5 +27,8 @@ export const AdminService = {
 
 
         return ApiClient.post(`/events/${eventId}/image`, formData, {headers: { 'Content-Type': 'multipart/form-data'}});
+    },
+    sendBulkEmail(eventId, emailData) {
+        return ApiClient.post(`/admin/events/${eventId}/send-bulk-email`, emailData);
     }
 };

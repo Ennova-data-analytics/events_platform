@@ -5,6 +5,15 @@
       <h1 class="text-h5">Manage Attendees: {{ eventTitle }}</h1>
       <v-spacer></v-spacer>
       <v-btn
+        color="primary"
+        variant="tonal"
+        @click="openBulkEmailDialog"
+        prepend-icon="mdi-email-multiple"
+        class="mr-2"
+      >
+        Send Bulk Email
+      </v-btn>
+      <v-btn
         :color="signupsEnabled ? 'success' : 'error'"
         variant="tonal"
         @click="toggleSignups"
@@ -196,6 +205,78 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Bulk Email Dialog -->
+    <v-dialog v-model="bulkEmailDialog.show" max-width="700" scrollable>
+      <v-card>
+        <v-card-title class="text-h5">
+          Send Bulk Email
+        </v-card-title>
+        <v-card-text>
+          <v-alert type="info" variant="tonal" class="mb-4">
+            This will send an email to all attendees with the selected status(es).
+          </v-alert>
+
+          <v-select
+            v-model="bulkEmailDialog.recipientStatuses"
+            label="Recipient Status(es)"
+            :items="statusOptions"
+            multiple
+            chips
+            closable-chips
+            required
+            density="comfortable"
+            class="mb-4"
+            :hint="`${getRecipientCount()} recipient(s) selected`"
+            persistent-hint
+          ></v-select>
+
+          <v-text-field
+            v-model="bulkEmailDialog.subject"
+            label="Email Subject"
+            required
+            density="comfortable"
+            class="mb-4"
+          ></v-text-field>
+
+          <v-textarea
+            v-model="bulkEmailDialog.body"
+            label="Email Body (Plain Text)"
+            rows="8"
+            required
+            density="comfortable"
+            class="mb-4"
+          ></v-textarea>
+
+          <v-alert v-if="bulkEmailDialog.result" :type="bulkEmailDialog.result.success ? 'success' : 'error'" class="mt-4">
+            <div v-if="bulkEmailDialog.result.success">
+              Successfully sent {{ bulkEmailDialog.result.emails_sent }} of {{ bulkEmailDialog.result.total_recipients }} emails.
+            </div>
+            <div v-if="bulkEmailDialog.result.failed_emails && bulkEmailDialog.result.failed_emails.length > 0">
+              <div class="font-weight-bold">Failed to send to:</div>
+              <ul>
+                <li v-for="email in bulkEmailDialog.result.failed_emails" :key="email">{{ email }}</li>
+              </ul>
+            </div>
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="closeBulkEmailDialog">
+            Cancel
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            @click="sendBulkEmail"
+            :loading="bulkEmailDialog.sending"
+            :disabled="!canSendBulkEmail"
+          >
+            Send Email
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -233,6 +314,16 @@ const revertDialog = ref({
   attendee: null,
   attendeeName: ''
 });
+const bulkEmailDialog = ref({
+  show: false,
+  recipientStatuses: ['Approved', 'Paid'],
+  subject: '',
+  body: '',
+  sending: false,
+  result: null
+});
+
+const statusOptions = ['Pending Approval', 'Approved', 'Paid', 'Rejected'];
 
 watch(tab, () => {
   expanded.value = [];
@@ -375,6 +466,83 @@ async function toggleSignups() {
     snackbar.value = { show: true, text: 'Failed to toggle signups.', color: 'error' };
   } finally {
     isTogglingSignups.value = false;
+  }
+}
+
+function openBulkEmailDialog() {
+  bulkEmailDialog.value = {
+    show: true,
+    recipientStatuses: ['Approved', 'Paid'],
+    subject: '',
+    body: '',
+    sending: false,
+    result: null
+  };
+}
+
+function closeBulkEmailDialog() {
+  bulkEmailDialog.value.show = false;
+}
+
+function getRecipientCount() {
+  if (!bulkEmailDialog.value.recipientStatuses || bulkEmailDialog.value.recipientStatuses.length === 0) {
+    return 0;
+  }
+  return allAttendees.value.filter(a =>
+    bulkEmailDialog.value.recipientStatuses.includes(a.status)
+  ).length;
+}
+
+const canSendBulkEmail = computed(() => {
+  return bulkEmailDialog.value.recipientStatuses.length > 0 &&
+         bulkEmailDialog.value.subject.trim() !== '' &&
+         bulkEmailDialog.value.body.trim() !== '' &&
+         !bulkEmailDialog.value.sending;
+});
+
+async function sendBulkEmail() {
+  bulkEmailDialog.value.sending = true;
+  bulkEmailDialog.value.result = null;
+
+  try {
+    const emailData = {
+      event_id: parseInt(route.params.id),
+      recipient_statuses: bulkEmailDialog.value.recipientStatuses,
+      subject: bulkEmailDialog.value.subject,
+      body: bulkEmailDialog.value.body
+    };
+
+    const response = await AdminService.sendBulkEmail(route.params.id, emailData);
+    bulkEmailDialog.value.result = response.data;
+
+    if (response.data.success) {
+      snackbar.value = {
+        show: true,
+        text: `Successfully sent ${response.data.emails_sent} email(s).`,
+        color: 'success'
+      };
+    } else {
+      snackbar.value = {
+        show: true,
+        text: 'Some emails failed to send. Check the details above.',
+        color: 'warning'
+      };
+    }
+  } catch (error) {
+    console.error('Failed to send bulk email:', error);
+    snackbar.value = {
+      show: true,
+      text: error.response?.data?.detail || 'Failed to send bulk email.',
+      color: 'error'
+    };
+    bulkEmailDialog.value.result = {
+      success: false,
+      emails_sent: 0,
+      total_recipients: 0,
+      failed_emails: []
+    };
+  } finally {
+    bulkEmailDialog.value.sending = false;
   }
 }
 

@@ -361,25 +361,25 @@ def render_password_reset_email(
         <p>Hi {user_name},</p>
         <p>We received a request to reset your password for your Events Platform account.</p>
         <p>Click the button below to reset your password. This link will expire in <strong>1 hour</strong>.</p>
-        
+
         <a href="{reset_url}" class="button">Reset Password</a>
-        
+
         <p>If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.</p>
-        
+
         <p>For security reasons, this link can only be used once.</p>
-        
+
         <p style="color: #666; font-size: 12px; margin-top: 20px;">
             If the button doesn't work, copy and paste this link into your browser:<br>
             {reset_url}
         </p>
     """
-    
+
     base = Template(get_base_template())
     html_content = base.render(
         header_title="Password Reset",
         content=content
     )
-    
+
     text_content = f"""
 Password Reset Request
 
@@ -395,5 +395,53 @@ If you didn't request this password reset, you can safely ignore this email. You
 
 For security reasons, this link can only be used once.
 """
-    
+
+    return html_content, text_content
+
+
+def render_bulk_email(
+    user_name: str,
+    event_name: str,
+    header_title: str,
+    body_content: str
+) -> tuple[str, str]:
+    """
+    Render bulk email with proper HTML template
+
+    Args:
+        user_name: Recipient's name
+        event_name: Event name for context
+        header_title: Email header title
+        body_content: The body content (plain text, will be converted to HTML)
+
+    Returns:
+        Tuple of (html_content, text_content)
+    """
+    paragraphs = body_content.strip().split('\n\n')
+    html_paragraphs = ''.join([f'<p>{p.replace(chr(10), "<br>")}</p>' for p in paragraphs if p.strip()])
+
+    content = f"""
+        <h2>Hi {user_name},</h2>
+        {html_paragraphs}
+        <div class="event-details">
+            <p><strong>Event:</strong> {event_name}</p>
+        </div>
+    """
+
+    base = Template(get_base_template())
+    html_content = base.render(
+        header_title=header_title,
+        content=content
+    )
+
+    text_content = f"""
+{header_title}
+
+Hi {user_name},
+
+{body_content}
+
+Event: {event_name}
+"""
+
     return html_content, text_content
