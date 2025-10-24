@@ -23,74 +23,111 @@
 
           <v-card-text class="px-6 pb-6">
             <v-form ref="formRef" @submit.prevent="submitFeedback">
-              <div v-for="(field, index) in template.fields" :key="index" class="mb-4">
+              <div v-for="(field, index) in template.fields" :key="index" class="mb-8">
                 <!-- Text input -->
-                <v-text-field
-                  v-if="field.type === 'text'"
-                  v-model="formData[field.name]"
-                  :label="field.label"
-                  :required="field.required"
-                  :rules="field.required ? [v => !!v || `${field.label} is required`] : []"
-                  variant="outlined"
-                ></v-text-field>
+                <div v-if="field.type === 'text'" class="field-wrapper">
+                  <label class="text-body-1 font-weight-medium mb-2 d-block">
+                    {{ field.label }}
+                    <span v-if="field.required" class="text-error">*</span>
+                  </label>
+                  <v-text-field
+                    v-model="formData[field.name]"
+                    :placeholder="`Enter ${field.label.toLowerCase()}`"
+                    :required="field.required"
+                    :rules="field.required ? [v => !!v || `${field.label} is required`] : []"
+                    variant="outlined"
+                    density="comfortable"
+                    hide-details="auto"
+                  ></v-text-field>
+                </div>
 
                 <!-- Textarea -->
-                <v-textarea
-                  v-else-if="field.type === 'textarea'"
-                  v-model="formData[field.name]"
-                  :label="field.label"
-                  :required="field.required"
-                  :rules="field.required ? [v => !!v || `${field.label} is required`] : []"
-                  variant="outlined"
-                  rows="4"
-                ></v-textarea>
+                <div v-else-if="field.type === 'textarea'" class="field-wrapper">
+                  <label class="text-body-1 font-weight-medium mb-2 d-block">
+                    {{ field.label }}
+                    <span v-if="field.required" class="text-error">*</span>
+                  </label>
+                  <v-textarea
+                    v-model="formData[field.name]"
+                    :placeholder="`Enter your response`"
+                    :required="field.required"
+                    :rules="field.required ? [v => !!v || `${field.label} is required`] : []"
+                    variant="outlined"
+                    rows="4"
+                    density="comfortable"
+                    hide-details="auto"
+                  ></v-textarea>
+                </div>
 
                 <!-- Number input -->
-                <v-text-field
-                  v-else-if="field.type === 'number'"
-                  v-model.number="formData[field.name]"
-                  :label="field.label"
-                  :required="field.required"
-                  :rules="field.required ? [v => v !== null && v !== '' || `${field.label} is required`] : []"
-                  type="number"
-                  variant="outlined"
-                ></v-text-field>
+                <div v-else-if="field.type === 'number'" class="field-wrapper">
+                  <label class="text-body-1 font-weight-medium mb-2 d-block">
+                    {{ field.label }}
+                    <span v-if="field.required" class="text-error">*</span>
+                  </label>
+                  <v-text-field
+                    v-model.number="formData[field.name]"
+                    :placeholder="`Enter a number`"
+                    :required="field.required"
+                    :rules="field.required ? [v => v !== null && v !== '' || `${field.label} is required`] : []"
+                    type="number"
+                    variant="outlined"
+                    density="comfortable"
+                    hide-details="auto"
+                  ></v-text-field>
+                </div>
 
                 <!-- Rating -->
-                <div v-else-if="field.type === 'rating'">
-                  <label class="text-body-2 mb-2 d-block">{{ field.label }}</label>
+                <div v-else-if="field.type === 'rating'" class="field-wrapper">
+                  <label class="text-body-1 font-weight-medium mb-3 d-block">
+                    {{ field.label }}
+                    <span v-if="field.required" class="text-error">*</span>
+                  </label>
                   <v-rating
                     v-model="formData[field.name]"
                     color="warning"
                     length="5"
                     hover
+                    size="large"
                   ></v-rating>
                 </div>
 
                 <!-- Select dropdown -->
-                <v-select
-                  v-else-if="field.type === 'select'"
-                  v-model="formData[field.name]"
-                  :label="field.label"
-                  :items="field.options"
-                  :required="field.required"
-                  :rules="field.required ? [v => !!v || `${field.label} is required`] : []"
-                  variant="outlined"
-                ></v-select>
+                <div v-else-if="field.type === 'select'" class="field-wrapper">
+                  <label class="text-body-1 font-weight-medium mb-2 d-block">
+                    {{ field.label }}
+                    <span v-if="field.required" class="text-error">*</span>
+                  </label>
+                  <v-select
+                    v-model="formData[field.name]"
+                    :placeholder="`Select an option`"
+                    :items="field.options"
+                    :required="field.required"
+                    :rules="field.required ? [v => !!v || `${field.label} is required`] : []"
+                    variant="outlined"
+                    density="comfortable"
+                    hide-details="auto"
+                  ></v-select>
+                </div>
 
                 <!-- Radio buttons -->
-                <div v-else-if="field.type === 'radio'">
-                  <label class="text-body-2 mb-2 d-block">{{ field.label }}</label>
+                <div v-else-if="field.type === 'radio'" class="field-wrapper">
+                  <label class="text-body-1 font-weight-medium mb-3 d-block">
+                    {{ field.label }}
+                    <span v-if="field.required" class="text-error">*</span>
+                  </label>
                   <v-radio-group
                     v-model="formData[field.name]"
                     :required="field.required"
                     :rules="field.required ? [v => !!v || `${field.label} is required`] : []"
+                    hide-details="auto"
                   >
                     <v-radio
                       v-for="option in field.options"
                       :key="option"
                       :label="option"
                       :value="option"
+                      class="mb-2"
                     ></v-radio>
                   </v-radio-group>
                 </div>
