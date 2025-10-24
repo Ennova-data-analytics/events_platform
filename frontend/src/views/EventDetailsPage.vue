@@ -56,20 +56,6 @@
             <v-btn v-if="!authStore.isAuthenticated" to="/login" color="primary" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
               Login to Apply
             </v-btn>
-            <v-chip v-else-if="!eventStore.currentEvent.signups_enabled" color="warning" variant="tonal" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
-              <v-icon start>mdi-close-circle-outline</v-icon>
-              Signups Closed
-            </v-chip>
-            <v-btn
-              v-else-if="registrationStatus === 'not_registered'"
-              color="primary"
-              :size="$vuetify.display.mobile ? 'default' : 'large'"
-              block
-              @click="handleRegistration"
-              :loading="eventStore.isLoading"
-            >
-              Apply to Register ({{ eventStore.currentEvent.price_euros > 0 ? `€${eventStore.currentEvent.price_euros}` : 'Free' }})
-            </v-btn>
             <v-chip v-else-if="registrationStatus === 'Pending Approval'" color="info" variant="tonal" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
               <v-icon start>mdi-clock-outline</v-icon>
               Application Pending Review
@@ -86,6 +72,20 @@
               <v-icon start>mdi-close-circle</v-icon>
               Application Not Approved
             </v-chip>
+            <v-chip v-else-if="!eventStore.currentEvent.signups_enabled" color="warning" variant="tonal" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
+              <v-icon start>mdi-close-circle-outline</v-icon>
+              Signups Closed
+            </v-chip>
+            <v-btn
+              v-else-if="registrationStatus === 'not_registered'"
+              color="primary"
+              :size="$vuetify.display.mobile ? 'default' : 'large'"
+              block
+              @click="handleRegistration"
+              :loading="eventStore.isLoading"
+            >
+              Apply to Register ({{ eventStore.currentEvent.price_euros > 0 ? `€${eventStore.currentEvent.price_euros}` : 'Free' }})
+            </v-btn>
           </div>
 
           <v-snackbar v-model="showSuccess" color="success" timeout="4000">
