@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str
     FRONTEND_URL: str = "https://ennova-events.com"
 
+    OPENAI_API_KEY: str
+
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()
