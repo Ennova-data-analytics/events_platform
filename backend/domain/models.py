@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     Boolean, Column, ForeignKey, Integer, String, TIMESTAMP, Table,
-    Text, DECIMAL
+    Text, DECIMAL, ARRAY
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, declarative_base
@@ -208,3 +208,21 @@ class PasswordResetToken(Base):
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     
     user = relationship("User")
+
+class AISummary(Base):
+    __tablename__ = "ai_summary"
+
+    summary_id = Column(UUID(as_uuid=True))
+    event_id = Column(UUID(as_uuid=True), ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
+    generated_by_user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="CASCADE"), nullable=False, index=True)
+    generated_at = Column(TIMESTAMP(timezone=True))
+    feedback_count = Column(Integer)
+    summary_text = Column(Text)
+    summary_json = Column(JSONB)
+    model_used = Column(String(255))
+    tokens_used = Column(Integer, nullable=True)
+    sent_to_emails = Column(ARRAY(String))
+    sent_at = Column(TIMESTAMP(timezone=True))
+
+    user = relationship("User")
+    event = relationship("Event")
