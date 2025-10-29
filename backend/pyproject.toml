@@ -31,6 +31,13 @@ python-multipart = "^0.0.9"
 stripe = "^7.0.0"
 resend = "^2.16.0"
 
+# AI/LLM Dependencies
+langchain = "^0.3.0"
+langchain-openai = "^0.2.0"
+langchain-core = "^0.3.0"
+openai = "^1.54.0"
+markdown = "^3.7"
+
 
 
 [tool.poetry.group.dev.dependencies]

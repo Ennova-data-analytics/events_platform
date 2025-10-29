@@ -1,5 +1,7 @@
 from jinja2 import Template
 from domain import models
+import markdown
+from typing import Any
 
 
 def get_base_template() -> str:
@@ -445,3 +447,133 @@ Event: {event_name}
 """
 
     return html_content, text_content
+
+
+def render_feedback_summary_email(
+    event_name: str,
+    summary_text: str,
+    summary_json: dict[str, Any],
+    response_count: int,
+    generated_date: str
+) -> tuple[str, str, str]:
+    """
+    Render the feedback summary email template.
+
+    Args:
+        event_name: Name of the event
+        summary_text: Markdown-formatted summary
+        summary_json: Structured summary data
+        response_count: Number of responses analyzed
+        generated_date: Date the summary was generated
+
+    Returns:
+        Tuple of (subject, html_content, text_content)
+    """
+    summary_html = markdown.markdown(
+        summary_text,
+        extensions=['nl2br', 'fenced_code']
+    )
+
+    subject = f"AI Feedback Analysis: {event_name}"
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+            }}
+            .header {{
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 30px;
+                border-radius: 10px;
+                margin-bottom: 30px;
+            }}
+            .header h1 {{
+                margin: 0 0 10px 0;
+                font-size: 28px;
+            }}
+            .meta {{
+                font-size: 14px;
+                opacity: 0.9;
+            }}
+            .content {{
+                background: #f9f9f9;
+                padding: 30px;
+                border-radius: 10px;
+            }}
+            blockquote {{
+                border-left: 4px solid #667eea;
+                margin: 20px 0;
+                padding: 10px 20px;
+                background: #f0f0f0;
+                font-style: italic;
+            }}
+            ul, ol {{
+                margin: 10px 0;
+                padding-left: 30px;
+            }}
+            li {{
+                margin: 8px 0;
+            }}
+            h2 {{
+                color: #667eea;
+                margin-top: 30px;
+                border-bottom: 2px solid #667eea;
+                padding-bottom: 10px;
+            }}
+            .footer {{
+                text-align: center;
+                margin-top: 40px;
+                padding-top: 20px;
+                border-top: 1px solid #ddd;
+                font-size: 12px;
+                color: #666;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>📊 AI Feedback Analysis</h1>
+            <div class="meta">
+                <strong>{event_name}</strong><br>
+                {response_count} responses analyzed • Generated on {generated_date}
+            </div>
+        </div>
+
+        <div class="content">
+            {summary_html}
+        </div>
+
+        <div class="footer">
+            <p>
+                This analysis was generated using AI Agent by Ennova Events Platform.<br>
+                Powered by LangChain
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+
+    text_content = f"""
+AI Feedback Analysis: {event_name}
+
+{response_count} responses analyzed
+Generated on {generated_date}
+
+{summary_text}
+
+---
+This analysis was generated using AI (GPT-4o-mini) by Ennova Events Platform.
+Powered by LangChain
+    """.strip()
+
+    return subject, html_content, text_content
