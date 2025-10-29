@@ -136,6 +136,7 @@ class Event(Base):
     contacts = relationship("Contact", secondary=event_contacts, back_populates="events")
     registrations = relationship("Registration", back_populates="event", cascade="all, delete-orphan")
     feedback = relationship("Feedback", back_populates="event", cascade="all, delete-orphan")
+    ai_summaries = relationship("AISummary", back_populates="event", cascade="all, delete-orphan")
 
     # Relationships to email templates
     email_template_approved = relationship("EmailTemplate", foreign_keys=[email_template_approved_id])
@@ -210,19 +211,26 @@ class PasswordResetToken(Base):
     user = relationship("User")
 
 class AISummary(Base):
-    __tablename__ = "ai_summary"
+    __tablename__ = "ai_summaries"
 
-    summary_id = Column(UUID(as_uuid=True))
-    event_id = Column(UUID(as_uuid=True), ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
+    summary_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
     generated_by_user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="CASCADE"), nullable=False, index=True)
-    generated_at = Column(TIMESTAMP(timezone=True))
-    feedback_count = Column(Integer)
-    summary_text = Column(Text)
-    summary_json = Column(JSONB)
-    model_used = Column(String(255))
-    tokens_used = Column(Integer, nullable=True)
-    sent_to_emails = Column(ARRAY(String))
-    sent_at = Column(TIMESTAMP(timezone=True))
 
-    user = relationship("User")
-    event = relationship("Event")
+    generated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+    feedback_count = Column(Integer, nullable=False)
+
+    summary_text = Column(Text, nullable=False)
+    summary_json = Column(JSONB, nullable=False)
+
+    model_used = Column(String(50), nullable=False)
+    tokens_used = Column(Integer, nullable=True)
+
+    sent_to_emails = Column(ARRAY(String), default=list)
+    sent_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    generated_by = relationship("User", foreign_keys=[generated_by_user_id])
+    event = relationship("Event", back_populates="ai_summaries")
+
+    def __repr__(self):
+        return f"<AISummary(summary_id={self.summary_id}, event_id={self.event_id}, generated_at={self.generated_at})>"

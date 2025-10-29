@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr, ConfigDict, field_serializer
 from core import s3_service
 import uuid
 from datetime import datetime
+from typing import Any
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -255,3 +256,40 @@ class BulkEmailResponse(BaseModel):
     failed_emails: list[str] = []
 
 
+
+class AISummaryCreate(BaseModel):
+    pass
+
+
+class AISummarySendRequest(BaseModel):
+    recipient_statuses: list[str] = None
+    custom_emails: list[EmailStr] | None = None
+    include_organizers: bool = False
+
+
+class AISummaryResponse(BaseModel):
+    summary_id: uuid.UUID
+    event_id: int
+    generated_by_user_id: uuid.UUID
+    generated_at: datetime
+    feedback_count: int
+    summary_text: str
+    summary_json: dict[str, Any]
+    model_used: str
+    tokens_used: int | None
+    sent_to_emails: list[str]
+    sent_at: datetime | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AISummaryListResponse(BaseModel):
+    summaries: list[AISummaryResponse]
+    total_count: int
+
+
+class AISummarySendResponse(BaseModel):
+    summary_id: uuid.UUID
+    sent_count: int
+    failed_count: int
+    failed_emails: list[str]
