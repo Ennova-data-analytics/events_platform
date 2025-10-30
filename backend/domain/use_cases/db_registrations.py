@@ -40,10 +40,16 @@ def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_res
                 detail="This event is full"
             )
     
+    if event.requires_approval:
+        inital_status = 'Pending Approval'
+    else:
+        inital_status = 'Approved'
+    
     db_registration = models.Registration(
         event_id=event_id,
         user_id=user_id,
-        form_responses=form_responses
+        form_responses=form_responses,
+        status=inital_status
     )
 
     db.add(db_registration)
@@ -51,7 +57,10 @@ def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_res
     db.refresh(db_registration)
 
     try:
-        notification_service.send_registration_created_notification(db=db, registration=db_registration)
+        if event.requires_approval:
+            notification_service.send_registration_created_notification(db=db, registration=db_registration)
+        else:
+            notification_service.send_registration_approved_notification(db=db, registration=db_registration)
     except Exception as e:
         logger.error(f"Failed to create notification: {str(e)}")
 

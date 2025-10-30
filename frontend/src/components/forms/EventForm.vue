@@ -58,6 +58,33 @@
       </v-col>
     </v-row>
 
+    <!-- Requires Approval Toggle -->
+    <v-row>
+      <v-col cols="12">
+        <v-card variant="outlined" class="mb-4">
+          <v-card-text>
+            <div class="d-flex align-center justify-space-between">
+              <div>
+                <div class="text-subtitle-1 font-weight-medium mb-1">
+                  Require Admin Approval for Registrations
+                </div>
+                <div class="text-body-2 text-grey">
+                  When enabled, registrations must be manually approved before attendees can proceed to payment.
+                  When disabled, registrations are auto-approved and attendees can pay immediately.
+                </div>
+              </div>
+              <v-switch
+                v-model="editableEvent.requires_approval"
+                color="primary"
+                hide-details
+                class="ml-4"
+              ></v-switch>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+
     <v-row>
       <v-col cols="12">
         <v-select
@@ -187,7 +214,9 @@ const props = defineProps({
 
 const emit = defineEmits(['submit']);
 
-const editableEvent = ref({});
+const editableEvent = ref({
+  requires_approval: true  // Default to true for new events
+});
 const imageFile = ref([]);
 
 const formTemplates = ref([]);
@@ -202,6 +231,10 @@ watch(() => props.initialData, (newData) => {
   const dataToEdit = { ...newData };
   if (dataToEdit.event_date_start) {
     dataToEdit.event_date_start = new Date(dataToEdit.event_date_start).toISOString().slice(0, 19);
+  }
+  // Ensure requires_approval has a default value if not present
+  if (dataToEdit.requires_approval === undefined) {
+    dataToEdit.requires_approval = true;
   }
   editableEvent.value = dataToEdit;
 }, { immediate: true, deep: true });

@@ -142,7 +142,7 @@ def render_registration_approved_email(
 
         {"<p>Please complete your payment of €" + f"{price:.2f}" + " to confirm your spot.</p>" if price and price > 0 else "<p>Your spot is confirmed! We look forward to seeing you there.</p>"}
 
-        {f'<a href="{event_url}" class="button">View Event Details</a>' if event_url else ""}
+        {f'<a href="{event_url}" class="button">Pay Now</a>' if event_url else ""}
 
         <p>If you have any questions, please don't hesitate to contact us.</p>
     """

@@ -16,6 +16,17 @@
           item-key="event_id"
           class="elevation-1"
         >
+          <template v-slot:item.requires_approval="{ item }">
+            <v-chip
+              :color="item.requires_approval ? 'warning' : 'success'"
+              variant="tonal"
+              size="small"
+            >
+              <v-icon start :icon="item.requires_approval ? 'mdi-account-check' : 'mdi-check-circle'"></v-icon>
+              {{ item.requires_approval ? 'Manual' : 'Auto' }}
+            </v-chip>
+          </template>
+
           <template v-slot:item.actions="{ item }">
             <v-btn
               icon="mdi-pencil"
@@ -73,6 +84,7 @@ const headers = ref([
   { title: 'Location', key: 'location', sortable: false },
   { title: 'Price (€)', key: 'price_euros', sortable: true },
   { title: 'Capacity', key: 'capacity', sortable: true },
+  { title: 'Approval', key: 'requires_approval', sortable: true },
   { title: 'Actions', key: 'actions', sortable: false, align: 'end' },
 ]);
 const deleteDialog = ref(false);

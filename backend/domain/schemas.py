@@ -75,6 +75,7 @@ class EventBase(BaseModel):
     capacity: int | None = None
     price_euros: float | None = None
     signups_enabled: bool = True
+    requires_approval: bool = True
     image_url: str | None = None
     form_template_id: int | None = None
     email_template_approved_id: int | None = None

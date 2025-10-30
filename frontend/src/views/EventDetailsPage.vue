@@ -88,6 +88,24 @@
             </v-btn>
           </div>
 
+          <!-- Approval requirement info -->
+          <v-alert
+            v-if="registrationStatus === 'not_registered' && eventStore.currentEvent.signups_enabled && authStore.isAuthenticated"
+            type="info"
+            variant="tonal"
+            density="compact"
+            class="mt-3"
+          >
+            <template v-if="eventStore.currentEvent.requires_approval">
+              <v-icon size="small">mdi-information</v-icon>
+              Your registration will be reviewed by the organizer before you can proceed to payment.
+            </template>
+            <template v-else>
+              <v-icon size="small">mdi-flash</v-icon>
+              Register now and pay immediately to secure your spot!
+            </template>
+          </v-alert>
+
           <v-snackbar v-model="showSuccess" color="success" timeout="4000">
             {{ successMessage }}
           </v-snackbar>

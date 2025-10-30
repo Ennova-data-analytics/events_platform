@@ -45,10 +45,17 @@ def create_checkout_session(
         )
 
     if registration.status != 'Approved':
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Registration must be approved before payment"
-        )
+        event = registration.event
+        if event.requires_approval:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Registration must be approved before payment"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Registration is in '{registration.status}' and cannot be paid at this time"
+            )
 
     event = registration.event
     if not event.price_euros or event.price_euros <= 0:
