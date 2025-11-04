@@ -132,6 +132,11 @@ const routes = [
         path: 'events/:id/feedback',
         name: 'admin-event-feedback',
         component: () => import('../views/admin/AdminEventFeedbackPage.vue')
+      },
+      {
+        path: 'tutorials',
+        name: 'admin-tutorials',
+        component: () => import('../views/TutorialPage.vue')
       }
     ]
   }
