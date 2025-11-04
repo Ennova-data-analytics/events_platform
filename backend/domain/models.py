@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     Boolean, Column, ForeignKey, Integer, String, TIMESTAMP, Table,
-    Text, DECIMAL, ARRAY, CheckConstraint
+    Text, DECIMAL, ARRAY, JSON, Enum, CheckConstraint
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, declarative_base
@@ -44,6 +44,7 @@ class User(Base):
     feedback = relationship("Feedback", back_populates="user")
     created_events = relationship("Event", back_populates="creator")
     notifications = relationship("InAppNotification", back_populates="user", cascade="all, delete-orphan", order_by="desc(InAppNotification.created_at)")
+    chats = relationship("Chat", back_populates="user", cascade="all, delete-orphan")
 
 class Role(Base):
     __tablename__ = "roles"
@@ -248,6 +249,7 @@ class AISummary(Base):
     def __repr__(self):
         return f"<AISummary(summary_id={self.summary_id}, event_id={self.event_id}, generated_at={self.generated_at})>"
 
+
 class EventPhoto(Base):
     __tablename__ = "event_photos"
 
@@ -287,3 +289,32 @@ class DiscountCode(Base):
         CheckConstraint("max_uses IS NULL OR max_uses > 0", name='check_max_uses_positive'),
         CheckConstraint("used_count >= 0", name='check_used_count_non_negative'),
     )
+
+
+class Chat(Base):
+    __tablename__ = "chats"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False)
+    title = Column(String(255))
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+
+    user = relationship("User", back_populates="chats")
+    messages = relationship("ChatMessage", back_populates="chat", cascade="all, delete-orphan")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    chat_id = Column(Integer, ForeignKey("chats.id"), nullable=False)
+    role = Column(Enum("user", "assistant", "system", name="message_role"))
+    content = Column(Text, nullable=False)
+
+    retrieved_chunks = Column(JSON, nullable=True)
+    tokens_used = Column(Integer, nullable=True)
+
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+
+    chat = relationship("Chat", back_populates="messages")
