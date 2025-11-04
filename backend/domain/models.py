@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     Boolean, Column, ForeignKey, Integer, String, TIMESTAMP, Table,
-    Text, DECIMAL, ARRAY
+    Text, DECIMAL, ARRAY, JSON, Enum
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, declarative_base
@@ -235,3 +235,31 @@ class AISummary(Base):
 
     def __repr__(self):
         return f"<AISummary(summary_id={self.summary_id}, event_id={self.event_id}, generated_at={self.generated_at})>"
+    
+
+class Chat(Base):
+    __tablename__ = "chats"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String(255))
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+
+    user = relationship("User", back_populates="chats")
+    messages = relationship("ChatMessage", back_populates="chat", cascade="all, delete-orphan")
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    chat_id = Column(Integer, ForeignKey("chats.id"), nullable=False)
+    role = Column(Enum("user", "assistant", "system", name="message_role"))
+    content = Column(Text, nullable=False)
+    
+    retrieved_chunks = Column(JSON, nullable=True)
+    tokens_used = Column(Integer, nullable=True)
+    
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    
+    chat = relationship("Chat", back_populates="messages")
