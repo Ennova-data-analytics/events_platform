@@ -1,11 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response, UploadFile, File
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from datetime import datetime
+import uuid
+import logging
 
 from domain import schemas, models
 from domain.use_cases import db_events, db_registrations
-from api import deps 
+from api import deps
 from core import s3_service
+from core.image_processing_service import image_processing_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -91,6 +97,124 @@ def toggle_event_signups(event_id: int, db: Session = Depends(deps.get_db), curr
         raise HTTPException(status_code=404, detail="Event not found")
 
     db_event.signups_enabled = not db_event.signups_enabled
+    db.commit()
+    db.refresh(db_event)
+
+    return db_event
+
+@router.post("/{event_id}/sponsor-logos", response_model=schemas.Event, tags=["Admin"])
+def upload_sponsor_logos(
+    event_id: int,
+    logo_files: list[UploadFile] = File(..., description="Multiple sponsor logo files"),
+    process_images: bool = True,
+    remove_background: bool = False,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """
+    Upload multiple sponsor logos for an event (Organiser only)
+
+    Processing options:
+    - process_images=true: Resize, optimize, and optionally remove background
+    - remove_background=true: Use AI to remove background (slower, may have artifacts)
+    - remove_background=false (default): Just resize and optimize (faster, cleaner for PNGs)
+
+    Set process_images=false to skip all processing and upload as-is
+    """
+    db_event = db_events.get_event(db, event_id=event_id)
+    if not db_event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if db_event.created_by_user_id != current_organiser.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this event")
+
+    uploaded_logos = []
+    errors = []
+
+    for logo_file in logo_files:
+        try:
+            is_valid, error_msg = image_processing_service.validate_image(logo_file.file)
+            if not is_valid:
+                errors.append(f"{logo_file.filename}: {error_msg}")
+                continue
+
+            if process_images:
+                try:
+                    processed_bytes, content_type = image_processing_service.process_sponsor_logo(
+                        logo_file.file,
+                        max_width=800,
+                        max_height=400,
+                        remove_bg=remove_background
+                    )
+
+                    s3_key = f"sponsor_logos/event_{event_id}_{uuid.uuid4()}.png"
+
+                    s3_service.upload_file_to_s3_from_bytes(
+                        processed_bytes,
+                        s3_key,
+                        content_type
+                    )
+
+                    uploaded_logos.append(s3_key)
+
+                except Exception as e:
+                    logger.error(f"Failed to process {logo_file.filename}: {str(e)}")
+                    errors.append(f"{logo_file.filename}: Processing failed, uploading original")
+
+                    file_extension = logo_file.filename.split('.')[-1]
+                    s3_key = f"sponsor_logos/event_{event_id}_{uuid.uuid4()}.{file_extension}"
+                    logo_file.file.seek(0)
+                    s3_service.upload_file_to_s3(logo_file.file, s3_key)
+                    uploaded_logos.append(s3_key)
+            else:
+                file_extension = logo_file.filename.split('.')[-1]
+                s3_key = f"sponsor_logos/event_{event_id}_{uuid.uuid4()}.{file_extension}"
+                logo_file.file.seek(0)
+                s3_service.upload_file_to_s3(logo_file.file, s3_key)
+                uploaded_logos.append(s3_key)
+
+        except Exception as e:
+            logger.error(f"Failed to upload {logo_file.filename}: {str(e)}")
+            errors.append(f"{logo_file.filename}: {str(e)}")
+
+    if not uploaded_logos and errors:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to upload any logos: {'; '.join(errors)}"
+        )
+
+    existing_logos = db_event.sponsor_logos or []
+    db_event.sponsor_logos = existing_logos + uploaded_logos
+
+    db.commit()
+    db.refresh(db_event)
+
+    if errors:
+        logger.warning(f"Some logos had issues: {errors}")
+
+    return db_event
+
+@router.delete("/{event_id}/sponsor-logos/{logo_index}", response_model=schemas.Event, tags=["Admin"])
+def delete_sponsor_logo(
+    event_id: int,
+    logo_index: int,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """Delete a specific sponsor logo by index (Organiser only)"""
+    db_event = db_events.get_event(db, event_id=event_id)
+    if not db_event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if db_event.created_by_user_id != current_organiser.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this event")
+
+    if not db_event.sponsor_logos or logo_index >= len(db_event.sponsor_logos):
+        raise HTTPException(status_code=404, detail="Logo not found")
+
+    db_event.sponsor_logos.pop(logo_index)
+    flag_modified(db_event, 'sponsor_logos')
+
     db.commit()
     db.refresh(db_event)
 

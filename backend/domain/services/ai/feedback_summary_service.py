@@ -22,7 +22,7 @@ class FeedbackSummaryService:
     def __init__(self):
         self.llm = ChatOpenAI(
             model="gpt-5-mini",
-            temperature=0.2,
+            temperature=1.0,
             api_key=settings.OPENAI_API_KEY
         )
 

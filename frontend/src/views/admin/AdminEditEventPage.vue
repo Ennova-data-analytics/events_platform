@@ -6,6 +6,14 @@
         <EventForm :initial-data="event" @submit="handleUpdateEvent" />
       </v-card-text>
     </v-card>
+
+    <SponsorLogoUpload
+      v-if="event.event_id"
+      :event-id="event.event_id"
+      :logos="event.sponsor_logos"
+      @updated="handleLogosUpdated"
+      class="mt-4"
+    />
   </div>
 </template>
 
@@ -13,6 +21,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import EventForm from '@/components/forms/EventForm.vue';
+import SponsorLogoUpload from '@/components/admin/SponsorLogoUpload.vue';
 import { useEventStore } from '@/stores/events.store.js';
 import { EventService } from '@/services/EventService.js';
 
@@ -42,14 +51,14 @@ const handleUpdateEvent = async (eventData, imageFile) => {
   console.log('Is Array?:', Array.isArray(imageFile));
   console.log('Array length:', imageFile?.length);
   console.log('First element:', imageFile?.[0]);
-  
+
   try {
     await eventStore.updateEvent(eventId, eventData);
     console.log('Event updated successfully');
     console.log('Checking image upload condition...');
     console.log('imageFile exists?', !!imageFile);
     console.log('imageFile.length > 0?', imageFile?.length > 0);
-    
+
     if (imageFile) {
       console.log('ATTEMPTING IMAGE UPLOAD with file:', imageFile);
       await eventStore.uploadEventImage(eventId, imageFile);
@@ -57,8 +66,13 @@ const handleUpdateEvent = async (eventData, imageFile) => {
     } else {
       console.log('IMAGE UPLOAD SKIPPED - No file provided');
     }
-    
+
   } catch (error) {
     console.error("Failed to update event:", error);
-  }}
+  }
+}
+
+const handleLogosUpdated = (updatedEvent) => {
+  event.value = updatedEvent;
+}
 </script>

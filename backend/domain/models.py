@@ -118,6 +118,7 @@ class Event(Base):
 
     requires_approval = Column(Boolean, default=True, nullable=False)
     image_url = Column(Text, nullable=True)
+    sponsor_logos = Column(ARRAY(Text), nullable=True)
     form_template_id = Column(Integer, ForeignKey('form_templates.template_id', ondelete="SET NULL"))
 
     # Separate email templates for each type

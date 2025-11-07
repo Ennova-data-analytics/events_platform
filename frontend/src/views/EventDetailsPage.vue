@@ -88,7 +88,6 @@
             </v-btn>
           </div>
 
-          <!-- Approval requirement info -->
           <v-alert
             v-if="registrationStatus === 'not_registered' && eventStore.currentEvent.signups_enabled && authStore.isAuthenticated"
             type="info"
@@ -122,13 +121,15 @@
             <h2 :class="$vuetify.display.mobile ? 'text-h5 font-weight-bold mb-4' : 'text-h4 font-weight-bold mb-6'">About this event</h2>
             <v-divider class="mb-6"></v-divider>
             
-            <div 
-              class="event-description" 
+            <div
+              class="event-description"
               v-html="parsedDescription"
             ></div>
           </v-card>
         </v-col>
       </v-row>
+
+      <SponsorLogos v-if="eventStore.currentEvent?.sponsor_logos" :logos="eventStore.currentEvent.sponsor_logos" />
     </div>
 
     <v-dialog v-model="isFormModalVisible" max-width="600px" persistent>
@@ -224,6 +225,7 @@ import { UploadService } from '@/services/UploadService.js';
 import ApiClient from '@/services/ApiClient.js';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import SponsorLogos from '@/components/events/SponsorLogos.vue';
 
 marked.setOptions({
   breaks: true,        

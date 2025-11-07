@@ -77,6 +77,7 @@ class EventBase(BaseModel):
     signups_enabled: bool = True
     requires_approval: bool = True
     image_url: str | None = None
+    sponsor_logos: list[str] | None = None
     form_template_id: int | None = None
     email_template_approved_id: int | None = None
     email_template_rejected_id: int | None = None
@@ -94,15 +95,22 @@ class Event(EventBase):
     event_id: int 
     status: str 
 
-    creator: "User" = None 
+    creator: "User" = None
     @field_serializer('image_url')
     def serialise_image_url(self, image_url: str, _info):
         if image_url:
             if image_url.startswith('http'):
                 return image_url
             return s3_service.generate_predesigned_url(image_url)
-        return None 
-    
+        return None
+
+    @field_serializer('sponsor_logos')
+    def serialise_sponsor_logos(self, sponsor_logos: list[str] | None, _info):
+        """Generate presigned URLs for all sponsor logos"""
+        if sponsor_logos:
+            return [s3_service.generate_predesigned_url(logo) for logo in sponsor_logos]
+        return []
+
     model_config = ConfigDict(from_attributes=True)
 
 

@@ -1,5 +1,6 @@
 import boto3
 import mimetypes
+import io
 from botocore.client import Config
 from core.config import settings
 
@@ -36,6 +37,27 @@ def upload_file_to_s3(file_obj, object_name: str) -> str:
     public_url = f"{settings.R2_PUBLIC_DOMAIN}/{object_name}"
     return public_url
 
+def upload_file_to_s3_from_bytes(file_bytes: io.BytesIO, object_name: str, content_type: str = 'application/octet-stream') -> str:
+    """
+    Upload a file to S3 from bytes buffer
+    """
+    file_bytes.seek(0)
+
+    extra_args = {
+        'CacheControl': 'public, max-age=31536000',
+        'ContentType': content_type
+    }
+
+    s3_client.upload_fileobj(
+        file_bytes,
+        settings.S3_BUCKET_NAME,
+        object_name,
+        ExtraArgs=extra_args
+    )
+
+    public_url = f"{settings.R2_PUBLIC_DOMAIN}/{object_name}"
+    return public_url
+
 def generate_predesigned_url(object_name: str) -> str:
     """Generates a predesigned URL to share a private S3 object"""
     try:
@@ -44,7 +66,7 @@ def generate_predesigned_url(object_name: str) -> str:
             Params = {'Bucket': settings.S3_BUCKET_NAME, 'Key': object_name},
             ExpiresIn=3600
         )
-        return response 
+        return response
     except Exception as e:
         print(f"Error generating URL: {e}")
     
