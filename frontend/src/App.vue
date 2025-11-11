@@ -43,7 +43,7 @@ const openSupportEmail = () => {
 
 <style scoped>
 .support-btn {
-  margin: 0 16px 16px 0;
+  margin: 0 24px 24px 0;
   z-index: 1000;
 }
 </style>

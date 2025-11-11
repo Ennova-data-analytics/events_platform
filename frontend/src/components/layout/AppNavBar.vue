@@ -1,5 +1,5 @@
 <template>
-  <v-app-bar color="primary" density="compact" app>
+  <v-app-bar color="primary" density="default" app class="px-4 px-md-6">
     <div class="d-flex align-center" style="cursor: pointer;" @click="$router.push('/')">
       <v-img
         :src="logoUrl"
@@ -12,28 +12,25 @@
 
     <v-spacer></v-spacer>
 
-    <!-- Mobile Menu -->
     <template v-if="$vuetify.display.mobile">
       <v-app-bar-nav-icon @click="drawer = !drawer"></v-app-bar-nav-icon>
     </template>
 
-    <!-- Desktop Menu -->
     <template v-else>
-      <v-btn to="/" text>Events</v-btn>
+      <v-btn to="/" text class="mx-1">Events</v-btn>
       <template v-if="!authStore.isAuthenticated">
-        <v-btn to="/login" text>Login</v-btn>
-        <v-btn to="/register" text>Sign Up</v-btn>
+        <v-btn to="/login" text class="mx-1">Login</v-btn>
+        <v-btn to="/register" text class="mx-1">Sign Up</v-btn>
       </template>
       <template v-else>
-        <NotificationBell />
-        <v-btn to="/profile" text>Profile</v-btn>
-        <v-btn v-if="authStore.isOrganiser" to="/admin" text>Admin</v-btn>
-        <v-btn @click="authStore.logout()" text>Logout</v-btn>
+        <NotificationBell class="mx-1" />
+        <v-btn to="/profile" text class="mx-1">Profile</v-btn>
+        <v-btn v-if="authStore.isOrganiser" to="/admin" text class="mx-1">Admin</v-btn>
+        <v-btn @click="authStore.logout()" text class="mx-1">Logout</v-btn>
       </template>
     </template>
   </v-app-bar>
 
-  <!-- Mobile Navigation Drawer -->
   <v-navigation-drawer v-model="drawer" location="right" temporary>
     <v-list>
       <v-list-item to="/" prepend-icon="mdi-calendar-multiple">
