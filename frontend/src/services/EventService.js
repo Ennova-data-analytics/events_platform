@@ -31,5 +31,32 @@ export const EventService = {
 
   toggleSignups(eventId) {
     return ApiClient.patch(`/events/${eventId}/toggle-signups`);
+  },
+
+  uploadEventPhotos(eventId, photoFiles, processImages = true) {
+    const formData = new FormData();
+    photoFiles.forEach(file => {
+      formData.append('photo_files', file);
+    });
+    return ApiClient.post(`/events/${eventId}/photos`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params: { process_images: processImages }
+    });
+  },
+
+  getEventPhotos(eventId) {
+    return ApiClient.get(`/events/${eventId}/photos`);
+  },
+
+  deleteEventPhoto(eventId, photoId) {
+    return ApiClient.delete(`/events/${eventId}/photos/${photoId}`);
+  },
+
+  updateEventPhoto(eventId, photoId, photoData) {
+    return ApiClient.patch(`/events/${eventId}/photos/${photoId}`, photoData);
+  },
+
+  reorderEventPhotos(eventId, photoIds) {
+    return ApiClient.post(`/events/${eventId}/photos/reorder`, { photo_ids: photoIds });
   }
 };

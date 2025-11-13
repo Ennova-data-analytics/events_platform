@@ -149,6 +149,9 @@ class Event(Base):
     # Relationship to feedback template
     feedback_template = relationship("FeedbackTemplate", foreign_keys=[feedback_template_id])
 
+    event_photos = relationship("EventPhoto", back_populates="event", cascade="all, delete-orphan", order_by="EventPhoto.display_order")
+
+
 class Registration(Base):
     __tablename__ = "registrations"
     registration_id = Column(Integer, primary_key=True)
@@ -236,3 +239,17 @@ class AISummary(Base):
 
     def __repr__(self):
         return f"<AISummary(summary_id={self.summary_id}, event_id={self.event_id}, generated_at={self.generated_at})>"
+
+class EventPhoto(Base):
+    __tablename__ = "event_photos"
+
+    photo_id = Column(Integer, primary_key=True)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
+    photo_url = Column(Text, nullable=False)
+    caption = Column(String(500), nullable=True)
+    display_order = Column(Integer, nullable=False, default=0)
+    uploaded_by_user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="SET NULL"), nullable=True)
+    uploaded_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+
+    event = relationship("Event", back_populates="event_photos")
+    uploaded_by = relationship("User", foreign_keys=[uploaded_by_user_id])

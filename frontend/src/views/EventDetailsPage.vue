@@ -84,7 +84,13 @@
               @click="handleRegistration"
               :loading="eventStore.isLoading"
             >
-              Apply to Register ({{ eventStore.currentEvent.price_euros > 0 ? `€${eventStore.currentEvent.price_euros}` : 'Free' }})
+              <template v-if="!eventStore.currentEvent.requires_approval && eventStore.currentEvent.price_euros > 0">
+                <v-icon start>mdi-credit-card-outline</v-icon>
+                Register & Pay Now (€{{ eventStore.currentEvent.price_euros }})
+              </template>
+              <template v-else>
+                Apply to Register ({{ eventStore.currentEvent.price_euros > 0 ? `€${eventStore.currentEvent.price_euros}` : 'Free' }})
+              </template>
             </v-btn>
           </div>
 
@@ -130,6 +136,8 @@
       </v-row>
 
       <SponsorLogos v-if="eventStore.currentEvent?.sponsor_logos" :logos="eventStore.currentEvent.sponsor_logos" />
+
+      <EventPhotos v-if="eventStore.currentEvent?.event_photos?.length > 0" :photos="eventStore.currentEvent.event_photos" />
     </div>
 
     <v-dialog v-model="isFormModalVisible" max-width="600px" persistent>
@@ -226,6 +234,7 @@ import ApiClient from '@/services/ApiClient.js';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import SponsorLogos from '@/components/events/SponsorLogos.vue';
+import EventPhotos from '@/components/events/EventPhotos.vue';
 
 marked.setOptions({
   breaks: true,        
@@ -369,7 +378,15 @@ async function submitApplicationWithForm() {
     }
 
     if (eventStore.currentEvent) {
-      await eventStore.registerForEvent(eventStore.currentEvent.event_id, { form_responses: finalFormResponses });
+      const registrationResponse = await eventStore.registerForEvent(eventStore.currentEvent.event_id, { form_responses: finalFormResponses });
+
+      // Check if immediate payment is required (event without approval and with price)
+      if (registrationResponse.requires_immediate_payment && registrationResponse.checkout_url) {
+        // Redirect to Stripe payment immediately
+        window.location.href = registrationResponse.checkout_url;
+        return;
+      }
+
       successMessage.value = 'Application submitted successfully!';
       showSuccess.value = true;
       await authStore.fetchCurrentUser();

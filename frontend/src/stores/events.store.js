@@ -72,13 +72,14 @@ export const useEventStore = defineStore('events', () => {
         isLoading.value = true;
         error.value = null;
         try {
-            await EventService.registerForEvent(eventId, registrationData);
+            const response = await EventService.registerForEvent(eventId, registrationData);
+            return response.data;
 
         } catch(err){
             console.error('Failed to register for event:', err);
             error.value = err.response?.data?.detail || 'Registration Failed';
             throw err;
-            
+
         } finally {
             isLoading.value = false;
         }
@@ -123,5 +124,40 @@ export const useEventStore = defineStore('events', () => {
         }
     }
 
-    return { events, currentEvent, isLoading, error, fetchAllEvents, fetchEventById, createEvent, updateEvent, registerForEvent, uploadEventImage, deleteEvent};
+    async function uploadEventPhotos(eventId, photoFiles, processImages = true) {
+        isLoading.value = true;
+        error.value = null;
+        try {
+            const response = await EventService.uploadEventPhotos(eventId, photoFiles, processImages);
+            if (currentEvent.value?.event_id === eventId) {
+                currentEvent.value.event_photos = response.data.photos;
+            }
+            return response.data;
+        } catch (err) {
+            console.error('Failed to upload event photos:', err);
+            error.value = err.response?.data?.detail || 'Failed to upload event photos';
+            throw err;
+        } finally {
+            isLoading.value = false;
+        }
+    }
+
+    async function deleteEventPhoto(eventId, photoId) {
+        isLoading.value = true;
+        error.value = null;
+        try {
+            await EventService.deleteEventPhoto(eventId, photoId);
+            if (currentEvent.value?.event_id === eventId) {
+                await fetchEventById(eventId);
+            }
+        } catch (err) {
+            console.error('Failed to delete event photo:', err);
+            error.value = err.response?.data?.detail || 'Failed to delete event photo';
+            throw err;
+        } finally {
+            isLoading.value = false;
+        }
+    }
+
+    return { events, currentEvent, isLoading, error, fetchAllEvents, fetchEventById, createEvent, updateEvent, registerForEvent, uploadEventImage, deleteEvent, uploadEventPhotos, deleteEventPhoto};
 });

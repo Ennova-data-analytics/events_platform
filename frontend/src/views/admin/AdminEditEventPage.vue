@@ -14,6 +14,14 @@
       @updated="handleLogosUpdated"
       class="mt-4"
     />
+
+    <EventPhotosUpload
+      v-if="event.event_id"
+      :event-id="event.event_id"
+      :photos="event.event_photos"
+      @updated="handlePhotosUpdated"
+      class="mt-4"
+    />
   </div>
 </template>
 
@@ -22,6 +30,7 @@ import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import EventForm from '@/components/forms/EventForm.vue';
 import SponsorLogoUpload from '@/components/admin/SponsorLogoUpload.vue';
+import EventPhotosUpload from '@/components/admin/EventPhotosUpload.vue';
 import { useEventStore } from '@/stores/events.store.js';
 import { EventService } from '@/services/EventService.js';
 
@@ -73,6 +82,10 @@ const handleUpdateEvent = async (eventData, imageFile) => {
 }
 
 const handleLogosUpdated = (updatedEvent) => {
+  event.value = updatedEvent;
+}
+
+const handlePhotosUpdated = (updatedEvent) => {
   event.value = updatedEvent;
 }
 </script>

@@ -67,6 +67,39 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: EmailStr | None = None 
 
+class EventPhotoBase(BaseModel):
+    caption: str | None = None 
+    display_order: int = 0 
+
+class EventPhotoCreate(EventPhotoBase):
+    pass 
+
+class EventPhotoUpdate(BaseModel):
+    caption: str | None = None 
+    display_order: int | None = None 
+
+class EventPhoto(EventPhotoBase):
+    photo_id: int
+    event_id: int
+    photo_url: str 
+    uploaded_by_user_id: uuid.UUID | None = None 
+    uploaded_at: datetime
+
+    @field_serializer('photo_url')
+    def serialise_photo_url(self, photo_url: str, _info):
+        if photo_url:
+            if photo_url.startswith('http'):
+                return photo_url
+            return s3_service.generate_predesigned_url(photo_url)
+        return None 
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class EventPhotoUploadResponse(BaseModel):
+    uploaded_count: int
+    photos: list[EventPhoto]
+    errors: list[str] = []
+
 class EventBase(BaseModel):
     event_name: str
     description: str | None = None
@@ -84,6 +117,7 @@ class EventBase(BaseModel):
     email_template_received_id: int | None = None
     email_template_payment_id: int | None = None
     feedback_template_id: int | None = None
+    event_photos: list[EventPhoto] = []
 
 class EventCreate(EventBase):
     pass 
@@ -120,6 +154,11 @@ class RegistrationWithUser(Registration):
 class RegistrationCreate(BaseModel):
     form_responses: dict | None = None
 
+class RegistrationResponse(BaseModel):
+    registration: Registration
+    checkout_url: str | None = None
+    requires_immediate_payment: bool = False
+
 class RegistrationApprove(BaseModel):
     custom_amount_euros: float | None = None
 
@@ -144,7 +183,7 @@ class FormTemplate(FormTemplateBase):
     template_id: int 
     model_config = ConfigDict(from_attributes=True)
 
-
+EventPhoto.model_rebuild()
 Event.model_rebuild()
 
 class InAppNotificationBase(BaseModel):
@@ -302,3 +341,4 @@ class AISummarySendResponse(BaseModel):
     sent_count: int
     failed_count: int
     failed_emails: list[str]
+
