@@ -122,8 +122,23 @@ class EventBase(BaseModel):
 class EventCreate(EventBase):
     pass 
 
-class EventUpdate(EventBase):
-    pass 
+class EventUpdate(BaseModel):
+    event_name: str | None = None
+    description: str | None = None
+    event_date_start: datetime | None = None
+    location: str | None = None
+    capacity: int | None = None
+    price_euros: float | None = None
+    signups_enabled: bool | None = None
+    requires_approval: bool | None = None
+    image_url: str | None = None
+    sponsor_logos: list[str] | None = None
+    form_template_id: int | None = None
+    email_template_approved_id: int | None = None
+    email_template_rejected_id: int | None = None
+    email_template_received_id: int | None = None
+    email_template_payment_id: int | None = None
+    feedback_template_id: int | None = None
 
 class Event(EventBase):
     event_id: int 
