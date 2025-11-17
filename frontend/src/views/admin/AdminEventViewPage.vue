@@ -29,6 +29,7 @@
       <v-tab value="approved">Approved ({{ approvedAttendees.length }})</v-tab>
       <v-tab value="paid">Paid ({{ paidAttendees.length }})</v-tab>
       <v-tab value="rejected">Rejected ({{ rejectedAttendees.length }})</v-tab>
+      <v-tab value="discounts">Discount Codes</v-tab>
     </v-tabs>
 
     <v-card>
@@ -74,7 +75,8 @@
 
             <template v-slot:item.actions="{ item }">
               <v-btn @click="handleApproval(item, 'approve')" icon="mdi-check" color="success" variant="text" size="small" class="mr-2" title="Approve"></v-btn>
-              <v-btn @click="handleApproval(item, 'reject')" icon="mdi-close" color="error" variant="text" size="small" title="Reject"></v-btn>
+              <v-btn @click="handleApproval(item, 'reject')" icon="mdi-close" color="error" variant="text" size="small" class="mr-2" title="Reject"></v-btn>
+              <v-btn @click="handleDelete(item)" icon="mdi-delete" color="error" variant="text" size="small" title="Delete"></v-btn>
             </template>
           </v-data-table>
         </v-window-item>
@@ -123,6 +125,11 @@
                   <v-btn @click="handleRevert(item)" icon="mdi-undo" color="warning" variant="text" size="small" title="Revert to Pending"></v-btn>
                 </template>
             </v-data-table>
+        </v-window-item>
+
+        <!-- Discount Codes Tab -->
+        <v-window-item value="discounts">
+          <DiscountCodeManager v-if="eventId" :event-id="parseInt(eventId)" />
         </v-window-item>
       </v-window>
     </v-card>
@@ -201,6 +208,31 @@
             @click="confirmRevert"
           >
             Revert to Pending
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="deleteDialog.show" max-width="500">
+      <v-card>
+        <v-card-title class="text-h5">
+          Delete Registration?
+        </v-card-title>
+        <v-card-text>
+          Are you sure you want to permanently delete the registration for <strong>{{ deleteDialog.attendeeName }}</strong>?
+          This action cannot be undone.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="deleteDialog.show = false">
+            Cancel
+          </v-btn>
+          <v-btn
+            color="error"
+            variant="flat"
+            @click="confirmDelete"
+          >
+            Delete
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -287,6 +319,7 @@ import { EventService } from '@/services/EventService.js';
 import { AdminService } from '@/services/AdminService.js';
 import { UploadService } from '@/services/UploadService.js';
 import FeedbackSection from '@/components/feedback/FeedbackSection.vue';
+import DiscountCodeManager from '@/components/admin/DiscountCodeManager.vue';
 
 
 const route = useRoute();
@@ -310,6 +343,11 @@ const confirmDialog = ref({
   attendeeName: ''
 });
 const revertDialog = ref({
+  show: false,
+  attendee: null,
+  attendeeName: ''
+});
+const deleteDialog = ref({
   show: false,
   attendee: null,
   attendeeName: ''
@@ -428,6 +466,28 @@ async function confirmRevert() {
   } catch (error) {
     console.error('Revert failed:', error);
     snackbar.value = { show: true, text: 'Failed to revert registration.', color: 'error' };
+  }
+}
+
+function handleDelete(attendee) {
+  deleteDialog.value = {
+    show: true,
+    attendee: attendee,
+    attendeeName: attendee.user?.full_name || attendee.user?.email || 'Unknown'
+  };
+}
+
+async function confirmDelete() {
+  const { attendee } = deleteDialog.value;
+  deleteDialog.value.show = false;
+
+  try {
+    await AdminService.deleteRegistration(attendee.registration_id);
+    snackbar.value = { show: true, text: 'Registration deleted successfully.', color: 'success' };
+    await fetchAttendees();
+  } catch (error) {
+    console.error('Delete failed:', error);
+    snackbar.value = { show: true, text: 'Failed to delete registration.', color: 'error' };
   }
 }
 function isFileUrl(value) {

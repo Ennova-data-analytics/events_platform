@@ -22,11 +22,15 @@ def send_registration_approved_notification(
         event_date = event.event_date_start.strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
         event_url = f"https://ennova-events.com/event/{event.event_id}"
 
-        # Use type-specific custom template if set
         custom_template = event.email_template_approved if hasattr(event, 'email_template_approved') else None
 
-        # Use custom amount if set, otherwise use event price
-        price = registration.custom_amount_euros if registration.custom_amount_euros is not None else event.price_euros
+
+        if registration.custom_amount_euros is not None:
+            price = registration.custom_amount_euros
+        elif registration.final_amount_euros is not None:
+            price = registration.final_amount_euros
+        else:
+            price = event.price_euros
 
         html_content, text_content = email_templates.render_registration_approved_email(
             user_name=user.full_name or user.email.split("@")[0],
@@ -71,7 +75,6 @@ def send_registration_rejected_notification(
     db_notifications.notify_registration_rejected(db=db, registration=registration, reason=reason)
 
     try:
-        # Use type-specific custom template if set
         custom_template = event.email_template_rejected if hasattr(event, 'email_template_rejected') else None
 
         html_content, text_content = email_templates.render_registration_rejected_email(
@@ -116,7 +119,6 @@ def send_registration_created_notification(
     try:
         event_date = event.event_date_start.strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
 
-        # Use type-specific custom template if set
         custom_template = event.email_template_received if hasattr(event, 'email_template_received') else None
 
         html_content, text_content = email_templates.render_registration_received_email(
@@ -162,11 +164,15 @@ def send_payment_confirmed_notification(
         event_date = event.event_date_start.strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
         event_url = f"https://ennova-events.com/event/{event.event_id}"
 
-        # Use type-specific custom template if set
         custom_template = event.email_template_payment if hasattr(event, 'email_template_payment') else None
 
-        # Use custom amount if set, otherwise use event price
-        price = registration.custom_amount_euros if registration.custom_amount_euros is not None else event.price_euros
+        
+        if registration.custom_amount_euros is not None:
+            price = registration.custom_amount_euros
+        elif registration.final_amount_euros is not None:
+            price = registration.final_amount_euros
+        else:
+            price = event.price_euros
 
         html_content, text_content = email_templates.render_payment_confirmed_email(
             user_name=user.full_name or user.email.split("@")[0],

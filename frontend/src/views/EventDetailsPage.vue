@@ -143,10 +143,11 @@
     <v-dialog v-model="isFormModalVisible" max-width="600px" persistent>
       <v-card>
         <v-card-title>
-          <span class="text-h5">Additional Information Required</span>
+          <span class="text-h5">{{ customForm.fields.length > 0 ? 'Additional Information Required' : 'Complete Registration' }}</span>
         </v-card-title>
         <v-card-text>
-          <p class="mb-4">Please answer the following questions to complete your application.</p>
+          <p v-if="customForm.fields.length > 0" class="mb-4">Please answer the following questions to complete your application.</p>
+          <p v-else-if="eventStore.currentEvent?.price_euros > 0" class="mb-4">Review your registration details and apply a discount code if you have one.</p>
           <v-alert
               v-if="validationError"
               type="error"
@@ -211,6 +212,14 @@
 
           </div>
         </v-form>
+
+        <DiscountCodeInput
+          v-if="eventStore.currentEvent?.price_euros > 0"
+          :event-id="eventStore.currentEvent.event_id"
+          @discount-applied="handleDiscountApplied"
+          @discount-removed="handleDiscountRemoved"
+        />
+
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
@@ -235,6 +244,7 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import SponsorLogos from '@/components/events/SponsorLogos.vue';
 import EventPhotos from '@/components/events/EventPhotos.vue';
+import DiscountCodeInput from '@/components/DiscountCodeInput.vue';
 
 marked.setOptions({
   breaks: true,        
@@ -261,9 +271,10 @@ const showError = ref(false);
 const isFormModalVisible = ref(false);
 const customForm = ref({ fields: [] });
 const formResponses = ref({});
-const formFiles = ref({}); 
-const isSubmitting = ref(false); 
+const formFiles = ref({});
+const isSubmitting = ref(false);
 const validationError = ref('');
+const appliedDiscountCode = ref(null);
 
 
 watch(() => eventStore.currentEvent, (newEvent) => {
@@ -341,11 +352,16 @@ async function handleRegistration() {
   }
 
   console.log(`Checking for form_template_id: ${event.form_template_id}`);
-  if (event.form_template_id) {
-    console.log('Form template found. Attempting to open modal...');
+
+  if (event.form_template_id || event.price_euros > 0) {
+    console.log('Opening modal for form or discount code entry...');
     try {
-      const response = await FormTemplateService.getTemplateById(event.form_template_id);
-      customForm.value = response.data;
+      if (event.form_template_id) {
+        const response = await FormTemplateService.getTemplateById(event.form_template_id);
+        customForm.value = response.data;
+      } else {
+        customForm.value = { fields: [] };
+      }
       formResponses.value = {};
       formFiles.value = {};
       isFormModalVisible.value = true;
@@ -356,7 +372,7 @@ async function handleRegistration() {
       showError.value = true;
     }
   } else {
-    console.log('No form template found. Submitting application directly...');
+    console.log('No form template and free event. Submitting application directly...');
     submitApplicationWithForm();
   }
 }
@@ -378,11 +394,17 @@ async function submitApplicationWithForm() {
     }
 
     if (eventStore.currentEvent) {
-      const registrationResponse = await eventStore.registerForEvent(eventStore.currentEvent.event_id, { form_responses: finalFormResponses });
+      const registrationData = {
+        form_responses: finalFormResponses,
+        discount_code: appliedDiscountCode.value
+      };
 
-      // Check if immediate payment is required (event without approval and with price)
+      const registrationResponse = await eventStore.registerForEvent(
+        eventStore.currentEvent.event_id,
+        registrationData
+      );
+
       if (registrationResponse.requires_immediate_payment && registrationResponse.checkout_url) {
-        // Redirect to Stripe payment immediately
         window.location.href = registrationResponse.checkout_url;
         return;
       }
@@ -397,6 +419,16 @@ async function submitApplicationWithForm() {
     isSubmitting.value = false;
     isFormModalVisible.value = false;
   }
+}
+
+function handleDiscountApplied(data) {
+  appliedDiscountCode.value = data.code;
+  console.log('Discount code applied:', data);
+}
+
+function handleDiscountRemoved() {
+  appliedDiscountCode.value = null;
+  console.log('Discount code removed');
 }
 
 async function handlePayment() {

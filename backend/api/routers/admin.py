@@ -74,6 +74,30 @@ def revert_registration_to_pending(registration_id: int, db: Session = Depends(d
     return reg
 
 
+@router.delete("/registrations/{registration_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_registration(
+    registration_id: int,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """Delete a registration (organizer only)"""
+    reg = db.query(models.Registration).filter(models.Registration.registration_id == registration_id).first()
+    if not reg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration not found")
+
+    event = reg.event
+    if str(event.created_by_user_id) != str(current_organiser.user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to delete this registration"
+        )
+
+    db.delete(reg)
+    db.commit()
+
+    return None
+
+
 @router.post("/events/{event_id}/send-bulk-email", response_model=schemas.BulkEmailResponse)
 def send_bulk_email_to_attendees(
     event_id: int,

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     Boolean, Column, ForeignKey, Integer, String, TIMESTAMP, Table,
-    Text, DECIMAL, ARRAY
+    Text, DECIMAL, ARRAY, CheckConstraint
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, declarative_base
@@ -150,6 +150,7 @@ class Event(Base):
     feedback_template = relationship("FeedbackTemplate", foreign_keys=[feedback_template_id])
 
     event_photos = relationship("EventPhoto", back_populates="event", cascade="all, delete-orphan", order_by="EventPhoto.display_order")
+    discount_codes = relationship("DiscountCode", back_populates="event", cascade="all, delete-orphan")
 
 
 class Registration(Base):
@@ -162,10 +163,14 @@ class Registration(Base):
     stripe_payment_intent_id = Column(String(255), unique=True)
     form_responses = Column(JSONB)
     custom_amount_euros = Column(DECIMAL(10, 2))
+    discount_code_id = Column(Integer, ForeignKey('discount_codes.code_id', ondelete='SET NULL'), nullable=True)
+    discount_amount_euros = Column(DECIMAL(10, 2), nullable=True)
+    final_amount_euros = Column(DECIMAL(10, 2), nullable=True)
     registration_date = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
 
     user = relationship("User", back_populates="registrations")
     event = relationship("Event", back_populates="registrations")
+    discount_code = relationship("DiscountCode", back_populates="registrations")
 
 
 class Feedback(Base):
@@ -253,3 +258,29 @@ class EventPhoto(Base):
 
     event = relationship("Event", back_populates="event_photos")
     uploaded_by = relationship("User", foreign_keys=[uploaded_by_user_id])
+
+
+class DiscountCode(Base):
+    __tablename__ = 'discount_codes'
+
+    code_id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete='CASCADE'), nullable=False, index=True)
+    code = Column(String(50), nullable=False, index=True)
+    discount_type = Column(String(20), nullable=False)  # 'percentage' or 'fixed_amount'
+    discount_value = Column(DECIMAL(10, 2), nullable=False)
+    max_uses = Column(Integer, nullable=True)  # NULL = unlimited
+    used_count = Column(Integer, nullable=False, default=0)
+    expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    event = relationship("Event", back_populates="discount_codes")
+    registrations = relationship("Registration", back_populates="discount_code")
+
+    __table_args__ = (
+        CheckConstraint("discount_type IN ('percentage', 'fixed_amount')", name='check_discount_type'),
+        CheckConstraint("discount_value > 0", name='check_discount_value_positive'),
+        CheckConstraint("max_uses IS NULL OR max_uses > 0", name='check_max_uses_positive'),
+        CheckConstraint("used_count >= 0", name='check_used_count_non_negative'),
+    )

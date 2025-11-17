@@ -58,5 +58,51 @@ export const EventService = {
 
   reorderEventPhotos(eventId, photoIds) {
     return ApiClient.post(`/events/${eventId}/photos/reorder`, { photo_ids: photoIds });
+  },
+
+  // Discount Code Methods
+  validateDiscountCode(eventId, code) {
+    return ApiClient.post('/discount-codes/validate', {
+      event_id: eventId,
+      code: code
+    });
+  },
+
+  createDiscountCode(discountCodeData) {
+    return ApiClient.post('/discount-codes', discountCodeData);
+  },
+
+  getEventDiscountCodes(eventId) {
+    return ApiClient.get(`/discount-codes/event/${eventId}`);
+  },
+
+  updateDiscountCode(codeId, updateData) {
+    return ApiClient.put(`/discount-codes/${codeId}`, updateData);
+  },
+
+  deleteDiscountCode(codeId) {
+    return ApiClient.delete(`/discount-codes/${codeId}`);
   }
 };
+
+// Export individual functions for direct import
+export const {
+  getAllEvents,
+  getEventById,
+  createEvent,
+  updateEvent,
+  deleteEvent,
+  registerForEvent,
+  getEventRegistrations,
+  toggleSignups,
+  uploadEventPhotos,
+  getEventPhotos,
+  deleteEventPhoto,
+  updateEventPhoto,
+  reorderEventPhotos,
+  validateDiscountCode,
+  createDiscountCode,
+  getEventDiscountCodes,
+  updateDiscountCode,
+  deleteDiscountCode
+} = EventService;

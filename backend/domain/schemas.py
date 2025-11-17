@@ -1,8 +1,9 @@
-from pydantic import BaseModel, EmailStr, ConfigDict, field_serializer
+from pydantic import BaseModel, EmailStr, ConfigDict, field_serializer, Field, validator
 from core import s3_service
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional, Literal
+from decimal import Decimal
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -41,6 +42,9 @@ class Registration(BaseModel):
     form_responses: dict | None = None
     stripe_payment_intent_id: str | None = None
     custom_amount_euros: float | None = None
+    discount_code_id: int | None = None
+    discount_amount_euros: Decimal | None = None
+    final_amount_euros: Decimal | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -168,6 +172,7 @@ class RegistrationWithUser(Registration):
 
 class RegistrationCreate(BaseModel):
     form_responses: dict | None = None
+    discount_code: str | None = Field(None, description="Optional discount code")
 
 class RegistrationResponse(BaseModel):
     registration: Registration
@@ -356,4 +361,55 @@ class AISummarySendResponse(BaseModel):
     sent_count: int
     failed_count: int
     failed_emails: list[str]
+
+
+# Discount Code Schemas
+class DiscountCodeBase(BaseModel):
+    code: str = Field(..., min_length=1, max_length=50, description="Discount code (e.g., SUMMER2024)")
+    discount_type: Literal['percentage', 'fixed_amount'] = Field(..., description="Type of discount")
+    discount_value: Decimal = Field(..., gt=0, description="Discount value (percentage 0-100 or fixed amount)")
+    max_uses: int | None = Field(None, gt=0, description="Maximum number of uses (null = unlimited)")
+    expires_at: datetime | None = Field(None, description="Expiration date")
+    is_active: bool = Field(True, description="Whether the code is active")
+
+    @field_serializer('code')
+    def serialize_code(self, code: str, _info):
+        return code.upper().strip().replace(' ', '')
+
+
+class DiscountCodeCreate(DiscountCodeBase):
+    event_id: int
+
+
+class DiscountCodeUpdate(BaseModel):
+    discount_value: Decimal | None = Field(None, gt=0)
+    max_uses: int | None = Field(None, gt=0)
+    expires_at: datetime | None = None
+    is_active: bool | None = None
+
+
+class DiscountCodeResponse(DiscountCodeBase):
+    code_id: int
+    event_id: int
+    used_count: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DiscountCodeValidation(BaseModel):
+    code: str
+    event_id: int
+
+
+class DiscountCodeValidationResponse(BaseModel):
+    valid: bool
+    message: str
+    discount_code_id: int | None = None
+    discount_type: str | None = None
+    discount_value: Decimal | None = None
+    original_price: Decimal | None = None
+    discount_amount: Decimal | None = None
+    final_price: Decimal | None = None
 

@@ -2,12 +2,14 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from domain import models
 from domain.services import notification_service
+from domain.use_cases.db_discount_codes import DiscountCodeUseCases
+from domain.schemas import DiscountCodeValidation
 import uuid
 import logging
 
-logger = logging.getLogger(__name__) 
+logger = logging.getLogger(__name__)
 
-def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_responses: dict | None = None):
+def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_responses: dict | None = None, discount_code: str | None = None):
     """Handles db operations for creating a new registration"""
     existing_registraion = db.query(models.Registration).filter(
         models.Registration.event_id == event_id,
@@ -44,12 +46,37 @@ def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_res
         inital_status = 'Pending Approval'
     else:
         inital_status = 'Approved'
-    
+
+    discount_code_id = None
+    discount_amount = None
+    final_amount = event.price_euros
+
+    if discount_code and event.price_euros and event.price_euros > 0:
+        validation_result = DiscountCodeUseCases.validate_discount_code(
+            db=db,
+            validation_data=DiscountCodeValidation(code=discount_code, event_id=event_id)
+        )
+
+        if validation_result.valid:
+            discount_code_id = validation_result.discount_code_id
+            discount_amount = validation_result.discount_amount
+            final_amount = validation_result.final_price
+
+            DiscountCodeUseCases.increment_usage_count(db, discount_code_id)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=validation_result.message
+            )
+
     db_registration = models.Registration(
         event_id=event_id,
         user_id=user_id,
         form_responses=form_responses,
-        status=inital_status
+        status=inital_status,
+        discount_code_id=discount_code_id,
+        discount_amount_euros=discount_amount,
+        final_amount_euros=final_amount
     )
 
     db.add(db_registration)

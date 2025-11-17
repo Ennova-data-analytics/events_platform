@@ -63,7 +63,13 @@ def register_user_for_event(event_id: int, registration_data: schemas.Registrati
     if not db_event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
-    registration = db_registrations.create_registration(db=db, event_id=event_id, user_id=current_user.user_id, form_responses=registration_data.form_responses)
+    registration = db_registrations.create_registration(
+        db=db,
+        event_id=event_id,
+        user_id=current_user.user_id,
+        form_responses=registration_data.form_responses,
+        discount_code=registration_data.discount_code
+    )
 
     if not db_event.requires_approval and db_event.price_euros and db_event.price_euros > 0:
         from domain.services.stripe_service import stripe_service

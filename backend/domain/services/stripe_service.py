@@ -14,9 +14,23 @@ class StripeService:
         event = registration.event
         user = registration.user
 
-        # Use custom amount if set, otherwise use event price
-        price_euros = registration.custom_amount_euros if registration.custom_amount_euros is not None else event.price_euros
-        amount_cents = int(price_euros * 100)
+       
+        if registration.custom_amount_euros is not None:
+            price_euros = registration.custom_amount_euros
+        elif registration.final_amount_euros is not None:
+            price_euros = registration.final_amount_euros
+        else:
+            price_euros = event.price_euros
+
+        amount_cents = int(float(price_euros) * 100)
+
+        product_name = event.event_name
+        product_description = f'Registration for {event.event_name}'
+
+        if registration.discount_code_id and registration.discount_amount_euros:
+            discount_code = registration.discount_code
+            product_description = f'Registration for {event.event_name} (Discount code: {discount_code.code} applied)'
+
         try:
             checkout_session = stripe.checkout.Session.create(
                 payment_method_types=['card'],
@@ -25,8 +39,8 @@ class StripeService:
                         'currency': 'eur',
                         'unit_amount': amount_cents,
                         'product_data': {
-                            'name': event.event_name,
-                            'description': f'Registration for {event.event_name}',
+                            'name': product_name,
+                            'description': product_description,
                             'images': [event.image_url] if event.image_url and event.image_url.startswith('http') else [],
                         },
                     },
@@ -41,6 +55,7 @@ class StripeService:
                     'registration_id': registration.registration_id,
                     'event_id': event.event_id,
                     'user_id': str(user.user_id),
+                    'discount_code_id': str(registration.discount_code_id) if registration.discount_code_id else None,
                 }
             )
 
