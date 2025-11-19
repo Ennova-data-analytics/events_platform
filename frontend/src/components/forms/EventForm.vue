@@ -85,6 +85,33 @@
       </v-col>
     </v-row>
 
+    <!-- Free for Members Toggle -->
+    <v-row>
+      <v-col cols="12">
+        <v-card variant="outlined" class="mb-4">
+          <v-card-text>
+            <div class="d-flex align-center justify-space-between">
+              <div>
+                <div class="text-subtitle-1 font-weight-medium mb-1">
+                  Free for Ennova Members
+                </div>
+                <div class="text-body-2 text-grey">
+                  When enabled, Ennova association members will automatically bypass payment and be approved for this event.
+                  Members are managed in the "Ennova Members" section.
+                </div>
+              </div>
+              <v-switch
+                v-model="editableEvent.is_free_for_members"
+                color="success"
+                hide-details
+                class="ml-4"
+              ></v-switch>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+
     <v-row>
       <v-col cols="12">
         <v-select
@@ -215,7 +242,8 @@ const props = defineProps({
 const emit = defineEmits(['submit']);
 
 const editableEvent = ref({
-  requires_approval: true  // Default to true for new events
+  requires_approval: true,  // Default to true for new events
+  is_free_for_members: false  // Default to false for new events
 });
 const imageFile = ref([]);
 
@@ -235,6 +263,10 @@ watch(() => props.initialData, (newData) => {
   // Ensure requires_approval has a default value if not present
   if (dataToEdit.requires_approval === undefined) {
     dataToEdit.requires_approval = true;
+  }
+  // Ensure is_free_for_members has a default value if not present
+  if (dataToEdit.is_free_for_members === undefined) {
+    dataToEdit.is_free_for_members = false;
   }
   editableEvent.value = dataToEdit;
 }, { immediate: true, deep: true });

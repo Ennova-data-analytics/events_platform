@@ -71,7 +71,7 @@ def register_user_for_event(event_id: int, registration_data: schemas.Registrati
         discount_code=registration_data.discount_code
     )
 
-    if not db_event.requires_approval and db_event.price_euros and db_event.price_euros > 0:
+    if not db_event.requires_approval and registration.final_amount_euros and registration.final_amount_euros > 0:
         from domain.services.stripe_service import stripe_service
         try:
             session_data = stripe_service.create_checkout_session(

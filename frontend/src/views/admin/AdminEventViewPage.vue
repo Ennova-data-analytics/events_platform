@@ -122,6 +122,16 @@
                 </template>
 
                 <template v-slot:item.actions="{ item }">
+                  <v-btn
+                    v-if="status === 'approved'"
+                    @click="handleMarkPaid(item)"
+                    icon="mdi-cash-check"
+                    color="success"
+                    variant="text"
+                    size="small"
+                    class="mr-2"
+                    title="Mark as Paid"
+                  ></v-btn>
                   <v-btn @click="handleRevert(item)" icon="mdi-undo" color="warning" variant="text" size="small" title="Revert to Pending"></v-btn>
                 </template>
             </v-data-table>
@@ -238,6 +248,31 @@
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="markPaidDialog.show" max-width="500">
+      <v-card>
+        <v-card-title class="text-h5">
+          Mark as Paid?
+        </v-card-title>
+        <v-card-text>
+          Are you sure you want to mark the registration for <strong>{{ markPaidDialog.attendeeName }}</strong> as paid?
+          This indicates that payment has been received (e.g., through offline payment or manual transfer).
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="markPaidDialog.show = false">
+            Cancel
+          </v-btn>
+          <v-btn
+            color="success"
+            variant="flat"
+            @click="confirmMarkPaid"
+          >
+            Mark as Paid
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Bulk Email Dialog -->
     <v-dialog v-model="bulkEmailDialog.show" max-width="700" scrollable>
       <v-card>
@@ -348,6 +383,11 @@ const revertDialog = ref({
   attendeeName: ''
 });
 const deleteDialog = ref({
+  show: false,
+  attendee: null,
+  attendeeName: ''
+});
+const markPaidDialog = ref({
   show: false,
   attendee: null,
   attendeeName: ''
@@ -490,6 +530,29 @@ async function confirmDelete() {
     snackbar.value = { show: true, text: 'Failed to delete registration.', color: 'error' };
   }
 }
+
+function handleMarkPaid(attendee) {
+  markPaidDialog.value = {
+    show: true,
+    attendee: attendee,
+    attendeeName: attendee.user?.full_name || attendee.user?.email || 'Unknown'
+  };
+}
+
+async function confirmMarkPaid() {
+  const { attendee } = markPaidDialog.value;
+  markPaidDialog.value.show = false;
+
+  try {
+    await AdminService.markRegistrationPaid(attendee.registration_id);
+    snackbar.value = { show: true, text: 'Registration marked as paid successfully.', color: 'success' };
+    await fetchAttendees();
+  } catch (error) {
+    console.error('Mark paid failed:', error);
+    snackbar.value = { show: true, text: error.response?.data?.detail || 'Failed to mark registration as paid.', color: 'error' };
+  }
+}
+
 function isFileUrl(value) {
   if (!value) return false;
   if (value.startsWith('http')) return true;

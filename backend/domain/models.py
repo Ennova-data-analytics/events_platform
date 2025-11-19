@@ -37,6 +37,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_ennova_member = Column(Boolean, default=False, nullable=False, index=True)
     
     roles = relationship("Role", secondary=user_roles, back_populates="users")
     registrations = relationship("Registration", back_populates="user")
@@ -115,6 +116,7 @@ class Event(Base):
     capacity = Column(Integer)
     price_euros = Column(DECIMAL(10, 2), default=0.00)
     signups_enabled = Column(Boolean, default=True, nullable=False)
+    is_free_for_members = Column(Boolean, default=False, nullable=False)
 
     requires_approval = Column(Boolean, default=True, nullable=False)
     image_url = Column(Text, nullable=True)
@@ -167,6 +169,7 @@ class Registration(Base):
     discount_amount_euros = Column(DECIMAL(10, 2), nullable=True)
     final_amount_euros = Column(DECIMAL(10, 2), nullable=True)
     registration_date = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    member_discount_applied = Column(Boolean, default=False, nullable=False)
 
     user = relationship("User", back_populates="registrations")
     event = relationship("Event", back_populates="registrations")

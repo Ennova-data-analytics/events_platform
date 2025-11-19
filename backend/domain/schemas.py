@@ -1,8 +1,8 @@
-from pydantic import BaseModel, EmailStr, ConfigDict, field_serializer, Field, validator
+from pydantic import BaseModel, EmailStr, ConfigDict, field_serializer, Field
 from core import s3_service
 import uuid
 from datetime import datetime
-from typing import Any, Optional, Literal
+from typing import Any, Literal
 from decimal import Decimal
 
 class UserBase(BaseModel):
@@ -10,6 +10,7 @@ class UserBase(BaseModel):
     full_name: str | None = None 
     degree: str | None = None
     study_year: str | None = None
+    is_ennova_member: bool = False 
 
 class UserCreate(UserBase):
     password: str
@@ -45,8 +46,9 @@ class Registration(BaseModel):
     discount_code_id: int | None = None
     discount_amount_euros: Decimal | None = None
     final_amount_euros: Decimal | None = None
+    member_discount_applied: bool | None = None 
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True) 
 
 class User(UserBase):
     user_id: uuid.UUID
@@ -122,6 +124,7 @@ class EventBase(BaseModel):
     email_template_payment_id: int | None = None
     feedback_template_id: int | None = None
     event_photos: list[EventPhoto] = []
+    is_free_for_members: bool = False 
 
 class EventCreate(EventBase):
     pass 
@@ -143,8 +146,9 @@ class EventUpdate(BaseModel):
     email_template_received_id: int | None = None
     email_template_payment_id: int | None = None
     feedback_template_id: int | None = None
+    is_free_for_members: bool | None = None 
 
-class Event(EventBase):
+class Event(EventBase): 
     event_id: int 
     status: str 
 
@@ -413,3 +417,39 @@ class DiscountCodeValidationResponse(BaseModel):
     discount_amount: Decimal | None = None
     final_price: Decimal | None = None
 
+class EnnovaMemberAdd(BaseModel):
+    user_id: uuid.UUID
+
+class EnnovaMemberRemove(BaseModel):
+    user_id: uuid.UUID
+
+class EnnovaMemberBulkAdd(BaseModel):
+    user_ids: list[uuid.UUID]
+
+class EnnovaMemberResponse(BaseModel):
+    user_id: uuid.UUID
+    email: str
+    full_name: str | None 
+    degree: str | None 
+    study_year: str | None 
+    is_ennova_member: bool 
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class EnnovaMemberListResponse(BaseModel):
+    members: list[EnnovaMemberResponse]
+    total_count: int 
+
+class UserSearchResponse(BaseModel):
+    users: list[EnnovaMemberResponse]
+    total_count: int 
+
+class ExcelImportResponse(BaseModel):
+    success: bool
+    matched_count: int 
+    unmatched_count: int 
+    added_count: int 
+    matched_emails: list[str]
+    unmatched_emails: list[str]
+    already_members: list[str]

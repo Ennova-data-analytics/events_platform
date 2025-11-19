@@ -13,6 +13,9 @@ export const AdminService = {
     revertRegistrationToPending(registrationId) {
         return ApiClient.post(`/admin/registrations/${registrationId}/revert-to-pending`);
     },
+    markRegistrationPaid(registrationId) {
+        return ApiClient.post(`/admin/registrations/${registrationId}/mark-paid`);
+    },
     deleteRegistration(registrationId) {
         return ApiClient.delete(`/admin/registrations/${registrationId}`);
     },

@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
+import pandas as pd 
+from io import BytesIO
 import logging
 import time
 
@@ -25,7 +27,6 @@ def approve_registration(
 
     reg.status = 'Approved'
 
-    # Set custom amount if provided, otherwise it remains None (will use event price)
     if approval_data.custom_amount_euros is not None:
         reg.custom_amount_euros = approval_data.custom_amount_euros
 
@@ -70,6 +71,32 @@ def revert_registration_to_pending(registration_id: int, db: Session = Depends(d
     reg.status = 'Pending Approval'
     db.commit()
     db.refresh(reg)
+
+    return reg
+
+
+@router.post("/registrations/{registration_id}/mark-paid", response_model=schemas.Registration)
+def mark_registration_paid(
+    registration_id: int,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """Mark an approved registration as paid (for manual payments or offline transactions)"""
+    reg = db.query(models.Registration).filter(models.Registration.registration_id == registration_id).first()
+    if not reg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration not found")
+
+    if reg.status != 'Approved':
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Can only mark 'Approved' registrations as paid. Current status: {reg.status}"
+        )
+
+    reg.status = 'Paid'
+    db.commit()
+    db.refresh(reg)
+
+    logger.info(f"Registration {registration_id} marked as paid by organiser {current_organiser.email}")
 
     return reg
 
@@ -178,3 +205,246 @@ def send_bulk_email_to_attendees(
         total_recipients=len(registrations),
         failed_emails=failed_emails
     )
+
+@router.get("/ennova-members", response_model=schemas.EnnovaMemberListResponse)
+def get_ennova_members(skip: int = 0, limit: int = 100, search: str | None = None, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
+    """Get all Ennova members with optional search"""
+    query = db.query(models.User).filter(models.User.is_ennova_member)
+    if search:
+        search_filter = f"%{search}%"
+        query = query.filter(
+            (models.User.email.ilike(search_filter)) |
+            (models.User.full_name.ilike(search_filter))
+        )
+    
+    total_count = query.count()
+    members = query.order_by(models.User.email).offset(skip).limit(limit).all()
+
+    return schemas.EnnovaMemberListResponse(
+        members=[schemas.EnnovaMemberResponse.model_validate(m) for m in members],
+        total_count=total_count
+    )
+
+@router.get("/users/search", response_model=schemas.UserSearchResponse)
+def search_users(q: str, skip: int = 0, limit: int = 50, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
+    """Search all users by email or name for adding to Ennova members"""
+    search_filter = f"%{q}%"
+    query = db.query(models.User).filter(
+        (models.User.email.ilike(search_filter)) | 
+        (models.User.full_name.ilike(search_filter))
+    )
+
+    total_count = query.count()
+    users = query.order_by(models.User.email).offset(skip).limit(limit).all()
+
+    return schemas.UserSearchResponse(
+        users=[schemas.EnnovaMemberResponse.model_validate(u) for u in users],
+        total_count=total_count
+    )
+
+@router.post("/ennova-members/add", response_model=schemas.EnnovaMemberResponse)
+def add_ennova_member(member_data: schemas.EnnovaMemberAdd, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
+    """Add a single user to Ennova members"""
+    user = db.query(models.User).filter(models.User.user_id == member_data.user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if user.is_ennova_member:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User is already an Ennova member")
+
+    user.is_ennova_member = True
+    db.commit()
+    db.refresh(user)
+
+    logger.info(f"User {user.email} added to Ennova members by organiser {current_organiser.email}")
+
+    return schemas.EnnovaMemberResponse.model_validate(user)
+
+@router.post("/ennova-members/remove", response_model=schemas.EnnovaMemberResponse)
+def remove_ennova_member(member_data: schemas.EnnovaMemberRemove, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
+    """Remove a user from Ennova members"""
+    user = db.query(models.User).filter(models.User.user_id == member_data.user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if not user.is_ennova_member:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User is not an Ennova member")
+
+    user.is_ennova_member = False
+    db.commit()
+    db.refresh(user)
+
+    logger.info(f"User {user.email} removed from Ennova members by organiser {current_organiser.email}")
+
+    return schemas.EnnovaMemberResponse.model_validate(user)
+
+@router.post("/ennova-members/bulk-add", response_model=schemas.EnnovaMemberListResponse)
+def bulk_add_ennova_members(bulk_data: schemas.EnnovaMemberBulkAdd, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
+    """Add multiple users to Ennova members at once"""
+    users = db.query(models.User).filter(models.User.user_id.in_(bulk_data.user_ids)).all()
+
+    if len(users) != len(bulk_data.user_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Some users not found")
+    
+    added_count = 0
+    for user in users:
+        if not user.is_ennova_member:
+            user.is_ennova_member = True
+            added_count += 1
+    
+    db.commit()
+
+    logger.info(f"{added_count} users added to Ennova members by organiser")
+
+    for user in users:
+        db.refresh(user)
+    
+    return schemas.EnnovaMemberListResponse(
+        members=[schemas.EnnovaMemberResponse.model_validate(u) for u in users],
+        total_count=len(users)
+    )
+
+
+@router.post("/ennova-members/import-excel", response_model=schemas.ExcelImportResponse)
+async def import_ennova_members_from_excel(
+    file: UploadFile = File(...),
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """
+    Import Ennova members from Excel file.
+    Expected format: Excel file with an email column (looks for: 'Esade email', 'email', 'e-mail', etc.)
+    """
+    
+    if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file format. Please upload an Excel file (.xlsx, .xls) or CSV"
+        )
+    
+    try:
+        contents = await file.read()
+        
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(BytesIO(contents))
+        else:
+            df = pd.read_excel(BytesIO(contents))
+        
+        email_column = None
+        possible_email_columns = [
+            'esade email', 'esade_email', 'email', 'emails', 
+            'e-mail', 'e-mails', 'email address', 'correo', 
+            'correo electrónico', 'correo electronico'
+        ]
+        
+        for col in df.columns:
+            col_normalized = col.lower().strip()
+            if col_normalized in possible_email_columns:
+                email_column = col
+                break
+        
+        if email_column is None:
+            for col in df.columns:
+                if 'email' in col.lower() or 'mail' in col.lower():
+                    email_column = col
+                    break
+        
+        if email_column is None:
+            available_columns = ", ".join([f"'{col}'" for col in df.columns])
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"No email column found. Available columns: {available_columns}. "
+                       f"Please ensure there's a column containing 'email' in its name."
+            )
+        
+        emails_raw = df[email_column].dropna()
+        
+        emails = (
+            emails_raw
+            .astype(str)
+            .str.strip()
+            .str.lower()
+            .replace('', None)
+            .dropna()
+            .unique()
+            .tolist()
+        )
+        
+        valid_emails = [
+            email for email in emails 
+            if '@' in email and '.' in email and len(email) > 5
+        ]
+        
+        if not valid_emails:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"No valid emails found in column '{email_column}'. "
+                       f"Found {len(emails)} entries but none appear to be valid email addresses."
+            )
+        
+        if len(valid_emails) < len(emails):
+            logger.warning(
+                f"Filtered out {len(emails) - len(valid_emails)} invalid email entries "
+                f"from Excel import by {current_organiser.email}"
+            )
+        
+        existing_users = db.query(models.User).filter(
+            models.User.email.in_(valid_emails)
+        ).all()
+        
+        existing_users_dict = {user.email.lower(): user for user in existing_users}
+        matched_emails = []
+        unmatched_emails = []
+        already_members = []
+        added_count = 0
+        
+        for email in valid_emails:
+            email_lower = email.lower()
+            if email_lower in existing_users_dict:
+                user = existing_users_dict[email_lower]
+                matched_emails.append(email)
+                
+                if user.is_ennova_member:
+                    already_members.append(email)
+                else:
+                    user.is_ennova_member = True
+                    added_count += 1
+            else:
+                unmatched_emails.append(email)
+        
+        db.commit()
+        
+        logger.info(
+            f"Excel import by {current_organiser.email}: "
+            f"{added_count} new members added, "
+            f"{len(already_members)} already members, "
+            f"{len(unmatched_emails)} unmatched emails. "
+            f"Email column used: '{email_column}'"
+        )
+        
+        return schemas.ExcelImportResponse(
+            success=True,
+            matched_count=len(matched_emails),
+            unmatched_count=len(unmatched_emails),
+            added_count=added_count,
+            matched_emails=matched_emails,
+            unmatched_emails=unmatched_emails,
+            already_members=already_members
+        )
+        
+    except pd.errors.EmptyDataError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The file is empty"
+        )
+    except pd.errors.ParserError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error parsing file: {str(e)}. Please ensure it's a valid Excel or CSV file."
+        )
+    except Exception as e:
+        logger.error(f"Error importing Excel file: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing file: {str(e)}"
+        )
