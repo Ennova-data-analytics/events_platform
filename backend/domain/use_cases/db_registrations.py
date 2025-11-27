@@ -44,6 +44,7 @@ def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_res
             )
     
     is_member_free_event = event.is_free_for_members and user.is_ennova_member
+    is_completely_free_event = event.price_euros is None or event.price_euros == 0
     member_discount_applied = False
 
     if event.requires_approval:
@@ -52,15 +53,18 @@ def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_res
         inital_status = 'Approved'
 
     if is_member_free_event:
-        inital_status = 'Paid'  
+        inital_status = 'Paid'
         member_discount_applied = True
         logger.info(f"Ennova member {user.email} registering for free event {event.event_name} (event_id={event_id})")
+    elif is_completely_free_event:
+        inital_status = 'Approved'
+        logger.info(f"User {user.email} registering for completely free event {event.event_name} (event_id={event_id})")
 
     discount_code_id = None
     discount_amount = None
-    final_amount = event.price_euros if not is_member_free_event else 0
+    final_amount = 0 if (is_member_free_event or is_completely_free_event) else event.price_euros
 
-    if discount_code and event.price_euros and event.price_euros > 0 and not is_member_free_event:
+    if discount_code and event.price_euros and event.price_euros > 0 and not is_member_free_event and not is_completely_free_event:
         validation_result = DiscountCodeUseCases.validate_discount_code(
             db=db,
             validation_data=DiscountCodeValidation(code=discount_code, event_id=event_id)
@@ -94,7 +98,7 @@ def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_res
     db.refresh(db_registration)
 
     try:
-        if is_member_free_event:
+        if is_member_free_event or is_completely_free_event:
             notification_service.send_registration_approved_notification(db=db, registration=db_registration)
         elif event.requires_approval:
             notification_service.send_registration_created_notification(db=db, registration=db_registration)
