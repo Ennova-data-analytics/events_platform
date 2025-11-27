@@ -24,6 +24,8 @@
         <v-icon>mdi-bug-outline</v-icon>
         <v-tooltip activator="parent" location="left">Report a bug</v-tooltip>
       </v-btn>
+
+      <ChatPopup />
     </v-layout>
   </v-app>
 </template>
@@ -31,9 +33,10 @@
 <script setup>
 import AppNavbar from './components/layout/AppNavBar.vue';
 import AppFooter from './components/layout/AppFooter.vue';
+import ChatPopup from './components/chat/ChatPopup.vue';
 
 const openSupportEmail = () => {
-  const email = 'alanbruno.fijal@alumni.esade.edu'; 
+  const email = 'alanbruno.fijal@alumni.esade.edu';
   const subject = 'Bug Report - Ennova Events Platform';
   const body = 'Please describe the bug you encountered:\n\n';
 

@@ -142,6 +142,11 @@ const routes = [
         path: 'ennova-members',
         name: 'admin-ennova-members',
         component: () => import('../views/admin/AdminEnnovaMembersPage.vue')
+      },
+      {
+        path: 'ai-documents',
+        name: 'admin-ai-documents',
+        component: () => import('../views/admin/AdminAIDocumentsPage.vue')
       }
     ]
   }
