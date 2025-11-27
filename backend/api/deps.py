@@ -1,5 +1,5 @@
 from db.session import SessionLocal
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from jose import jwt, JWTError
@@ -9,7 +9,14 @@ from domain.use_cases import db_users
 from core.config import settings
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+from core.qdrant_service import get_qdrant_service
+from domain.services.ai.chat_service import ChatService
+from domain.services.ai.document_vectorization_service import DocumentVectorizationService
+import time 
+from collections import defaultdict
 
+chat_rate_limits = defaultdict(list)
+MAX_MESSAGES_PER_MINUTE = 10
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 def get_db():
@@ -96,3 +103,33 @@ def get_optional_current_user(
     user = db_users.get_user_by_email(db, email=email)
     return user
 
+def get_chat_service() -> ChatService:
+    """Get ChatService instance with dependencies"""
+    qdrant_service = get_qdrant_service()
+    return ChatService(qdrant_client=qdrant_service.get_client())
+
+def get_document_vectorization_service() -> DocumentVectorizationService:
+    """Get DocumentVectorizationService instance"""
+    qdrant_service = get_qdrant_service()
+    return DocumentVectorizationService(qdrant_client=qdrant_service.get_client())
+
+async def rate_limit_chat(request: Request, current_user: models.User = Depends(get_current_user)):
+    """Rate limiting for chat messages"""
+    user_id = str(current_user.user_id)
+    current_time = time.time()
+
+    #Clean old entries
+    chat_rate_limits[user_id] = [
+        timestamp for timestamp in chat_rate_limits[user_id]
+        if current_time - timestamp < 60
+    ]
+
+    #Check rate limit
+    if len(chat_rate_limits[user_id]) >= MAX_MESSAGES_PER_MINUTE:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Rate limit exceeded. Maximum {MAX_MESSAGES_PER_MINUTE} messages per minute"
+        )
+    
+    #Add current request
+    chat_rate_limits[user_id].append(current_time)

@@ -453,3 +453,46 @@ class ExcelImportResponse(BaseModel):
     matched_emails: list[str]
     unmatched_emails: list[str]
     already_members: list[str]
+
+class ChatCreate(BaseModel):
+    first_message: str | None = Field(None, max_length=2000)
+
+class MessageCreate(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000)
+
+class MessageResponse(BaseModel):
+    id: int
+    role: str
+    content: str
+    retrieved_chunks: list | None = None
+    tokens_used: int | None = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ChatResponse(BaseModel):
+    id: int
+    title: str | None
+    created_at: datetime
+    updated_at: datetime
+    message_count: int | None = None
+    last_message: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class ChatDetailResponse(ChatResponse):
+    messages: MessageResponse | None
+
+
+class ChatTitleUpdate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+
+class DocumentVectorizeResponse(BaseModel):
+    filename: str
+    chunks_processed: int
+    event_id: int | None = None
+    message: str

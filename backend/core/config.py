@@ -28,6 +28,11 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str
 
+    QDRANT_URL: str
+    QDRANT_API_KEY: str
+    QDRANT_COLLECTION_NAME: str = "ennova_documents"
+    QDRANT_PORT: int 
+
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()
