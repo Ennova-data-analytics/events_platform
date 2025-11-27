@@ -60,10 +60,14 @@
               <v-icon start>mdi-clock-outline</v-icon>
               Application Pending Review
             </v-chip>
-            <v-btn v-else-if="registrationStatus === 'Approved'" color="warning" :size="$vuetify.display.mobile ? 'default' : 'large'" block @click="handlePayment">
+            <v-btn v-else-if="registrationStatus === 'Approved' && eventStore.currentEvent.price_euros > 0" color="warning" :size="$vuetify.display.mobile ? 'default' : 'large'" block @click="handlePayment">
               <v-icon start>mdi-credit-card-outline</v-icon>
               Pay Now to Confirm Spot
             </v-btn>
+            <v-chip v-else-if="registrationStatus === 'Approved' && (!eventStore.currentEvent.price_euros || eventStore.currentEvent.price_euros === 0)" color="success" variant="tonal" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
+              <v-icon start>mdi-check-circle</v-icon>
+              Registered & Confirmed
+            </v-chip>
             <v-chip v-else-if="registrationStatus === 'Paid'" color="success" variant="tonal" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
               <v-icon start>mdi-check-circle</v-icon>
               Registered & Confirmed
@@ -103,11 +107,20 @@
           >
             <template v-if="eventStore.currentEvent.requires_approval">
               <v-icon size="small">mdi-information</v-icon>
-              Your registration will be reviewed by the organizer before you can proceed to payment.
+              <template v-if="eventStore.currentEvent.price_euros > 0">
+                Your registration will be reviewed by the organizer before you can proceed to payment.
+              </template>
+              <template v-else>
+                Your registration will be reviewed by the organizer.
+              </template>
+            </template>
+            <template v-else-if="eventStore.currentEvent.price_euros > 0">
+              <v-icon size="small">mdi-flash</v-icon>
+              Register now and pay immediately to secure your spot!
             </template>
             <template v-else>
               <v-icon size="small">mdi-flash</v-icon>
-              Register now and pay immediately to secure your spot!
+              Register now to secure your spot - this event is free!
             </template>
           </v-alert>
 
