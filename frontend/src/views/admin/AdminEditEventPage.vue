@@ -22,6 +22,14 @@
       @updated="handlePhotosUpdated"
       class="mt-4"
     />
+
+    <EventAttachmentsUpload
+      v-if="event.event_id"
+      :event-id="event.event_id"
+      :attachments="event.attachments"
+      @updated="handleAttachmentsUpdated"
+      class="mt-4"
+    />
   </div>
 </template>
 
@@ -31,6 +39,7 @@ import { useRoute } from 'vue-router';
 import EventForm from '@/components/forms/EventForm.vue';
 import SponsorLogoUpload from '@/components/admin/SponsorLogoUpload.vue';
 import EventPhotosUpload from '@/components/admin/EventPhotosUpload.vue';
+import EventAttachmentsUpload from '@/components/admin/EventAttachmentsUpload.vue';
 import { useEventStore } from '@/stores/events.store.js';
 import { EventService } from '@/services/EventService.js';
 
@@ -86,6 +95,10 @@ const handleLogosUpdated = (updatedEvent) => {
 }
 
 const handlePhotosUpdated = (updatedEvent) => {
+  event.value = updatedEvent;
+}
+
+const handleAttachmentsUpdated = (updatedEvent) => {
   event.value = updatedEvent;
 }
 </script>

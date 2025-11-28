@@ -151,6 +151,57 @@
       <SponsorLogos v-if="eventStore.currentEvent?.sponsor_logos" :logos="eventStore.currentEvent.sponsor_logos" />
 
       <EventPhotos v-if="eventStore.currentEvent?.event_photos?.length > 0" :photos="eventStore.currentEvent.event_photos" />
+
+      <!-- Event Attachments Section (Only for approved/paid participants) -->
+      <v-row v-if="eventStore.currentEvent?.attachments?.length > 0 && (registrationStatus === 'Approved' || registrationStatus === 'Paid')" class="mt-8">
+        <v-col cols="12">
+          <v-card elevation="2" class="pa-6">
+            <h2 class="text-h5 font-weight-bold mb-4">
+              <v-icon start color="primary">mdi-paperclip</v-icon>
+              Downloads & Resources
+            </h2>
+            <v-divider class="mb-4"></v-divider>
+
+            <v-list lines="two">
+              <v-list-item
+                v-for="attachment in eventStore.currentEvent.attachments"
+                :key="attachment.attachment_id"
+                :href="attachment.file_url"
+                target="_blank"
+                class="attachment-item rounded mb-2"
+                border
+              >
+                <template v-slot:prepend>
+                  <v-avatar :color="getFileColor(attachment.file_type)" variant="tonal">
+                    <v-icon :icon="getFileIcon(attachment.file_type)" size="large"></v-icon>
+                  </v-avatar>
+                </template>
+
+                <v-list-item-title class="font-weight-medium">
+                  {{ attachment.file_name }}
+                </v-list-item-title>
+
+                <v-list-item-subtitle v-if="attachment.description" class="mt-1">
+                  {{ attachment.description }}
+                </v-list-item-subtitle>
+
+                <v-list-item-subtitle class="text-caption mt-1">
+                  {{ formatFileSize(attachment.file_size_bytes) }} •
+                  Uploaded {{ formatDate(attachment.uploaded_at) }}
+                </v-list-item-subtitle>
+
+                <template v-slot:append>
+                  <v-btn
+                    icon="mdi-download"
+                    variant="text"
+                    color="primary"
+                  ></v-btn>
+                </template>
+              </v-list-item>
+            </v-list>
+          </v-card>
+        </v-col>
+      </v-row>
     </div>
 
     <v-dialog v-model="isFormModalVisible" max-width="600px" persistent>
@@ -473,9 +524,80 @@ async function handlePayment() {
     isSubmitting.value = false;
   }
 }
+
+// Helper functions for attachments display
+function getFileIcon(fileType) {
+  const iconMap = {
+    pdf: 'mdi-file-pdf-box',
+    doc: 'mdi-file-word',
+    docx: 'mdi-file-word',
+    ppt: 'mdi-file-powerpoint',
+    pptx: 'mdi-file-powerpoint',
+    xls: 'mdi-file-excel',
+    xlsx: 'mdi-file-excel',
+    txt: 'mdi-file-document',
+    csv: 'mdi-file-delimited',
+    zip: 'mdi-folder-zip',
+    rar: 'mdi-folder-zip',
+    '7z': 'mdi-folder-zip',
+    jpg: 'mdi-file-image',
+    jpeg: 'mdi-file-image',
+    png: 'mdi-file-image',
+    gif: 'mdi-file-image',
+    svg: 'mdi-file-image'
+  };
+  return iconMap[fileType?.toLowerCase()] || 'mdi-file';
+}
+
+function getFileColor(fileType) {
+  const colorMap = {
+    pdf: 'red',
+    doc: 'blue',
+    docx: 'blue',
+    ppt: 'orange',
+    pptx: 'orange',
+    xls: 'green',
+    xlsx: 'green',
+    zip: 'purple',
+    rar: 'purple',
+    '7z': 'purple',
+    jpg: 'teal',
+    jpeg: 'teal',
+    png: 'teal',
+    gif: 'teal',
+    svg: 'teal'
+  };
+  return colorMap[fileType?.toLowerCase()] || 'grey';
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = bytes;
+  let unitIdx = 0;
+  while (size >= 1024 && unitIdx < units.length - 1) {
+    size /= 1024;
+    unitIdx++;
+  }
+  return `${size.toFixed(1)} ${units[unitIdx]}`;
+}
+
+function formatDate(dateString) {
+  return new Date(dateString).toLocaleDateString();
+}
 </script>
 
 <style scoped>
+.attachment-item {
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.attachment-item:hover {
+  background-color: rgba(25, 118, 210, 0.04);
+  transform: translateX(4px);
+}
+
 .event-description {
   font-size: 16px;
   line-height: 1.8;

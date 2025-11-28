@@ -60,6 +60,34 @@ export const EventService = {
     return ApiClient.post(`/events/${eventId}/photos/reorder`, { photo_ids: photoIds });
   },
 
+  // Event Attachments Methods
+  uploadEventAttachment(eventId, file, description = null) {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (description) {
+      formData.append('description', description);
+    }
+    return ApiClient.post(`/events/${eventId}/attachments`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+
+  getEventAttachments(eventId) {
+    return ApiClient.get(`/events/${eventId}/attachments`);
+  },
+
+  updateEventAttachment(eventId, attachmentId, updateData) {
+    return ApiClient.patch(`/events/${eventId}/attachments/${attachmentId}`, updateData);
+  },
+
+  deleteEventAttachment(eventId, attachmentId) {
+    return ApiClient.delete(`/events/${eventId}/attachments/${attachmentId}`);
+  },
+
+  reorderEventAttachments(eventId, attachmentIds) {
+    return ApiClient.post(`/events/${eventId}/attachments/reorder`, { attachment_ids: attachmentIds });
+  },
+
   // Discount Code Methods
   validateDiscountCode(eventId, code) {
     return ApiClient.post('/discount-codes/validate', {
@@ -100,6 +128,11 @@ export const {
   deleteEventPhoto,
   updateEventPhoto,
   reorderEventPhotos,
+  uploadEventAttachment,
+  getEventAttachments,
+  updateEventAttachment,
+  deleteEventAttachment,
+  reorderEventAttachments,
   validateDiscountCode,
   createDiscountCode,
   getEventDiscountCodes,
