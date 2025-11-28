@@ -106,6 +106,42 @@ class EventPhotoUploadResponse(BaseModel):
     photos: list[EventPhoto]
     errors: list[str] = []
 
+
+class EventAttachmentBase(BaseModel):
+    description: str | None = None
+    display_order: int = 0
+
+
+class EventAttachmentCreate(EventAttachmentBase):
+    pass
+
+
+class EventAttachmentUpdate(BaseModel):
+    description: str | None = None
+    display_order: int | None = None
+
+
+class EventAttachment(EventAttachmentBase):
+    attachment_id: int
+    event_id: int
+    file_url: str
+    file_name: str
+    file_type: str
+    file_size_bytes: int | None = None
+    uploaded_by_user_id: uuid.UUID | None = None
+    uploaded_at: datetime
+
+    @field_serializer('file_url')
+    def serialise_file_url(self, file_url: str, _info):
+        if file_url:
+            if file_url.startswith('http'):
+                return file_url
+            return s3_service.generate_predesigned_url(file_url)
+        return None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class EventBase(BaseModel):
     event_name: str
     description: str | None = None
@@ -124,6 +160,7 @@ class EventBase(BaseModel):
     email_template_payment_id: int | None = None
     feedback_template_id: int | None = None
     event_photos: list[EventPhoto] = []
+    attachments: list[EventAttachment] = []
     is_free_for_members: bool = False 
 
 class EventCreate(EventBase):

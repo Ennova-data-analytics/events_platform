@@ -6,7 +6,7 @@ import uuid
 import logging
 
 from domain import schemas, models
-from domain.use_cases import db_events, db_registrations, db_event_photos
+from domain.use_cases import db_events, db_registrations, db_event_photos, db_event_attachments
 from api import deps
 from core import s3_service
 from core.image_processing_service import image_processing_service
@@ -360,6 +360,132 @@ def reorder_event_photos(event_id: int, photo_ids: list[int], db: Session = Depe
     try:
         updated_photos = db_event_photos.reorder_event_photos(db, event_id, photo_ids)
         return updated_photos
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+
+@router.post("/{event_id}/attachments", response_model=schemas.EventAttachment, status_code=status.HTTP_201_CREATED, tags=["Admin"])
+def upload_event_attachment(
+    event_id: int,
+    file: UploadFile = File(...),
+    description: str | None = None,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """Upload an attachment (presentation, guide, etc.) for an event"""
+    db_event = db_events.get_event(db, event_id=event_id)
+    if not db_event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if db_event.created_by_user_id != current_organiser.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this event")
+
+    try:
+        s3_key, file_type, file_size = db_event_attachments.upload_attachment_to_s3(file, event_id)
+        attachment = db_event_attachments.create_event_attachment(
+            db=db,
+            event_id=event_id,
+            file_url=s3_key,
+            file_name=file.filename,
+            file_type=file_type,
+            file_size_bytes=file_size,
+            description=description,
+            uploaded_by_user_id=current_organiser.user_id
+        )
+        db.commit()
+        db.refresh(attachment)
+        return attachment
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to upload attachment: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to upload attachment")
+
+
+@router.get("/{event_id}/attachments", response_model=list[schemas.EventAttachment])
+def get_event_attachments(event_id: int, db: Session = Depends(deps.get_db)):
+    """Get all attachments for an event"""
+    db_event = db_events.get_event(db, event_id=event_id)
+    if not db_event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    return db_event_attachments.get_event_attachments(db, event_id)
+
+
+@router.patch("/{event_id}/attachments/{attachment_id}", response_model=schemas.EventAttachment, tags=["Admin"])
+def update_event_attachment(
+    event_id: int,
+    attachment_id: int,
+    update_data: schemas.EventAttachmentUpdate,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """Update attachment description or display order"""
+    db_event = db_events.get_event(db, event_id=event_id)
+    if not db_event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if db_event.created_by_user_id != current_organiser.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this event")
+
+    attachment = db_event_attachments.get_event_attachment(db, attachment_id, event_id)
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    updated_attachment = db_event_attachments.update_event_attachment(db, attachment, update_data)
+    return updated_attachment
+
+
+@router.delete("/{event_id}/attachments/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Admin"])
+def delete_event_attachment(
+    event_id: int,
+    attachment_id: int,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """Delete an attachment"""
+    db_event = db_events.get_event(db, event_id=event_id)
+    if not db_event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if db_event.created_by_user_id != current_organiser.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this event")
+
+    attachment = db_event_attachments.get_event_attachment(db, attachment_id, event_id)
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    db_event_attachments.delete_event_attachment(db, attachment)
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{event_id}/attachments/reorder", response_model=list[schemas.EventAttachment], tags=["Admin"])
+def reorder_event_attachments(
+    event_id: int,
+    attachment_ids: list[int],
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """Reorder all attachments for an event"""
+    db_event = db_events.get_event(db, event_id=event_id)
+    if not db_event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if db_event.created_by_user_id != current_organiser.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this event")
+
+    attachments = db_event_attachments.get_event_attachments(db, event_id)
+    if len(attachment_ids) != len(attachments):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Must provide all attachment IDs. Expected {len(attachments)}, got {len(attachment_ids)}"
+        )
+
+    try:
+        updated_attachments = db_event_attachments.reorder_event_attachments(db, event_id, attachment_ids)
+        return updated_attachments
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

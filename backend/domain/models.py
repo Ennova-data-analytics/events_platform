@@ -153,6 +153,7 @@ class Event(Base):
 
     event_photos = relationship("EventPhoto", back_populates="event", cascade="all, delete-orphan", order_by="EventPhoto.display_order")
     discount_codes = relationship("DiscountCode", back_populates="event", cascade="all, delete-orphan")
+    attachments = relationship("EventAttachment", back_populates="event", cascade="all, delete-orphan", order_by="EventAttachment.display_order")
 
 
 class Registration(Base):
@@ -287,3 +288,21 @@ class DiscountCode(Base):
         CheckConstraint("max_uses IS NULL OR max_uses > 0", name='check_max_uses_positive'),
         CheckConstraint("used_count >= 0", name='check_used_count_non_negative'),
     )
+
+
+class EventAttachment(Base):
+    __tablename__ = "event_attachments"
+
+    attachment_id = Column(Integer, primary_key=True)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
+    file_url = Column(Text, nullable=False)
+    file_name = Column(String(255), nullable=False)
+    file_type = Column(String(50), nullable=False)
+    file_size_bytes = Column(Integer, nullable=True)
+    description = Column(String(500), nullable=True)
+    display_order = Column(Integer, nullable=False, default=0)
+    uploaded_by_user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="SET NULL"), nullable=True)
+    uploaded_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+
+    event = relationship("Event", back_populates="attachments")
+    uploaded_by = relationship("User", foreign_keys=[uploaded_by_user_id])
