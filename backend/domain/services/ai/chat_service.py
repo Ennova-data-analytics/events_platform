@@ -1,6 +1,6 @@
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from qdrant_client import QdrantClient
 from typing import AsyncGenerator
 from sqlalchemy.orm import Session
