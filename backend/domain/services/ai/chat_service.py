@@ -76,11 +76,12 @@ class ChatService:
             query_vector = await self.embeddings.aembed_query(query)
 
             #Wide Search
-            initial_results = self.qdrant_client.search(
+            search_result = self.qdrant_client.query_points(
                 collection_name=self.collection_name,
-                query_vector=query_vector,
+                query=query_vector,
                 limit=25
             )
+            initial_results = search_result.points
 
             if not initial_results:
                 return []
