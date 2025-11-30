@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div v-if="authStore.isOrganiser">
     <!-- Floating Chat Button -->
     <v-btn
       icon="mdi-chat-outline"
@@ -171,9 +171,11 @@
 <script setup>
 import { ref, nextTick, onMounted } from 'vue';
 import { useChatStore } from '@/stores/chat.store';
+import { useAuthStore } from '@/stores/auth.store';
 import { marked } from 'marked';
 
 const chatStore = useChatStore();
+const authStore = useAuthStore();
 
 const isOpen = ref(false);
 const inputMessage = ref('');
@@ -259,7 +261,7 @@ onMounted(async () => {
 
 <style scoped>
 .chat-btn {
-  margin: 0 24px 80px 0;
+  margin: 0 24px 85px 0;
   z-index: 1000;
 }
 
