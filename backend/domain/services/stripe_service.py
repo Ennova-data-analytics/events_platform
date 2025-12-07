@@ -94,6 +94,12 @@ class StripeService:
 
         registration.status = 'Paid'
         registration.stripe_payment_intent_id = payment_intent_id
+
+        # Increment tickets_sold counter if this registration has a ticket type
+        if registration.ticket_type_id:
+            from domain.use_cases.db_ticket_types import TicketTypeUseCases
+            TicketTypeUseCases.increment_tickets_sold(db, registration.ticket_type_id)
+
         db.commit()
 
         logger.info(f"Registration {registration_id} marked as paid")

@@ -1,22 +1,30 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status
 from domain import models
 from domain.services import notification_service
 from domain.use_cases.db_discount_codes import DiscountCodeUseCases
+from domain.use_cases.db_ticket_types import TicketTypeUseCases
 from domain.schemas import DiscountCodeValidation
 import uuid
 import logging
 
 logger = logging.getLogger(__name__)
 
-def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_responses: dict | None = None, discount_code: str | None = None):
-    """Handles db operations for creating a new registration"""
-    existing_registraion = db.query(models.Registration).filter(
+def create_registration(
+    db: Session,
+    event_id: int,
+    user_id: uuid.UUID,
+    form_responses: dict | None = None,
+    discount_code: str | None = None,
+    ticket_type_id: int | None = None
+):
+    """Handles db operations for creating a new registration with ticket type support"""
+    existing_registration = db.query(models.Registration).filter(
         models.Registration.event_id == event_id,
         models.Registration.user_id == user_id
     ).first()
 
-    if existing_registraion:
+    if existing_registration:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="You are already registered for this event"
@@ -25,46 +33,115 @@ def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_res
     event = db.query(models.Event).filter(models.Event.event_id == event_id).first()
     user = db.query(models.User).filter(models.User.user_id == user_id).first()
 
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found"
+        )
+
     if not event.signups_enabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Signups are currently disabled for this event"
         )
 
-    if event.capacity is not None:
-        current_registrations = db.query(models.Registration).filter(
-            models.Registration.event_id == event_id,
-            models.Registration.status != 'Cancelled'
-        ).count()
+   
+    ticket_type = None
+    price_euros = event.price_euros 
+    form_template_id = event.form_template_id  
+    is_member_free = False
 
-        if current_registrations >= event.capacity:
+    event_ticket_types = db.query(models.TicketType).filter(
+        models.TicketType.event_id == event_id
+    ).all()
+
+    if event_ticket_types:
+        if not ticket_type_id:
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="This event is full"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This event requires selecting a ticket type"
             )
-    
-    is_member_free_event = event.is_free_for_members and user.is_ennova_member
-    is_completely_free_event = event.price_euros is None or event.price_euros == 0
+
+        ticket_type = db.query(models.TicketType).filter(
+            models.TicketType.ticket_type_id == ticket_type_id,
+            models.TicketType.event_id == event_id
+        ).first()
+
+        if not ticket_type:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Invalid ticket type for this event"
+            )
+
+        if not ticket_type.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This ticket type is no longer available"
+            )
+
+        if ticket_type.capacity is not None:
+            current_ticket_sales = db.query(models.Registration).filter(
+                models.Registration.ticket_type_id == ticket_type_id,
+                models.Registration.status != 'Cancelled'
+            ).count()
+
+            if current_ticket_sales >= ticket_type.capacity:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"The '{ticket_type.name}' ticket type is sold out"
+                )
+
+        price_euros = ticket_type.price_euros
+        if ticket_type.form_template_id:
+            form_template_id = ticket_type.form_template_id
+
+        is_member_free = ticket_type.is_free_for_members and user.is_ennova_member
+    else:
+        # Event does NOT have ticket types - use event-level settings
+        if ticket_type_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This event does not use ticket types"
+            )
+
+        is_member_free = event.is_free_for_members and user.is_ennova_member
+
+        # Only check event-level capacity if event doesn't use ticket types
+        if event.capacity is not None:
+            current_registrations = db.query(models.Registration).filter(
+                models.Registration.event_id == event_id,
+                models.Registration.status != 'Cancelled'
+            ).count()
+
+            if current_registrations >= event.capacity:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="This event is full"
+                )
+
+ 
+    is_completely_free_event = price_euros is None or price_euros == 0
     member_discount_applied = False
 
     if event.requires_approval:
-        inital_status = 'Pending Approval'
+        initial_status = 'Pending Approval'
     else:
-        inital_status = 'Approved'
+        initial_status = 'Approved'
 
-    if is_member_free_event:
-        inital_status = 'Paid'
+    if is_member_free:
+        initial_status = 'Paid'
         member_discount_applied = True
-        logger.info(f"Ennova member {user.email} registering for free event {event.event_name} (event_id={event_id})")
+        logger.info(f"Ennova member {user.email} registering for free (ticket type: {ticket_type.name if ticket_type else 'N/A'})")
     elif is_completely_free_event:
-        inital_status = 'Approved'
-        logger.info(f"User {user.email} registering for completely free event {event.event_name} (event_id={event_id})")
+        initial_status = 'Approved'
+        logger.info(f"User {user.email} registering for free event")
 
+  
     discount_code_id = None
     discount_amount = None
-    final_amount = 0 if (is_member_free_event or is_completely_free_event) else event.price_euros
+    final_amount = 0 if (is_member_free or is_completely_free_event) else price_euros
 
-    if discount_code and event.price_euros and event.price_euros > 0 and not is_member_free_event and not is_completely_free_event:
+    if discount_code and price_euros and price_euros > 0 and not is_member_free and not is_completely_free_event:
         validation_result = DiscountCodeUseCases.validate_discount_code(
             db=db,
             validation_data=DiscountCodeValidation(code=discount_code, event_id=event_id)
@@ -82,11 +159,13 @@ def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_res
                 detail=validation_result.message
             )
 
+ 
     db_registration = models.Registration(
         event_id=event_id,
         user_id=user_id,
+        ticket_type_id=ticket_type_id,  
         form_responses=form_responses,
-        status=inital_status,
+        status=initial_status,
         discount_code_id=discount_code_id,
         discount_amount_euros=discount_amount,
         final_amount_euros=final_amount,
@@ -97,8 +176,12 @@ def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_res
     db.commit()
     db.refresh(db_registration)
 
+    # Increment tickets_sold counter if registration is immediately marked as Paid
+    if initial_status == 'Paid' and ticket_type_id:
+        TicketTypeUseCases.increment_tickets_sold(db, ticket_type_id)
+
     try:
-        if is_member_free_event or is_completely_free_event:
+        if is_member_free or is_completely_free_event:
             notification_service.send_registration_approved_notification(db=db, registration=db_registration)
         elif event.requires_approval:
             notification_service.send_registration_created_notification(db=db, registration=db_registration)
@@ -110,6 +193,37 @@ def create_registration(db: Session, event_id: int, user_id: uuid.UUID, form_res
     return db_registration
 
 def get_registrations_for_event(db: Session, event_id: int):
-    """Fetches all registrations for a specific event"""
-    return db.query(models.Registration).filter(models.Registration.event_id == event_id).all()
+    """Fetches all registrations for a specific event with ticket type data"""
+    return db.query(models.Registration).options(
+        joinedload(models.Registration.ticket_type)
+    ).filter(models.Registration.event_id == event_id).all()
+
+
+def cancel_registration(db: Session, registration_id: int):
+    """Cancel a registration and free up ticket capacity"""
+    registration = db.query(models.Registration).filter(
+        models.Registration.registration_id == registration_id
+    ).first()
+
+    if not registration:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Registration not found"
+        )
+
+    if registration.status == 'Cancelled':
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Registration already cancelled"
+        )
+
+    if registration.ticket_type_id:
+        TicketTypeUseCases.decrement_tickets_sold(db, registration.ticket_type_id)
+
+    registration.status = 'Cancelled'
+    db.commit()
+    db.refresh(registration)
+
+    logger.info(f"Cancelled registration {registration_id}")
+    return registration
 

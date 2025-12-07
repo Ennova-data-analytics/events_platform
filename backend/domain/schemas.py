@@ -2,7 +2,7 @@ from pydantic import BaseModel, EmailStr, ConfigDict, field_serializer, Field
 from core import s3_service
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 from decimal import Decimal
 
 class UserBase(BaseModel):
@@ -46,7 +46,9 @@ class Registration(BaseModel):
     discount_code_id: int | None = None
     discount_amount_euros: Decimal | None = None
     final_amount_euros: Decimal | None = None
-    member_discount_applied: bool | None = None 
+    member_discount_applied: bool | None = None
+    ticket_type_id: int | None = None
+    ticket_type: Optional["TicketTypeResponse"] = None
 
     model_config = ConfigDict(from_attributes=True) 
 
@@ -185,9 +187,10 @@ class EventUpdate(BaseModel):
     feedback_template_id: int | None = None
     is_free_for_members: bool | None = None 
 
-class Event(EventBase): 
-    event_id: int 
-    status: str 
+class Event(EventBase):
+    event_id: int
+    status: str
+    ticket_types: list["TicketTypeResponse"] = []
 
     creator: "User" = None
     @field_serializer('image_url')
@@ -212,6 +215,7 @@ class RegistrationWithUser(Registration):
     user: User
 
 class RegistrationCreate(BaseModel):
+    ticket_type_id: int | None = Field(None, description="Required if event has ticket types")
     form_responses: dict | None = None
     discount_code: str | None = Field(None, description="Optional discount code")
 
@@ -241,11 +245,85 @@ class FormTemplateUpdate(FormTemplateBase):
     pass 
 
 class FormTemplate(FormTemplateBase):
-    template_id: int 
+    template_id: int
     model_config = ConfigDict(from_attributes=True)
 
+
+# ============================================================================
+# Ticket Type Schemas
+# ============================================================================
+
+class TicketTypeBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255, description="Ticket type name (e.g., Participant, Spectator)")
+    description: str | None = Field(None, description="Description of what this ticket includes")
+    price_euros: Decimal = Field(default=0.00, ge=0, description="Price for this ticket type")
+    capacity: int | None = Field(None, gt=0, description="Maximum capacity for this ticket type (null = unlimited)")
+    form_template_id: int | None = Field(None, description="Optional form template specific to this ticket type")
+    display_order: int = Field(default=0, ge=0, description="Order in which ticket types are displayed")
+    is_active: bool = Field(default=True, description="Whether this ticket type is available for purchase")
+    is_free_for_members: bool = Field(default=False, description="Whether Ennova members get this ticket free")
+
+
+class TicketTypeCreate(TicketTypeBase):
+    """Schema for creating a new ticket type"""
+    pass
+
+
+class TicketTypeUpdate(BaseModel):
+    """Schema for updating a ticket type (all fields optional)"""
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = None
+    price_euros: Decimal | None = Field(None, ge=0)
+    capacity: int | None = Field(None, gt=0)
+    form_template_id: int | None = None
+    display_order: int | None = Field(None, ge=0)
+    is_active: bool | None = None
+    is_free_for_members: bool | None = None
+
+
+class TicketTypeResponse(TicketTypeBase):
+    """Schema for ticket type in responses (includes computed fields)"""
+    ticket_type_id: int
+    event_id: int
+    tickets_sold: int
+    tickets_available: int | None = Field(None, description="Remaining tickets (null if unlimited)")
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @classmethod
+    def from_orm_with_availability(cls, ticket_type):
+        """Helper to compute tickets_available from ORM object"""
+        data = {
+            "ticket_type_id": ticket_type.ticket_type_id,
+            "event_id": ticket_type.event_id,
+            "name": ticket_type.name,
+            "description": ticket_type.description,
+            "price_euros": ticket_type.price_euros,
+            "capacity": ticket_type.capacity,
+            "tickets_sold": ticket_type.tickets_sold,
+            "tickets_available": ticket_type.capacity - ticket_type.tickets_sold if ticket_type.capacity else None,
+            "form_template_id": ticket_type.form_template_id,
+            "display_order": ticket_type.display_order,
+            "is_active": ticket_type.is_active,
+            "is_free_for_members": ticket_type.is_free_for_members,
+            "created_at": ticket_type.created_at,
+            "updated_at": ticket_type.updated_at,
+        }
+        return cls(**data)
+
+
+class TicketTypeListResponse(BaseModel):
+    """Response for listing ticket types"""
+    ticket_types: list[TicketTypeResponse]
+    total_count: int
+
+
+TicketTypeResponse.model_rebuild()
 EventPhoto.model_rebuild()
 Event.model_rebuild()
+Registration.model_rebuild()
 
 class InAppNotificationBase(BaseModel):
     title: str

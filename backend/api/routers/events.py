@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response, UploadFile, File
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.orm.attributes import flag_modified
 from datetime import datetime
 import uuid
@@ -18,19 +18,24 @@ router = APIRouter()
 @router.get("", response_model=list[schemas.Event])
 def read_events(skip: int = 0, limit: int = 100, db: Session = Depends(deps.get_db)):
     """Retrieve a list of all events"""
-    events = db_events.get_events(db, skip=skip, limit=limit)
+    events = db.query(models.Event).options(
+        joinedload(models.Event.ticket_types)
+    ).offset(skip).limit(limit).all()
     return events 
 
 @router.get("/{event_id}", response_model=schemas.Event)
 def read_event(event_id: int, db: Session = Depends(deps.get_db)):
     """Retrieve the details of a single event by its id"""
-    db_event = db_events.get_event(db, event_id=event_id)
+    db_event = db.query(models.Event).options(
+        joinedload(models.Event.ticket_types)
+    ).filter(models.Event.event_id == event_id).first()
+
     if db_event is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Event not found"
         )
-    
+
     return db_event
 
 @router.post("", response_model=schemas.Event, status_code=status.HTTP_201_CREATED)
@@ -68,7 +73,8 @@ def register_user_for_event(event_id: int, registration_data: schemas.Registrati
         event_id=event_id,
         user_id=current_user.user_id,
         form_responses=registration_data.form_responses,
-        discount_code=registration_data.discount_code
+        discount_code=registration_data.discount_code,
+        ticket_type_id=registration_data.ticket_type_id
     )
 
     if not db_event.requires_approval and registration.final_amount_euros and registration.final_amount_euros > 0:

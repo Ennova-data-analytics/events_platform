@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
-import pandas as pd 
+import pandas as pd
 from io import BytesIO
 import logging
 import time
 
 from domain import schemas, models
 from domain.services import notification_service, email_service, email_templates
+from domain.use_cases.db_ticket_types import TicketTypeUseCases
 from api import deps
 
 logger = logging.getLogger(__name__)
@@ -65,8 +66,12 @@ def revert_registration_to_pending(registration_id: int, db: Session = Depends(d
     if not reg:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration not found")
 
-    if reg.status not in ['Approved', 'Rejected']:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Can only revert approved or rejected registrations")
+    if reg.status not in ['Approved', 'Rejected', 'Paid']:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Can only revert approved, rejected, or paid registrations")
+
+    # If reverting from Paid status, decrement tickets_sold counter
+    if reg.status == 'Paid' and reg.ticket_type_id:
+        TicketTypeUseCases.decrement_tickets_sold(db, reg.ticket_type_id)
 
     reg.status = 'Pending Approval'
     db.commit()
@@ -93,6 +98,11 @@ def mark_registration_paid(
         )
 
     reg.status = 'Paid'
+
+    # Increment tickets_sold counter if this registration has a ticket type
+    if reg.ticket_type_id:
+        TicketTypeUseCases.increment_tickets_sold(db, reg.ticket_type_id)
+
     db.commit()
     db.refresh(reg)
 
@@ -118,6 +128,10 @@ def delete_registration(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to delete this registration"
         )
+
+    # If deleting a Paid registration, decrement tickets_sold counter
+    if reg.status == 'Paid' and reg.ticket_type_id:
+        TicketTypeUseCases.decrement_tickets_sold(db, reg.ticket_type_id)
 
     db.delete(reg)
     db.commit()

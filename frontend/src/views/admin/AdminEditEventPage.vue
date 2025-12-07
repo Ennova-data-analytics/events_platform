@@ -30,6 +30,13 @@
       @updated="handleAttachmentsUpdated"
       class="mt-4"
     />
+
+    <TicketTypeManagement
+      v-if="event.event_id"
+      :event-id="event.event_id"
+      @ticket-types-updated="handleTicketTypesUpdated"
+      class="mt-4"
+    />
   </div>
 </template>
 
@@ -40,6 +47,7 @@ import EventForm from '@/components/forms/EventForm.vue';
 import SponsorLogoUpload from '@/components/admin/SponsorLogoUpload.vue';
 import EventPhotosUpload from '@/components/admin/EventPhotosUpload.vue';
 import EventAttachmentsUpload from '@/components/admin/EventAttachmentsUpload.vue';
+import TicketTypeManagement from '@/components/admin/TicketTypeManagement.vue';
 import { useEventStore } from '@/stores/events.store.js';
 import { EventService } from '@/services/EventService.js';
 
@@ -100,5 +108,16 @@ const handlePhotosUpdated = (updatedEvent) => {
 
 const handleAttachmentsUpdated = (updatedEvent) => {
   event.value = updatedEvent;
+}
+
+const handleTicketTypesUpdated = async () => {
+  // Reload event to get updated ticket types
+  const eventId = route.params.id;
+  try {
+    const response = await EventService.getEventById(eventId);
+    event.value = response.data;
+  } catch (error) {
+    console.error("Failed to reload event after ticket type update:", error);
+  }
 }
 </script>

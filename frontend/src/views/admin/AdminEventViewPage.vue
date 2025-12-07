@@ -415,6 +415,7 @@ const rejectedAttendees = computed(() => allAttendees.value.filter(a => a.status
 const attendeeHeaders = ref([
   { title: 'Full Name', key: 'user.full_name' },
   { title: 'Email', key: 'user.email' },
+  { title: 'Ticket Type', key: 'ticket_type.name' },
   { title: 'Registration Date', key: 'registration_date' },
   { title: 'Degree', key: 'user.degree' },
   { title: 'Year', key: 'user.study_year' },

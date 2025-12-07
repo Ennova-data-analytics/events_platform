@@ -4,6 +4,7 @@
       <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
       <p class="mt-4">Loading Event Details...</p>
     </div>
+
     <v-alert v-else-if="eventStore.error && !eventStore.currentEvent" type="error" class="mt-4">
       {{ eventStore.error }}
     </v-alert>
@@ -20,14 +21,9 @@
           >
             <template v-slot:placeholder>
               <v-row class="fill-height ma-0" align="center" justify="center">
-                <v-progress-circular
-                  indeterminate
-                  color="grey-lighten-4"
-                  size="64"
-                ></v-progress-circular>
+                <v-progress-circular indeterminate color="grey-lighten-4" size="64"></v-progress-circular>
               </v-row>
             </template>
-
             <template v-slot:error>
               <v-row class="fill-height ma-0 bg-grey-lighten-3" align="center" justify="center">
                 <div class="text-center">
@@ -40,7 +36,10 @@
         </v-col>
         
         <v-col cols="12" md="4">
-          <h1 :class="$vuetify.display.mobile ? 'text-h4 font-weight-bold mt-4' : 'text-h3 font-weight-bold'">{{ eventStore.currentEvent.event_name }}</h1>
+          <h1 :class="$vuetify.display.mobile ? 'text-h4 font-weight-bold mt-4' : 'text-h3 font-weight-bold'">
+            {{ eventStore.currentEvent.event_name }}
+          </h1>
+          
           <div :class="$vuetify.display.mobile ? 'mt-3' : 'mt-4'">
             <p :class="$vuetify.display.mobile ? 'text-body-1 font-weight-regular' : 'text-h6 font-weight-regular'">
               <v-icon>mdi-calendar</v-icon>
@@ -52,34 +51,57 @@
             </p>
           </div>
 
-          <div :class="$vuetify.display.mobile ? 'mt-4' : 'mt-8'">
+          <div v-if="hasTicketTypes && registrationStatus === 'not_registered'" class="mt-6 mb-2">
+            <h3 class="text-subtitle-1 font-weight-bold text-grey-darken-1 mb-2">Available Tickets</h3>
+            <v-card 
+              v-for="ticket in eventStore.currentEvent.ticket_types" 
+              :key="ticket.ticket_type_id"
+              variant="outlined"
+              class="mb-2 px-3 py-2 bg-grey-lighten-5 border-thin"
+              elevation="0"
+            >
+              <div class="d-flex justify-space-between align-center">
+                <div>
+                  <div class="font-weight-medium text-body-2">{{ ticket.name }}</div>
+                  <div class="text-caption text-grey">{{ ticket.description }}</div>
+                </div>
+                <div class="text-body-1 font-weight-bold text-primary">
+                  {{ formatPrice(ticket.price_euros) }}
+                </div>
+              </div>
+            </v-card>
+          </div>
+
+          <div :class="$vuetify.display.mobile ? 'mt-4' : 'mt-6'">
             <v-btn v-if="!authStore.isAuthenticated" to="/login" color="primary" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
               Login to Apply
             </v-btn>
-            <v-chip v-else-if="registrationStatus === 'Pending Approval'" color="info" variant="tonal" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
+
+            <v-chip v-else-if="registrationStatus === 'Pending Approval'" color="info" variant="tonal" size="large" block>
               <v-icon start>mdi-clock-outline</v-icon>
               Application Pending Review
             </v-chip>
-            <v-btn v-else-if="registrationStatus === 'Approved' && eventStore.currentEvent.price_euros > 0" color="warning" :size="$vuetify.display.mobile ? 'default' : 'large'" block @click="handlePayment">
+
+            <v-btn v-else-if="registrationStatus === 'Approved' && eventStore.currentEvent.price_euros > 0" color="warning" size="large" block @click="handlePayment">
               <v-icon start>mdi-credit-card-outline</v-icon>
               Pay Now to Confirm Spot
             </v-btn>
-            <v-chip v-else-if="registrationStatus === 'Approved' && (!eventStore.currentEvent.price_euros || eventStore.currentEvent.price_euros === 0)" color="success" variant="tonal" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
+
+            <v-chip v-else-if="registrationStatus === 'Approved' || registrationStatus === 'Paid'" color="success" variant="tonal" size="large" block>
               <v-icon start>mdi-check-circle</v-icon>
               Registered & Confirmed
             </v-chip>
-            <v-chip v-else-if="registrationStatus === 'Paid'" color="success" variant="tonal" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
-              <v-icon start>mdi-check-circle</v-icon>
-              Registered & Confirmed
-            </v-chip>
-            <v-chip v-else-if="registrationStatus === 'Rejected'" color="error" variant="tonal" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
+
+            <v-chip v-else-if="registrationStatus === 'Rejected'" color="error" variant="tonal" size="large" block>
               <v-icon start>mdi-close-circle</v-icon>
               Application Not Approved
             </v-chip>
-            <v-chip v-else-if="!eventStore.currentEvent.signups_enabled" color="warning" variant="tonal" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
+
+            <v-chip v-else-if="!eventStore.currentEvent.signups_enabled" color="warning" variant="tonal" size="large" block>
               <v-icon start>mdi-close-circle-outline</v-icon>
               Signups Closed
             </v-chip>
+
             <v-btn
               v-else-if="registrationStatus === 'not_registered'"
               color="primary"
@@ -87,13 +109,20 @@
               block
               @click="handleRegistration"
               :loading="eventStore.isLoading"
+              elevation="3"
             >
-              <template v-if="!eventStore.currentEvent.requires_approval && eventStore.currentEvent.price_euros > 0">
-                <v-icon start>mdi-credit-card-outline</v-icon>
-                Register & Pay Now (€{{ eventStore.currentEvent.price_euros }})
+              <template v-if="hasTicketTypes">
+                <v-icon start>mdi-ticket-account</v-icon>
+                Get Tickets
               </template>
+
+              <template v-else-if="!eventStore.currentEvent.requires_approval && eventStore.currentEvent.price_euros > 0">
+                <v-icon start>mdi-credit-card-outline</v-icon>
+                Register & Pay ({{ formatPrice(eventStore.currentEvent.price_euros) }})
+              </template>
+
               <template v-else>
-                Apply to Register ({{ eventStore.currentEvent.price_euros > 0 ? `€${eventStore.currentEvent.price_euros}` : 'Free' }})
+                Apply to Register ({{ formatPrice(eventStore.currentEvent.price_euros) }})
               </template>
             </v-btn>
           </div>
@@ -106,21 +135,16 @@
             class="mt-3"
           >
             <template v-if="eventStore.currentEvent.requires_approval">
-              <v-icon size="small">mdi-information</v-icon>
-              <template v-if="eventStore.currentEvent.price_euros > 0">
-                Your registration will be reviewed by the organizer before you can proceed to payment.
-              </template>
-              <template v-else>
-                Your registration will be reviewed by the organizer.
-              </template>
+              <v-icon size="small" start>mdi-information</v-icon>
+              <span>Approvals Required: Your spot is not confirmed until the organizer reviews your application.</span>
             </template>
-            <template v-else-if="eventStore.currentEvent.price_euros > 0">
-              <v-icon size="small">mdi-flash</v-icon>
-              Register now and pay immediately to secure your spot!
+            <template v-else-if="hasTicketTypes">
+              <v-icon size="small" start>mdi-flash</v-icon>
+              <span>Select a ticket type to secure your spot.</span>
             </template>
             <template v-else>
-              <v-icon size="small">mdi-flash</v-icon>
-              Register now to secure your spot - this event is free!
+               <v-icon size="small" start>mdi-flash</v-icon>
+               <span>Register now to secure your spot!</span>
             </template>
           </v-alert>
 
@@ -139,20 +163,14 @@
           <v-card elevation="2" :class="$vuetify.display.mobile ? 'pa-4' : 'pa-8'">
             <h2 :class="$vuetify.display.mobile ? 'text-h5 font-weight-bold mb-4' : 'text-h4 font-weight-bold mb-6'">About this event</h2>
             <v-divider class="mb-6"></v-divider>
-            
-            <div
-              class="event-description"
-              v-html="parsedDescription"
-            ></div>
+            <div class="event-description" v-html="parsedDescription"></div>
           </v-card>
         </v-col>
       </v-row>
 
       <SponsorLogos v-if="eventStore.currentEvent?.sponsor_logos" :logos="eventStore.currentEvent.sponsor_logos" />
-
       <EventPhotos v-if="eventStore.currentEvent?.event_photos?.length > 0" :photos="eventStore.currentEvent.event_photos" />
 
-      <!-- Event Attachments Section (Only for approved/paid participants) -->
       <v-row v-if="eventStore.currentEvent?.attachments?.length > 0 && (registrationStatus === 'Approved' || registrationStatus === 'Paid')" class="mt-8">
         <v-col cols="12">
           <v-card elevation="2" class="pa-6">
@@ -161,7 +179,6 @@
               Downloads & Resources
             </h2>
             <v-divider class="mb-4"></v-divider>
-
             <v-list lines="two">
               <v-list-item
                 v-for="attachment in eventStore.currentEvent.attachments"
@@ -176,26 +193,12 @@
                     <v-icon :icon="getFileIcon(attachment.file_type)" size="large"></v-icon>
                   </v-avatar>
                 </template>
-
-                <v-list-item-title class="font-weight-medium">
-                  {{ attachment.file_name }}
-                </v-list-item-title>
-
-                <v-list-item-subtitle v-if="attachment.description" class="mt-1">
-                  {{ attachment.description }}
-                </v-list-item-subtitle>
-
+                <v-list-item-title class="font-weight-medium">{{ attachment.file_name }}</v-list-item-title>
                 <v-list-item-subtitle class="text-caption mt-1">
-                  {{ formatFileSize(attachment.file_size_bytes) }} •
-                  Uploaded {{ formatDate(attachment.uploaded_at) }}
+                  {{ formatFileSize(attachment.file_size_bytes) }} • Uploaded {{ formatDate(attachment.uploaded_at) }}
                 </v-list-item-subtitle>
-
                 <template v-slot:append>
-                  <v-btn
-                    icon="mdi-download"
-                    variant="text"
-                    color="primary"
-                  ></v-btn>
+                  <v-btn icon="mdi-download" variant="text" color="primary"></v-btn>
                 </template>
               </v-list-item>
             </v-list>
@@ -204,91 +207,64 @@
       </v-row>
     </div>
 
-    <v-dialog v-model="isFormModalVisible" max-width="600px" persistent>
+    <v-dialog v-model="isFormModalVisible" max-width="700px" persistent>
       <v-card>
-        <v-card-title>
-          <span class="text-h5">{{ customForm.fields.length > 0 ? 'Additional Information Required' : 'Complete Registration' }}</span>
+        <v-card-title class="d-flex justify-space-between align-center pa-4 bg-primary text-white">
+          <span class="text-h6">
+            {{ hasTicketTypes ? 'Select Tickets & Register' : 'Complete Registration' }}
+          </span>
+          <v-btn icon="mdi-close" variant="text" color="white" @click="isFormModalVisible = false"></v-btn>
         </v-card-title>
-        <v-card-text>
-          <p v-if="customForm.fields.length > 0" class="mb-4">Please answer the following questions to complete your application.</p>
-          <p v-else-if="eventStore.currentEvent?.price_euros > 0" class="mb-4">Review your registration details and apply a discount code if you have one.</p>
-          <v-alert
-              v-if="validationError"
-              type="error"
-              variant="tonal"
-              density="compact"
-              class="mb-4"
-            >
-              {{ validationError }}
+
+        <v-card-text class="pa-4">
+          <p class="mb-4 text-body-1" v-if="hasTicketTypes">
+            Please choose your ticket type below.
+          </p>
+          
+          <v-alert v-if="validationError" type="error" variant="tonal" density="compact" class="mb-4">
+             {{ validationError }}
           </v-alert>
-          <v-form ref="customFormRef">
+
+          <TicketTypeSelector
+            v-if="hasTicketTypes"
+            v-model="selectedTicketTypeId"
+            :ticket-types="eventStore.currentEvent.ticket_types"
+            @ticket-type-selected="handleTicketTypeSelected"
+            class="mb-6"
+          />
+
+          <v-form ref="customFormRef" v-if="customForm.fields.length > 0">
+            <h3 class="text-subtitle-1 font-weight-bold mb-3">Additional Details</h3>
             <div v-for="field in customForm.fields" :key="field.name" class="mb-2">
-              <v-text-field
-                v-if="field.type === 'text'"
-                v-model="formResponses[field.name]"
-                :label="field.label"
-                :required="field.required"
-                variant="outlined"
-              ></v-text-field>
-              <v-textarea
-                v-if="field.type === 'textarea'"
-                v-model="formResponses[field.name]"
-                :label="field.label"
-                :required="field.required"
-                variant="outlined"
-              ></v-textarea>
-          <v-select
-            v-if="field.type === 'select'"
-            v-model="formResponses[field.name]"
-            :items="field.options"
-            :label="field.label"
-            :required="field.required"
-            variant="outlined"
-          ></v-select>
+              <v-text-field v-if="field.type === 'text'" v-model="formResponses[field.name]" :label="field.label" :required="field.required" variant="outlined"></v-text-field>
+              <v-textarea v-if="field.type === 'textarea'" v-model="formResponses[field.name]" :label="field.label" :required="field.required" variant="outlined"></v-textarea>
+              <v-select v-if="field.type === 'select'" v-model="formResponses[field.name]" :items="field.options" :label="field.label" :required="field.required" variant="outlined"></v-select>
+              <v-radio-group v-if="field.type === 'radio'" v-model="formResponses[field.name]" :label="field.label" :required="field.required" inline>
+                <v-radio v-for="option in field.options" :key="option" :label="option" :value="option"></v-radio>
+              </v-radio-group>
+              <v-file-input v-if="field.type === 'file'" v-model="formFiles[field.name]" :label="field.label" :required="field.required" variant="outlined"></v-file-input>
+              <v-checkbox v-if="field.type === 'checkbox'" v-model="formResponses[field.name]" :label="field.label" :required="field.required"></v-checkbox>
+            </div>
+          </v-form>
 
-          <v-radio-group
-            v-if="field.type === 'radio'"
-            v-model="formResponses[field.name]"
-            :label="field.label"
-            :required="field.required"
-            inline
-          >
-          <v-radio
-              v-for="option in field.options"
-              :key="option"
-              :label="option"
-              :value="option"
-            ></v-radio>
-          </v-radio-group>
-          <v-file-input
-                v-if="field.type === 'file'"
-                v-model="formFiles[field.name]"
-                :label="field.label"
-                :required="field.required"
-                variant="outlined"
-          ></v-file-input>
-          <v-checkbox
-            v-if="field.type === 'checkbox'"
-            v-model="formResponses[field.name]"
-            :label="field.label"
-            :required="field.required"
-          ></v-checkbox>
-
+          <div class="mt-4">
+             <DiscountCodeInput
+               v-if="shouldShowDiscountInput"
+               :event-id="eventStore.currentEvent.event_id"
+               @discount-applied="handleDiscountApplied"
+               @discount-removed="handleDiscountRemoved"
+             />
           </div>
-        </v-form>
-
-        <DiscountCodeInput
-          v-if="eventStore.currentEvent?.price_euros > 0"
-          :event-id="eventStore.currentEvent.event_id"
-          @discount-applied="handleDiscountApplied"
-          @discount-removed="handleDiscountRemoved"
-        />
-
         </v-card-text>
-        <v-card-actions>
+
+        <v-divider></v-divider>
+
+        <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
-          <v-btn text @click="isFormModalVisible = false">Cancel</v-btn>
-          <v-btn color="primary" @click="submitApplicationWithForm">Submit Application</v-btn>
+          <v-btn variant="text" @click="isFormModalVisible = false">Cancel</v-btn>
+          <v-btn color="primary" variant="flat" :loading="isSubmitting" @click="submitApplicationWithForm">
+            {{ isSubmitting ? 'Processing...' : 'Confirm Registration' }}
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -309,21 +285,12 @@ import DOMPurify from 'dompurify';
 import SponsorLogos from '@/components/events/SponsorLogos.vue';
 import EventPhotos from '@/components/events/EventPhotos.vue';
 import DiscountCodeInput from '@/components/DiscountCodeInput.vue';
+import TicketTypeSelector from '@/components/events/TicketTypeSelector.vue';
 
-marked.setOptions({
-  breaks: true,        
-  gfm: true,          
-  headerIds: false,   
-});
+// --- Markdown Config ---
+marked.setOptions({ breaks: true, gfm: true, headerIds: false });
 
-const parsedDescription = computed(() => {
-  if (!eventStore.currentEvent?.description) return '';
-  
-  const rawHtml = marked.parse(eventStore.currentEvent.description);
-  
-  return DOMPurify.sanitize(rawHtml);
-});
-
+// --- State ---
 const route = useRoute();
 const eventStore = useEventStore();
 const authStore = useAuthStore();
@@ -339,15 +306,14 @@ const formFiles = ref({});
 const isSubmitting = ref(false);
 const validationError = ref('');
 const appliedDiscountCode = ref(null);
+const selectedTicketTypeId = ref(null);
+const selectedTicketType = ref(null);
 
+// --- Computed Properties ---
 
-watch(() => eventStore.currentEvent, (newEvent) => {
-  console.log('EventDetailsPage: currentEvent updated:', newEvent);
-});
-watch(isFormModalVisible, (isVisible) => {
-  if (!isVisible) {
-    validationError.value = '';
-  }
+const parsedDescription = computed(() => {
+  if (!eventStore.currentEvent?.description) return '';
+  return DOMPurify.sanitize(marked.parse(eventStore.currentEvent.description));
 });
 
 const registrationStatus = computed(() => {
@@ -358,6 +324,22 @@ const registrationStatus = computed(() => {
   return registration ? registration.status : 'not_registered';
 });
 
+// UX Helper: Check if tickets exist
+const hasTicketTypes = computed(() => {
+  return eventStore.currentEvent?.ticket_types?.length > 0;
+});
+
+// UX Helper: Determine if discount input is needed
+const shouldShowDiscountInput = computed(() => {
+  // Case 1: A ticket is selected and it costs money
+  if (selectedTicketType.value && parseFloat(selectedTicketType.value.price_euros) > 0) return true;
+  // Case 2: No tickets, but base event costs money
+  if (!hasTicketTypes.value && eventStore.currentEvent?.price_euros > 0) return true;
+  return false;
+});
+
+// --- Lifecycle & Watchers ---
+
 onMounted(async () => {
   const eventId = route.params.id;
   await eventStore.fetchEventById(eventId);
@@ -366,48 +348,64 @@ onMounted(async () => {
     await authStore.fetchCurrentUser();
   }
 
+  handleUrlPaymentParams();
+});
+
+watch(isFormModalVisible, (isVisible) => {
+  if (!isVisible) validationError.value = '';
+});
+
+// --- Methods ---
+
+function formatPrice(price) {
+  const num = parseFloat(price);
+  return num > 0 ? `€${num.toFixed(2)}` : 'Free';
+}
+
+function handleUrlPaymentParams() {
   const urlParams = new URLSearchParams(window.location.search);
   const paymentStatus = urlParams.get('payment');
-
   if (paymentStatus === 'success') {
     showSuccess.value = true;
     successMessage.value = 'Payment successful! Your registration is confirmed.';
-    await authStore.fetchCurrentUser();
+    authStore.fetchCurrentUser();
     window.history.replaceState({}, '', window.location.pathname);
   } else if (paymentStatus === 'cancelled') {
     showError.value = true;
     eventStore.error = 'Payment was cancelled. Please try again when ready.';
     window.history.replaceState({}, '', window.location.pathname);
   }
-});
+}
 
 function validateForm() {
+  validationError.value = '';
+  
+  // 1. Validate Ticket Selection
+  if (hasTicketTypes.value && !selectedTicketTypeId.value) {
+    validationError.value = 'Please select a ticket type.';
+    return false;
+  }
+
+  // 2. Validate Custom Fields
   for (const field of customForm.value.fields) {
     if (field.required) {
       const textResponse = formResponses.value[field.name];
       const fileResponse = formFiles.value[field.name];
-
       const isTextFilled = textResponse !== undefined && textResponse !== null && textResponse !== '';
       const isFileFilled = fileResponse !== undefined && fileResponse !== null;
 
       if (!isTextFilled && !isFileFilled) {
-        validationError.value = `The field "${field.label}" is required. Please fill it out.`;
+        validationError.value = `The field "${field.label}" is required.`;
         return false;
       }
     }
   }
-  validationError.value = ''; 
   return true;
 }
 
 async function handleRegistration() {
   const event = eventStore.currentEvent;
-  console.log('handleRegistration called. Event object:', event);
-
-  if (!event) {
-    console.error('handleRegistration: No current event found.');
-    return;
-  }
+  if (!event) return;
 
   if (!event.signups_enabled) {
     eventStore.error = "Signups are currently closed for this event.";
@@ -415,40 +413,74 @@ async function handleRegistration() {
     return;
   }
 
-  console.log(`Checking for form_template_id: ${event.form_template_id}`);
+  // Determine if we need to open the modal
+  const needsModal = hasTicketTypes.value || event.form_template_id || event.price_euros > 0;
 
-  if (event.form_template_id || event.price_euros > 0) {
-    console.log('Opening modal for form or discount code entry...');
-    try {
-      if (event.form_template_id) {
-        const response = await FormTemplateService.getTemplateById(event.form_template_id);
-        customForm.value = response.data;
-      } else {
-        customForm.value = { fields: [] };
-      }
-      formResponses.value = {};
-      formFiles.value = {};
-      isFormModalVisible.value = true;
-      console.log('Modal should now be visible.');
-    } catch (error) {
-      console.error("Failed to load custom form", error);
-      eventStore.error = "Could not load the application form.";
-      showError.value = true;
-    }
+  if (needsModal) {
+    await loadInitialForm();
+    isFormModalVisible.value = true;
   } else {
-    console.log('No form template and free event. Submitting application directly...');
+    // Simple free event, no tickets, no form
     submitApplicationWithForm();
   }
 }
 
-async function submitApplicationWithForm() {
-  if (!validateForm()) {
-    return;
+async function loadInitialForm() {
+  const event = eventStore.currentEvent;
+  formResponses.value = {};
+  formFiles.value = {};
+  selectedTicketTypeId.value = null;
+  selectedTicketType.value = null;
+  appliedDiscountCode.value = null;
+
+  // If there's a base form template (and no tickets, or as a default), load it
+  if (event.form_template_id && !hasTicketTypes.value) {
+    try {
+      const response = await FormTemplateService.getTemplateById(event.form_template_id);
+      customForm.value = response.data;
+    } catch (e) {
+      console.error(e);
+      customForm.value = { fields: [] };
+    }
+  } else {
+    customForm.value = { fields: [] };
   }
+}
+
+async function handleTicketTypeSelected(ticketType) {
+  selectedTicketType.value = ticketType;
+  selectedTicketTypeId.value = ticketType.ticket_type_id; // Ensure ID is synced
+
+  // Dynamic Form Loading based on ticket
+  if (ticketType?.form_template_id) {
+    try {
+      const response = await FormTemplateService.getTemplateById(ticketType.form_template_id);
+      customForm.value = response.data;
+      // Note: We might want to preserve common fields, but usually resetting is safer on ticket switch
+      formResponses.value = {}; 
+      formFiles.value = {};
+    } catch (error) {
+      console.error("Failed to load ticket form", error);
+    }
+  } else if (eventStore.currentEvent?.form_template_id) {
+    // Fallback to event form if ticket has none
+    try {
+      const response = await FormTemplateService.getTemplateById(eventStore.currentEvent.form_template_id);
+      customForm.value = response.data;
+    } catch(e) { console.error(e); }
+  } else {
+    customForm.value = { fields: [] };
+  }
+}
+
+async function submitApplicationWithForm() {
+  if (!validateForm()) return;
+
   isSubmitting.value = true;
   const finalFormResponses = { ...formResponses.value };
 
   try {
+    // Handle File Uploads first
     for (const fieldName in formFiles.value) {
       const file = formFiles.value[fieldName];
       if (file) {
@@ -457,55 +489,51 @@ async function submitApplicationWithForm() {
       }
     }
 
-    if (eventStore.currentEvent) {
-      const registrationData = {
-        form_responses: finalFormResponses,
-        discount_code: appliedDiscountCode.value
-      };
+    const registrationData = {
+      form_responses: finalFormResponses,
+      discount_code: appliedDiscountCode.value,
+      ticket_type_id: selectedTicketTypeId.value 
+    };
 
-      const registrationResponse = await eventStore.registerForEvent(
-        eventStore.currentEvent.event_id,
-        registrationData
-      );
+    const registrationResponse = await eventStore.registerForEvent(
+      eventStore.currentEvent.event_id,
+      registrationData
+    );
 
-      if (registrationResponse.requires_immediate_payment && registrationResponse.checkout_url) {
-        window.location.href = registrationResponse.checkout_url;
-        return;
-      }
-
-      successMessage.value = 'Application submitted successfully!';
-      showSuccess.value = true;
-      await authStore.fetchCurrentUser();
+    if (registrationResponse.requires_immediate_payment && registrationResponse.checkout_url) {
+      window.location.href = registrationResponse.checkout_url;
+      return;
     }
+
+    successMessage.value = 'Application submitted successfully!';
+    showSuccess.value = true;
+    isFormModalVisible.value = false;
+    await authStore.fetchCurrentUser();
+
   } catch (error) {
+    console.error(error);
     showError.value = true;
   } finally {
     isSubmitting.value = false;
-    isFormModalVisible.value = false;
   }
 }
 
 function handleDiscountApplied(data) {
   appliedDiscountCode.value = data.code;
-  console.log('Discount code applied:', data);
 }
 
 function handleDiscountRemoved() {
   appliedDiscountCode.value = null;
-  console.log('Discount code removed');
 }
 
 async function handlePayment() {
+  isSubmitting.value = true;
   try {
-    isSubmitting.value = true;
-
     const registration = authStore.user.registrations.find(
       r => r.event.event_id === eventStore.currentEvent.event_id && r.status === 'Approved'
     );
-
     if (!registration) {
-      alert('Registration not found or not approved');
-      return;
+        throw new Error('Registration not found');
     }
 
     const response = await ApiClient.post(
@@ -515,76 +543,32 @@ async function handlePayment() {
     if (response.data.checkout_url) {
       window.location.href = response.data.checkout_url;
     }
-
   } catch (error) {
-    console.error('Error creating checkout session:', error);
-    eventStore.error = 'Failed to initiate payment. Please try again.';
+    eventStore.error = 'Failed to initiate payment.';
     showError.value = true;
   } finally {
     isSubmitting.value = false;
   }
 }
 
-// Helper functions for attachments display
+// Helper functions for assets
 function getFileIcon(fileType) {
-  const iconMap = {
-    pdf: 'mdi-file-pdf-box',
-    doc: 'mdi-file-word',
-    docx: 'mdi-file-word',
-    ppt: 'mdi-file-powerpoint',
-    pptx: 'mdi-file-powerpoint',
-    xls: 'mdi-file-excel',
-    xlsx: 'mdi-file-excel',
-    txt: 'mdi-file-document',
-    csv: 'mdi-file-delimited',
-    zip: 'mdi-folder-zip',
-    rar: 'mdi-folder-zip',
-    '7z': 'mdi-folder-zip',
-    jpg: 'mdi-file-image',
-    jpeg: 'mdi-file-image',
-    png: 'mdi-file-image',
-    gif: 'mdi-file-image',
-    svg: 'mdi-file-image'
-  };
-  return iconMap[fileType?.toLowerCase()] || 'mdi-file';
+  const map = { pdf: 'mdi-file-pdf-box', doc: 'mdi-file-word', docx: 'mdi-file-word', jpg: 'mdi-file-image', png: 'mdi-file-image' };
+  return map[fileType?.toLowerCase()] || 'mdi-file';
 }
-
 function getFileColor(fileType) {
-  const colorMap = {
-    pdf: 'red',
-    doc: 'blue',
-    docx: 'blue',
-    ppt: 'orange',
-    pptx: 'orange',
-    xls: 'green',
-    xlsx: 'green',
-    zip: 'purple',
-    rar: 'purple',
-    '7z': 'purple',
-    jpg: 'teal',
-    jpeg: 'teal',
-    png: 'teal',
-    gif: 'teal',
-    svg: 'teal'
-  };
-  return colorMap[fileType?.toLowerCase()] || 'grey';
+  const map = { pdf: 'red', doc: 'blue', docx: 'blue', jpg: 'teal', png: 'teal' };
+  return map[fileType?.toLowerCase()] || 'grey';
 }
-
 function formatFileSize(bytes) {
   if (!bytes) return '';
   const units = ['B', 'KB', 'MB', 'GB'];
   let size = bytes;
-  let unitIdx = 0;
-  while (size >= 1024 && unitIdx < units.length - 1) {
-    size /= 1024;
-    unitIdx++;
-  }
-  return `${size.toFixed(1)} ${units[unitIdx]}`;
+  let i = 0;
+  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
+  return `${size.toFixed(1)} ${units[i]}`;
 }
-
-function formatDate(dateString) {
-  return new Date(dateString).toLocaleDateString();
-}
+function formatDate(date) { return new Date(date).toLocaleDateString(); }
 </script>
 
 <style scoped>
@@ -592,12 +576,10 @@ function formatDate(dateString) {
   transition: all 0.2s ease;
   cursor: pointer;
 }
-
 .attachment-item:hover {
   background-color: rgba(25, 118, 210, 0.04);
   transform: translateX(4px);
 }
-
 .event-description {
   font-size: 16px;
   line-height: 1.8;
@@ -605,187 +587,10 @@ function formatDate(dateString) {
   max-width: 100%;
   overflow-wrap: break-word;
 }
-
-.event-description :deep(h1) {
-  font-size: 28px;
-  font-weight: 700;
-  margin-top: 32px;
-  margin-bottom: 16px;
-  color: #1a1a1a;
-  line-height: 1.3;
-}
-
-.event-description :deep(h2) {
-  font-size: 24px;
-  font-weight: 600;
-  margin-top: 28px;
-  margin-bottom: 14px;
-  color: #1a1a1a;
-  line-height: 1.3;
-}
-
-.event-description :deep(h3) {
-  font-size: 20px;
-  font-weight: 600;
-  margin-top: 24px;
-  margin-bottom: 12px;
-  color: #2a2a2a;
-  line-height: 1.4;
-}
-
-.event-description :deep(h1:first-child),
-.event-description :deep(h2:first-child),
-.event-description :deep(h3:first-child) {
-  margin-top: 0;
-}
-
-.event-description :deep(p) {
-  margin-bottom: 16px;
-  color: #2c3e50;
-}
-
-.event-description :deep(p:first-of-type) {
-  font-size: 18px;
-  font-weight: 400;
-  color: #1a1a1a;
-}
-
-.event-description :deep(ul),
-.event-description :deep(ol) {
-  margin: 16px 0;
-  padding-left: 28px;
-}
-
-.event-description :deep(li) {
-  margin-bottom: 10px;
-  line-height: 1.7;
-}
-
-.event-description :deep(ul li) {
-  list-style-type: disc;
-}
-
-.event-description :deep(ol li) {
-  list-style-type: decimal;
-}
-
-.event-description :deep(ul ul),
-.event-description :deep(ol ol),
-.event-description :deep(ul ol),
-.event-description :deep(ol ul) {
-  margin: 8px 0;
-}
-
-.event-description :deep(strong) {
-  font-weight: 600;
-  color: #000;
-}
-
-.event-description :deep(em) {
-  font-style: italic;
-}
-
-/* Links */
-.event-description :deep(a) {
-  color: #1976d2;
-  text-decoration: none;
-  font-weight: 500;
-  transition: color 0.2s ease;
-}
-
-.event-description :deep(a:hover) {
-  color: #1565c0;
-  text-decoration: underline;
-}
-
-.event-description :deep(blockquote) {
-  border-left: 4px solid #1976d2;
-  padding-left: 16px;
-  margin: 20px 0;
-  font-style: italic;
-  color: #555;
-  background-color: #f5f9fc;
-  padding: 16px;
-  border-radius: 4px;
-}
-
-.event-description :deep(code) {
-  background-color: #f5f5f5;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: 'Courier New', Consolas, monospace;
-  font-size: 14px;
-  color: #c7254e;
-}
-
-.event-description :deep(pre) {
-  background-color: #f5f5f5;
-  padding: 16px;
-  border-radius: 8px;
-  overflow-x: auto;
-  margin: 16px 0;
-}
-
-.event-description :deep(pre code) {
-  background: none;
-  padding: 0;
-  color: #333;
-}
-
-.event-description :deep(hr) {
-  border: none;
-  border-top: 2px solid #e0e0e0;
-  margin: 32px 0;
-}
-
-.event-description :deep(table) {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 20px 0;
-}
-
-.event-description :deep(th),
-.event-description :deep(td) {
-  border: 1px solid #ddd;
-  padding: 12px;
-  text-align: left;
-}
-
-.event-description :deep(th) {
-  background-color: #f5f5f5;
-  font-weight: 600;
-}
-
-.event-description :deep(tr:hover) {
-  background-color: #fafafa;
-}
-
-.event-description :deep(img) {
-  max-width: 100%;
-  height: auto;
-  border-radius: 8px;
-  margin: 16px 0;
-}
-
-@media (max-width: 960px) {
-  .event-description {
-    font-size: 15px;
-  }
-  
-  .event-description :deep(h1) {
-    font-size: 24px;
-  }
-  
-  .event-description :deep(h2) {
-    font-size: 20px;
-  }
-  
-  .event-description :deep(h3) {
-    font-size: 18px;
-  }
-  
-  .event-description :deep(p:first-of-type) {
-    font-size: 16px;
-  }
-}
+/* Basic Markdown Styling */
+.event-description :deep(h1) { font-size: 28px; margin-top: 24px; }
+.event-description :deep(p) { margin-bottom: 16px; }
+.event-description :deep(img) { max-width: 100%; height: auto; border-radius: 8px; margin: 16px 0; }
+.event-description :deep(a) { color: #1976d2; text-decoration: none; }
+.event-description :deep(a:hover) { text-decoration: underline; }
 </style>

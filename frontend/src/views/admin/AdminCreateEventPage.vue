@@ -20,10 +20,10 @@ const router = useRouter();
 
 
 const handleCreateEvent = async (eventData, imageFile) => {
-  console.log("handleCreateEvent received imageFile:", imageFile); 
+  console.log("handleCreateEvent received imageFile:", imageFile);
   try {
     console.log("Calling eventStore.createEvent...");
-    const newEvent = await eventStore.createEvent(eventData); 
+    const newEvent = await eventStore.createEvent(eventData);
     console.log("...createEvent finished. Received new event object:", newEvent);
 
    if (newEvent && newEvent.event_id && imageFile && imageFile.length > 0) {
@@ -31,8 +31,13 @@ const handleCreateEvent = async (eventData, imageFile) => {
       await eventStore.uploadEventImage(newEvent.event_id, imageFile[0]);
       console.log("...image upload finished.");
     }
-    
-    router.push({ name: 'admin-events' });
+
+    // Redirect to edit page where ticket types can be configured
+    if (newEvent && newEvent.event_id) {
+      router.push({ name: 'admin-edit-event', params: { id: newEvent.event_id } });
+    } else {
+      router.push({ name: 'admin-events' });
+    }
   } catch (error) {
     console.error("An error occurred during the creation process:", error);
   }

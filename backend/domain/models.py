@@ -6,6 +6,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy.ext.hybrid import hybrid_property
 
 Base = declarative_base()
 
@@ -155,6 +156,48 @@ class Event(Base):
     event_photos = relationship("EventPhoto", back_populates="event", cascade="all, delete-orphan", order_by="EventPhoto.display_order")
     discount_codes = relationship("DiscountCode", back_populates="event", cascade="all, delete-orphan")
     attachments = relationship("EventAttachment", back_populates="event", cascade="all, delete-orphan", order_by="EventAttachment.display_order")
+    ticket_types = relationship("TicketType", back_populates="event", cascade="all, delete-orphan", order_by="TicketType.display_order")
+
+
+class TicketType(Base):
+    __tablename__ = "ticket_types"
+
+    ticket_type_id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
+
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    price_euros = Column(DECIMAL(10, 2), nullable=False, default=0.00)
+
+    capacity = Column(Integer, nullable=True)
+    tickets_sold = Column(Integer, nullable=False, default=0)
+
+    form_template_id = Column(Integer, ForeignKey('form_templates.template_id', ondelete="SET NULL"), nullable=True)
+    display_order = Column(Integer, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+    is_free_for_members = Column(Boolean, default=False, nullable=False)
+
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    event = relationship("Event", back_populates="ticket_types")
+    registrations = relationship("Registration", back_populates="ticket_type")
+    form_template = relationship("FormTemplate", foreign_keys=[form_template_id])
+
+    @hybrid_property
+    def tickets_available(self):
+        """Compute remaining tickets (None if unlimited capacity)"""
+        if self.capacity is None:
+            return None
+        return self.capacity - self.tickets_sold
+
+    __table_args__ = (
+        CheckConstraint("price_euros >= 0", name='check_ticket_price_non_negative'),
+        CheckConstraint("capacity IS NULL OR capacity > 0", name='check_ticket_capacity_positive'),
+        CheckConstraint("tickets_sold >= 0", name='check_tickets_sold_non_negative'),
+        CheckConstraint("display_order >= 0", name='check_display_order_non_negative'),
+    )
 
 
 class Registration(Base):
@@ -162,6 +205,7 @@ class Registration(Base):
     registration_id = Column(Integer, primary_key=True)
     event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="CASCADE"), nullable=False)
+    ticket_type_id = Column(Integer, ForeignKey('ticket_types.ticket_type_id', ondelete="SET NULL"), nullable=True, index=True)
 
     status = Column(String(50), nullable=False, default='Pending Approval')
     stripe_payment_intent_id = Column(String(255), unique=True)
@@ -176,6 +220,7 @@ class Registration(Base):
     user = relationship("User", back_populates="registrations")
     event = relationship("Event", back_populates="registrations")
     discount_code = relationship("DiscountCode", back_populates="registrations")
+    ticket_type = relationship("TicketType", back_populates="registrations")
 
 
 class Feedback(Base):
