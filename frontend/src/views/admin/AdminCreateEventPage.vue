@@ -26,9 +26,9 @@ const handleCreateEvent = async (eventData, imageFile) => {
     const newEvent = await eventStore.createEvent(eventData);
     console.log("...createEvent finished. Received new event object:", newEvent);
 
-   if (newEvent && newEvent.event_id && imageFile && imageFile.length > 0) {
+    if (newEvent && newEvent.event_id && imageFile) {
       console.log(`Uploading image for new event ID: ${newEvent.event_id}`);
-      await eventStore.uploadEventImage(newEvent.event_id, imageFile[0]);
+      await eventStore.uploadEventImage(newEvent.event_id, imageFile);
       console.log("...image upload finished.");
     }
 
