@@ -168,6 +168,18 @@
         </v-col>
       </v-row>
 
+      <v-row class="mt-8">
+        <v-col cols="12">
+          <EventLocationMap
+            v-if="eventStore.currentEvent?.location"
+            :display-location="eventStore.currentEvent.location"
+            :map-address="eventStore.currentEvent.map_address"
+            :latitude="eventStore.currentEvent.latitude"
+            :longitude="eventStore.currentEvent.longitude"
+          />
+        </v-col>
+      </v-row>
+
       <SponsorLogos v-if="eventStore.currentEvent?.sponsor_logos" :logos="eventStore.currentEvent.sponsor_logos" />
       <EventPhotos v-if="eventStore.currentEvent?.event_photos?.length > 0" :photos="eventStore.currentEvent.event_photos" />
 
@@ -286,6 +298,7 @@ import SponsorLogos from '@/components/events/SponsorLogos.vue';
 import EventPhotos from '@/components/events/EventPhotos.vue';
 import DiscountCodeInput from '@/components/DiscountCodeInput.vue';
 import TicketTypeSelector from '@/components/events/TicketTypeSelector.vue';
+import EventLocationMap from '@/components/events/EventLocationMap.vue';
 
 // --- Markdown Config ---
 marked.setOptions({ breaks: true, gfm: true, headerIds: false });

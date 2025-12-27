@@ -30,13 +30,109 @@
       <v-col cols="12" sm="6">
         <v-text-field
           v-model="editableEvent.location"
-          label="Location"
+          label="Display Location"
+          hint="This is what attendees will see (e.g., 'Building 9, Room 101')"
+          persistent-hint
           variant="outlined"
           class="mb-4"
         />
       </v-col>
     </v-row>
-    
+
+    <v-divider class="my-6"></v-divider>
+    <h3 class="text-subtitle-1 mb-4 font-weight-medium">
+      <v-icon start>mdi-map</v-icon>
+      Interactive Map Settings (Optional)
+    </h3>
+
+    <v-expansion-panels class="mb-4">
+      <v-expansion-panel>
+        <v-expansion-panel-title>
+          <div class="d-flex align-center">
+            <v-icon start color="primary">mdi-map-marker-radius</v-icon>
+            <span class="font-weight-medium">Configure Map Display</span>
+          </div>
+        </v-expansion-panel-title>
+        <v-expansion-panel-text>
+          <v-alert type="info" variant="tonal" density="compact" class="mb-4">
+            <v-icon start size="small">mdi-information</v-icon>
+            Configure how the event location appears on the interactive map. Choose one option:
+            <ul class="mt-2 ml-4">
+              <li><strong>Map Address:</strong> Let the system find coordinates automatically</li>
+              <li><strong>Manual Coordinates:</strong> Enter exact latitude/longitude</li>
+              <li><strong>Leave Empty:</strong> System will try to geocode the display location</li>
+            </ul>
+          </v-alert>
+
+          <v-radio-group v-model="mapInputMethod" class="mb-4">
+            <v-radio label="Use Map Address (Recommended)" value="address"></v-radio>
+            <v-radio label="Enter Manual Coordinates" value="coordinates"></v-radio>
+            <v-radio label="Auto-detect from Display Location" value="auto"></v-radio>
+          </v-radio-group>
+
+          <v-text-field
+            v-if="mapInputMethod === 'address'"
+            v-model="editableEvent.map_address"
+            label="Map Address"
+            variant="outlined"
+            placeholder="e.g., 'Julianalaan 134, 2628 BL Delft' or 'TU Delft Library, Delft, Netherlands'"
+            hint="Enter a detailed address for accurate map placement. The more specific, the better!"
+            persistent-hint
+            clearable
+            prepend-inner-icon="mdi-map-search"
+            class="mb-3"
+          />
+
+          <v-row v-if="mapInputMethod === 'coordinates'">
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model.number="editableEvent.latitude"
+                label="Latitude"
+                variant="outlined"
+                placeholder="e.g., 52.0027"
+                type="number"
+                step="any"
+                hint="Latitude coordinate (-90 to 90)"
+                persistent-hint
+                prepend-inner-icon="mdi-latitude"
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model.number="editableEvent.longitude"
+                label="Longitude"
+                variant="outlined"
+                placeholder="e.g., 4.3707"
+                type="number"
+                step="any"
+                hint="Longitude coordinate (-180 to 180)"
+                persistent-hint
+                prepend-inner-icon="mdi-longitude"
+              />
+            </v-col>
+          </v-row>
+
+          <v-alert v-if="mapInputMethod === 'auto'" type="info" variant="tonal" density="compact">
+            <v-icon start size="small">mdi-auto-fix</v-icon>
+            The map will attempt to geocode your display location: <strong>{{ editableEvent.location || 'Not set' }}</strong>
+          </v-alert>
+
+          <div v-if="showMapPreviewLink" class="mt-3">
+            <v-btn
+              :href="mapPreviewUrl"
+              target="_blank"
+              size="small"
+              variant="outlined"
+              color="primary"
+            >
+              <v-icon start>mdi-open-in-new</v-icon>
+              Preview on Google Maps
+            </v-btn>
+          </div>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+    </v-expansion-panels>
+
     <v-row>
       <v-col cols="12" sm="6">
         <v-text-field
@@ -242,10 +338,14 @@ const props = defineProps({
 const emit = defineEmits(['submit']);
 
 const editableEvent = ref({
-  requires_approval: true,  // Default to true for new events
-  is_free_for_members: false  // Default to false for new events
+  requires_approval: true,  
+  is_free_for_members: false,  
+  map_address: null,
+  latitude: null,
+  longitude: null
 });
 const imageFile = ref([]);
+const mapInputMethod = ref('address'); 
 
 const formTemplates = ref([]);
 const feedbackTemplates = ref([]);
@@ -260,16 +360,60 @@ watch(() => props.initialData, (newData) => {
   if (dataToEdit.event_date_start) {
     dataToEdit.event_date_start = new Date(dataToEdit.event_date_start).toISOString().slice(0, 19);
   }
-  // Ensure requires_approval has a default value if not present
   if (dataToEdit.requires_approval === undefined) {
     dataToEdit.requires_approval = true;
   }
-  // Ensure is_free_for_members has a default value if not present
   if (dataToEdit.is_free_for_members === undefined) {
     dataToEdit.is_free_for_members = false;
   }
+
+  if (dataToEdit.latitude && dataToEdit.longitude) {
+    mapInputMethod.value = 'coordinates';
+  } else if (dataToEdit.map_address) {
+    mapInputMethod.value = 'address';
+  } else {
+    mapInputMethod.value = 'auto';
+  }
+
   editableEvent.value = dataToEdit;
 }, { immediate: true, deep: true });
+
+watch(mapInputMethod, (newMethod) => {
+  if (newMethod === 'address') {
+    editableEvent.value.latitude = null;
+    editableEvent.value.longitude = null;
+  } else if (newMethod === 'coordinates') {
+    editableEvent.value.map_address = null;
+  } else if (newMethod === 'auto') {
+    editableEvent.value.map_address = null;
+    editableEvent.value.latitude = null;
+    editableEvent.value.longitude = null;
+  }
+});
+
+const showMapPreviewLink = computed(() => {
+  if (mapInputMethod.value === 'coordinates' && editableEvent.value.latitude && editableEvent.value.longitude) {
+    return true;
+  }
+  if (mapInputMethod.value === 'address' && editableEvent.value.map_address) {
+    return true;
+  }
+  if (mapInputMethod.value === 'auto' && editableEvent.value.location) {
+    return true;
+  }
+  return false;
+});
+
+const mapPreviewUrl = computed(() => {
+  if (mapInputMethod.value === 'coordinates' && editableEvent.value.latitude && editableEvent.value.longitude) {
+    return `https://www.google.com/maps/search/?api=1&query=${editableEvent.value.latitude},${editableEvent.value.longitude}`;
+  }
+  const address = mapInputMethod.value === 'address' ? editableEvent.value.map_address : editableEvent.value.location;
+  if (address) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+  }
+  return '';
+});
 
 onMounted(async () => {
   try {

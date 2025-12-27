@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     Boolean, Column, ForeignKey, Integer, String, TIMESTAMP, Table,
-    Text, DECIMAL, ARRAY, JSON, Enum, CheckConstraint
+    Text, DECIMAL, ARRAY, JSON, Enum, CheckConstraint, Float
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, declarative_base
@@ -114,6 +114,9 @@ class Event(Base):
     event_date_start = Column(TIMESTAMP(timezone=True), nullable=False)
     event_date_end = Column(TIMESTAMP(timezone=True))
     location = Column(Text)
+    map_address = Column(String(500), nullable=True)  
+    latitude = Column(Float, nullable=True)  
+    longitude = Column(Float, nullable=True)  
     status = Column(String(50), nullable=False, default='Draft')
     capacity = Column(Integer)
     price_euros = Column(DECIMAL(10, 2), default=0.00)

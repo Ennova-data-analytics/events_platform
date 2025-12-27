@@ -149,6 +149,9 @@ class EventBase(BaseModel):
     description: str | None = None
     event_date_start: datetime
     location: str | None = None
+    map_address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     capacity: int | None = None
     price_euros: float | None = None
     signups_enabled: bool = True
@@ -173,6 +176,9 @@ class EventUpdate(BaseModel):
     description: str | None = None
     event_date_start: datetime | None = None
     location: str | None = None
+    map_address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     capacity: int | None = None
     price_euros: float | None = None
     signups_enabled: bool | None = None
