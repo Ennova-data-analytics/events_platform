@@ -2,9 +2,9 @@
   <v-layout>
     <v-navigation-drawer permanent>
       <v-list-item
-        prepend-avatar="https://randomuser.me/api/portraits/men/85.jpg"
-        title="Admin Panel"
-        subtitle="Event Organiser"
+        :prepend-avatar="avatarUrl"
+        :title="userName"
+        :subtitle="userRole"
       ></v-list-item>
       <v-divider></v-divider>
       <v-list density="compact" nav>
@@ -27,3 +27,25 @@
     </v-main>
   </v-layout>
 </template>
+
+<script setup>
+  import { useAuthStore } from '@/stores/auth.store';
+  import { computed } from 'vue';
+
+  const authStore = useAuthStore();
+
+  const userName = computed(() => {
+    return authStore.user?.full_name || authStore.user?.email || 'Admin Panel';
+  });
+
+  const userRole = computed(() => {
+  if (!authStore.user?.roles || authStore.user.roles.length === 0) {
+    return 'Event Organiser';
+  }
+  
+  const roles = authStore.user.roles.map(r => 
+    r.role_name.charAt(0).toUpperCase() + r.role_name.slice(1)
+  );
+  return roles.join(', ');
+});
+</script>
