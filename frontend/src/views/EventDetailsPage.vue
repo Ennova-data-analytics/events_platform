@@ -127,6 +127,41 @@
             </v-btn>
           </div>
 
+          <div v-if="registrationStatus === 'Approved' || registrationStatus === 'Paid'" class="mt-4">
+            <v-menu>
+              <template v-slot:activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  color="secondary"
+                  variant="outlined"
+                  size="large"
+                  block
+                >
+                  <v-icon start>mdi-calendar-plus</v-icon>
+                  Add to Calendar
+                </v-btn>
+              </template>
+              <v-list>
+                <v-list-item @click="addToGoogleCalendar">
+                  <template v-slot:prepend>
+                    <v-icon color="primary">mdi-google</v-icon>
+                  </template>
+                  <v-list-item-title>Google Calendar</v-list-item-title>
+                </v-list-item>
+
+                <v-list-item @click="downloadIcsFile">
+                  <template v-slot:prepend>
+                    <v-icon color="secondary">mdi-download</v-icon>
+                  </template>
+                  <v-list-item-title>Download .ics file</v-list-item-title>
+                  <v-list-item-subtitle class="text-caption">
+                    For Apple Calendar, Outlook, etc.
+                  </v-list-item-subtitle>
+                </v-list-item>
+              </v-list>
+            </v-menu>
+          </div>
+
           <v-alert
             v-if="registrationStatus === 'not_registered' && eventStore.currentEvent.signups_enabled && authStore.isAuthenticated"
             type="info"
@@ -299,6 +334,7 @@ import EventPhotos from '@/components/events/EventPhotos.vue';
 import DiscountCodeInput from '@/components/DiscountCodeInput.vue';
 import TicketTypeSelector from '@/components/events/TicketTypeSelector.vue';
 import EventLocationMap from '@/components/events/EventLocationMap.vue';
+import { generateGoogleCalendarUrl, downloadIcsFile as downloadIcs } from '@/utils/calendarHelpers.js';
 
 // --- Markdown Config ---
 marked.setOptions({ breaks: true, gfm: true, headerIds: false });
@@ -582,6 +618,26 @@ function formatFileSize(bytes) {
   return `${size.toFixed(1)} ${units[i]}`;
 }
 function formatDate(date) { return new Date(date).toLocaleDateString(); }
+
+// Calendar Integration Methods
+function addToGoogleCalendar() {
+  if (!eventStore.currentEvent) return;
+  const googleCalUrl = generateGoogleCalendarUrl(eventStore.currentEvent);
+  window.open(googleCalUrl, '_blank');
+}
+
+async function downloadIcsFile() {
+  if (!eventStore.currentEvent) return;
+
+  try {
+    await downloadIcs(eventStore.currentEvent.event_id);
+    successMessage.value = 'Calendar file downloaded successfully!';
+    showSuccess.value = true;
+  } catch (error) {
+    eventStore.error = 'Failed to download calendar file. Please try again.';
+    showError.value = true;
+  }
+}
 </script>
 
 <style scoped>

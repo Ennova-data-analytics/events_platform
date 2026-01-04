@@ -4,9 +4,12 @@ from sqlalchemy.orm.attributes import flag_modified
 from datetime import datetime
 import uuid
 import logging
+import os
 
 from domain import schemas, models
 from domain.use_cases import db_events, db_registrations, db_event_photos, db_event_attachments
+from domain.use_cases.calendar_export import GenerateEventCalendarUseCase
+from domain.exceptions import EventNotFoundException, RegistrationNotFoundException, UnauthorizedCalendarAccessException
 from api import deps
 from core import s3_service
 from core.image_processing_service import image_processing_service
@@ -494,4 +497,59 @@ def reorder_event_attachments(
         return updated_attachments
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{event_id}/calendar.ics", tags=["Calendar"])
+def export_event_to_calendar(event_id: int,db: Session = Depends(deps.get_db),current_user: models.User = Depends(deps.get_current_user)):
+    """
+    Generate an .ics calendar file for confirmed attendees.
+    """
+    try:
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+    
+        use_case = GenerateEventCalendarUseCase(db)
+        ics_content = use_case.execute(
+            event_id=event_id,
+            user=current_user,
+            frontend_url=frontend_url
+        )
+        
+        db_event = db_events.get_event(db, event_id=event_id)
+        filename = GenerateEventCalendarUseCase.get_safe_filename(
+            db_event.event_name if db_event else f"Event_{event_id}"
+        )
+        
+        return Response(
+            content=ics_content,
+            media_type="text/calendar; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "no-cache"
+            }
+        )
+        
+    except EventNotFoundException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found"
+        )
+    
+    except RegistrationNotFoundException:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not registered for this event"
+        )
+    
+    except UnauthorizedCalendarAccessException as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
+    
+    except Exception as e:
+        logger.error(f"Error generating calendar for event {event_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate calendar file"
+        )
 
