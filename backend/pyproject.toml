@@ -51,6 +51,8 @@ qdrant-client = "^1.7.0"
 python-docx = "^1.1.0"
 langchain-text-splitters = "^0.3.0"
 
+icalendar = "^6.3.2"
+
 [tool.poetry.group.dev.dependencies]
 # Linters and formatters can be added here in the future
 # black = "^24.4.2"
