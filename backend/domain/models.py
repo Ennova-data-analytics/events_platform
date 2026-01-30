@@ -160,6 +160,7 @@ class Event(Base):
     discount_codes = relationship("DiscountCode", back_populates="event", cascade="all, delete-orphan")
     attachments = relationship("EventAttachment", back_populates="event", cascade="all, delete-orphan", order_by="EventAttachment.display_order")
     ticket_types = relationship("TicketType", back_populates="event", cascade="all, delete-orphan", order_by="TicketType.display_order")
+    teams = relationship("EventTeam", back_populates="event", cascade="all, delete-orphan", order_by="EventTeam.created_at")
 
 
 class TicketType(Base):
@@ -181,6 +182,10 @@ class TicketType(Base):
 
     is_free_for_members = Column(Boolean, default=False, nullable=False)
 
+    # Team-related fields
+    requires_team = Column(Boolean, default=False, nullable=False)
+    team_max_members = Column(Integer, nullable=True)
+
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -200,6 +205,7 @@ class TicketType(Base):
         CheckConstraint("capacity IS NULL OR capacity > 0", name='check_ticket_capacity_positive'),
         CheckConstraint("tickets_sold >= 0", name='check_tickets_sold_non_negative'),
         CheckConstraint("display_order >= 0", name='check_display_order_non_negative'),
+        CheckConstraint("team_max_members IS NULL OR team_max_members > 0", name='check_ticket_team_max_members_positive'),
     )
 
 
@@ -384,3 +390,61 @@ class EventAttachment(Base):
 
     event = relationship("Event", back_populates="attachments")
     uploaded_by = relationship("User", foreign_keys=[uploaded_by_user_id])
+
+
+class EventTeam(Base):
+    """
+    Represents a team for events with team-based registration.
+    Teams are scoped to events and have unique names per event.
+    """
+    __tablename__ = "event_teams"
+
+    team_id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
+    team_name = Column(String(255), nullable=False)
+    max_members = Column(Integer, nullable=True)  
+    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="SET NULL"), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    event = relationship("Event", back_populates="teams")
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+    members = relationship("TeamMember", back_populates="team", cascade="all, delete-orphan")
+
+    @hybrid_property
+    def member_count(self):
+        """Compute current number of members"""
+        return len(self.members)
+
+    @hybrid_property
+    def is_full(self):
+        """Check if team has reached max capacity"""
+        if self.max_members is None:
+            return False
+        return len(self.members) >= self.max_members
+
+    __table_args__ = (
+        CheckConstraint("max_members IS NULL OR max_members > 0", name='check_team_max_members_positive'),
+    )
+
+    def __repr__(self):
+        return f"<EventTeam(team_id={self.team_id}, event_id={self.event_id}, team_name='{self.team_name}', members={self.member_count})>"
+
+
+class TeamMember(Base):
+    """
+    Represents membership in a team.
+    One registration can only belong to one team (enforced by UNIQUE constraint).
+    """
+    __tablename__ = "team_members"
+
+    member_id = Column(Integer, primary_key=True, index=True)
+    team_id = Column(Integer, ForeignKey('event_teams.team_id', ondelete="CASCADE"), nullable=False, index=True)
+    registration_id = Column(Integer, ForeignKey('registrations.registration_id', ondelete="CASCADE"), nullable=False, index=True, unique=True)
+    joined_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+
+    team = relationship("EventTeam", back_populates="members")
+    registration = relationship("Registration", backref="team_membership", uselist=False)
+
+    def __repr__(self):
+        return f"<TeamMember(member_id={self.member_id}, team_id={self.team_id}, registration_id={self.registration_id})>"

@@ -77,7 +77,8 @@ def register_user_for_event(event_id: int, registration_data: schemas.Registrati
         user_id=current_user.user_id,
         form_responses=registration_data.form_responses,
         discount_code=registration_data.discount_code,
-        ticket_type_id=registration_data.ticket_type_id
+        ticket_type_id=registration_data.ticket_type_id,
+        team_selection=registration_data.team_selection
     )
 
     if not db_event.requires_approval and registration.final_amount_euros and registration.final_amount_euros > 0:

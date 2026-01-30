@@ -29,6 +29,7 @@
       <v-tab value="approved">Approved ({{ approvedAttendees.length }})</v-tab>
       <v-tab value="paid">Paid ({{ paidAttendees.length }})</v-tab>
       <v-tab value="rejected">Rejected ({{ rejectedAttendees.length }})</v-tab>
+      <v-tab value="teams">Teams</v-tab>
       <v-tab value="discounts">Discount Codes</v-tab>
     </v-tabs>
 
@@ -135,6 +136,102 @@
                   <v-btn @click="handleRevert(item)" icon="mdi-undo" color="warning" variant="text" size="small" title="Revert to Pending"></v-btn>
                 </template>
             </v-data-table>
+        </v-window-item>
+
+        <!-- Teams Tab -->
+        <v-window-item value="teams">
+          <v-card-text>
+            <div class="d-flex justify-space-between align-center mb-4">
+              <v-alert type="info" variant="tonal" class="flex-grow-1 mr-4">
+                <v-icon start>mdi-account-group</v-icon>
+                Manage teams for this event. Teams are created when users register with team-based ticket types.
+              </v-alert>
+              <v-btn
+                color="primary"
+                prepend-icon="mdi-plus"
+                @click="openCreateTeamDialog"
+                size="small"
+              >
+                Create Team
+              </v-btn>
+            </div>
+
+            <v-data-table
+              :headers="teamHeaders"
+              :items="teams"
+              :loading="isLoadingTeams"
+              item-value="team_id"
+            >
+              <template v-slot:item.team_name="{ item }">
+                <div class="font-weight-medium">{{ item.team_name }}</div>
+              </template>
+
+              <template v-slot:item.members="{ item }">
+                <v-chip size="small" color="primary">
+                  {{ item.member_count || 0 }} / {{ item.max_members || '∞' }} members
+                </v-chip>
+              </template>
+
+              <template v-slot:item.member_list="{ item }">
+                <div v-if="item.members && item.members.length > 0" class="py-2">
+                  <v-chip
+                    v-for="member in item.members"
+                    :key="member.registration_id"
+                    size="small"
+                    class="ma-1"
+                  >
+                    {{ member.full_name || 'Unknown' }}
+                    <v-icon
+                      end
+                      size="x-small"
+                      @click.stop="confirmRemoveMember(item, member)"
+                      class="ml-1"
+                    >
+                      mdi-close-circle
+                    </v-icon>
+                  </v-chip>
+                </div>
+                <div v-else class="text-grey">No members yet</div>
+              </template>
+
+              <template v-slot:item.actions="{ item }">
+                <v-btn
+                  icon
+                  color="success"
+                  variant="text"
+                  size="small"
+                  @click="openAddMemberDialog(item)"
+                  class="mr-2"
+                >
+                  <v-icon>mdi-account-plus</v-icon>
+                  <v-tooltip activator="parent">Add Member</v-tooltip>
+                </v-btn>
+
+                <v-btn
+                  icon
+                  color="primary"
+                  variant="text"
+                  size="small"
+                  @click="openEditTeamDialog(item)"
+                  class="mr-2"
+                >
+                  <v-icon>mdi-pencil</v-icon>
+                  <v-tooltip activator="parent">Edit Team</v-tooltip>
+                </v-btn>
+
+                <v-btn
+                  icon
+                  color="error"
+                  variant="text"
+                  size="small"
+                  @click="confirmDeleteTeam(item)"
+                >
+                  <v-icon>mdi-delete</v-icon>
+                  <v-tooltip activator="parent">Delete Team</v-tooltip>
+                </v-btn>
+              </template>
+            </v-data-table>
+          </v-card-text>
         </v-window-item>
 
         <!-- Discount Codes Tab -->
@@ -273,6 +370,149 @@
       </v-card>
     </v-dialog>
 
+    <!-- Create/Edit Team Dialog -->
+    <v-dialog v-model="teamDialog.show" max-width="600px" persistent>
+      <v-card>
+        <v-card-title>
+          <span class="text-h5">{{ teamDialog.isEditing ? 'Edit' : 'Create' }} Team</span>
+        </v-card-title>
+
+        <v-card-text>
+          <v-form ref="teamForm">
+            <v-text-field
+              v-model="teamDialog.teamName"
+              label="Team Name *"
+              placeholder="e.g., Team Alpha"
+              variant="outlined"
+              :rules="[v => !!v || 'Team name is required']"
+              class="mb-2"
+            ></v-text-field>
+
+            <v-text-field
+              v-model.number="teamDialog.maxMembers"
+              label="Max Members"
+              type="number"
+              min="1"
+              variant="outlined"
+              hint="Leave empty for unlimited members"
+              persistent-hint
+              class="mb-2"
+            ></v-text-field>
+          </v-form>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn text @click="closeTeamDialog">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            @click="saveTeam"
+            :loading="teamDialog.saving"
+          >
+            {{ teamDialog.isEditing ? 'Update' : 'Create' }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Add Member Dialog -->
+    <v-dialog v-model="addMemberDialog.show" max-width="600px" persistent>
+      <v-card>
+        <v-card-title>
+          <span class="text-h5">Add Member to {{ addMemberDialog.teamName }}</span>
+        </v-card-title>
+
+        <v-card-text>
+          <v-alert type="info" variant="tonal" class="mb-4">
+            Select an approved or paid attendee to add to this team. Only approved or paid attendees with team-based tickets can be added.
+          </v-alert>
+
+          <v-select
+            v-model="addMemberDialog.selectedRegistrationId"
+            :items="availableAttendees"
+            item-title="display_name"
+            item-value="registration_id"
+            label="Select Attendee"
+            variant="outlined"
+            :loading="addMemberDialog.loadingAttendees"
+            no-data-text="No available attendees"
+          >
+            <template v-slot:item="{ props, item }">
+              <v-list-item v-bind="props">
+                <template v-slot:subtitle>
+                  {{ item.raw.email }}
+                </template>
+              </v-list-item>
+            </template>
+          </v-select>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn text @click="closeAddMemberDialog">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            @click="addMemberToTeam"
+            :loading="addMemberDialog.saving"
+            :disabled="!addMemberDialog.selectedRegistrationId"
+          >
+            Add Member
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Remove Member Dialog -->
+    <v-dialog v-model="removeMemberDialog.show" max-width="500">
+      <v-card>
+        <v-card-title class="text-h5">
+          Remove Team Member?
+        </v-card-title>
+        <v-card-text>
+          Are you sure you want to remove <strong>{{ removeMemberDialog.memberName }}</strong> from <strong>{{ removeMemberDialog.teamName }}</strong>?
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="removeMemberDialog.show = false">
+            Cancel
+          </v-btn>
+          <v-btn
+            color="error"
+            variant="flat"
+            @click="removeMember"
+          >
+            Remove
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete Team Dialog -->
+    <v-dialog v-model="deleteTeamDialog.show" max-width="500">
+      <v-card>
+        <v-card-title class="text-h5">
+          Delete Team?
+        </v-card-title>
+        <v-card-text>
+          Are you sure you want to delete the team <strong>{{ deleteTeamDialog.teamName }}</strong>?
+          This will remove all team members and cannot be undone.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="deleteTeamDialog.show = false">
+            Cancel
+          </v-btn>
+          <v-btn
+            color="error"
+            variant="flat"
+            @click="deleteTeam"
+          >
+            Delete Team
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Bulk Email Dialog -->
     <v-dialog v-model="bulkEmailDialog.show" max-width="700" scrollable>
       <v-card>
@@ -353,6 +593,7 @@ import { useRoute } from 'vue-router';
 import { EventService } from '@/services/EventService.js';
 import { AdminService } from '@/services/AdminService.js';
 import { UploadService } from '@/services/UploadService.js';
+import { TeamService } from '@/services/TeamService.js';
 import FeedbackSection from '@/components/feedback/FeedbackSection.vue';
 import DiscountCodeManager from '@/components/admin/DiscountCodeManager.vue';
 
@@ -402,6 +643,47 @@ const bulkEmailDialog = ref({
 });
 
 const statusOptions = ['Pending Approval', 'Approved', 'Paid', 'Rejected'];
+
+// Teams data
+const teams = ref([]);
+const isLoadingTeams = ref(false);
+const teamDialog = ref({
+  show: false,
+  isEditing: false,
+  teamId: null,
+  teamName: '',
+  maxMembers: null,
+  saving: false
+});
+const addMemberDialog = ref({
+  show: false,
+  teamId: null,
+  teamName: '',
+  selectedRegistrationId: null,
+  loadingAttendees: false,
+  saving: false
+});
+const removeMemberDialog = ref({
+  show: false,
+  teamId: null,
+  teamName: '',
+  registrationId: null,
+  memberName: ''
+});
+const deleteTeamDialog = ref({
+  show: false,
+  team: null,
+  teamName: ''
+});
+const teamForm = ref(null);
+const availableAttendees = ref([]);
+
+const teamHeaders = ref([
+  { title: 'Team Name', key: 'team_name' },
+  { title: 'Members', key: 'members' },
+  { title: 'Team Members', key: 'member_list', sortable: false },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'end' }
+]);
 
 watch(tab, () => {
   expanded.value = [];
@@ -454,6 +736,217 @@ async function fetchAttendees() {
     snackbar.value = { show: true, text: 'Failed to load attendees.', color: 'error' };
   } finally {
     isLoading.value = false;
+  }
+}
+
+async function fetchTeams() {
+  isLoadingTeams.value = true;
+  try {
+    const response = await TeamService.getTeamsForEvent(route.params.id);
+    teams.value = response.data.teams || [];
+  } catch (error) {
+    console.error("Failed to fetch teams:", error);
+    snackbar.value = { show: true, text: 'Failed to load teams.', color: 'error' };
+  } finally {
+    isLoadingTeams.value = false;
+  }
+}
+
+function confirmDeleteTeam(team) {
+  deleteTeamDialog.value = {
+    show: true,
+    team: team,
+    teamName: team.team_name
+  };
+}
+
+function openCreateTeamDialog() {
+  teamDialog.value = {
+    show: true,
+    isEditing: false,
+    teamId: null,
+    teamName: '',
+    maxMembers: null,
+    saving: false
+  };
+}
+
+function openEditTeamDialog(team) {
+  teamDialog.value = {
+    show: true,
+    isEditing: true,
+    teamId: team.team_id,
+    teamName: team.team_name,
+    maxMembers: team.max_members,
+    saving: false
+  };
+}
+
+function closeTeamDialog() {
+  teamDialog.value.show = false;
+  teamDialog.value = {
+    show: false,
+    isEditing: false,
+    teamId: null,
+    teamName: '',
+    maxMembers: null,
+    saving: false
+  };
+}
+
+async function saveTeam() {
+  // Validate form
+  const { valid } = await teamForm.value.validate();
+  if (!valid) {
+    return;
+  }
+
+  teamDialog.value.saving = true;
+
+  try {
+    const teamData = {
+      team_name: teamDialog.value.teamName,
+      max_members: teamDialog.value.maxMembers || null
+    };
+
+    if (teamDialog.value.isEditing) {
+      await TeamService.updateTeam(
+        route.params.id,
+        teamDialog.value.teamId,
+        teamData
+      );
+      snackbar.value = { show: true, text: 'Team updated successfully.', color: 'success' };
+    } else {
+      await TeamService.createTeam(route.params.id, teamData);
+      snackbar.value = { show: true, text: 'Team created successfully.', color: 'success' };
+    }
+
+    await fetchTeams();
+    closeTeamDialog();
+  } catch (error) {
+    console.error('Failed to save team:', error);
+    snackbar.value = {
+      show: true,
+      text: error.response?.data?.detail || 'Failed to save team.',
+      color: 'error'
+    };
+  } finally {
+    teamDialog.value.saving = false;
+  }
+}
+
+async function openAddMemberDialog(team) {
+  addMemberDialog.value = {
+    show: true,
+    teamId: team.team_id,
+    teamName: team.team_name,
+    selectedRegistrationId: null,
+    loadingAttendees: true,
+    saving: false
+  };
+
+  // Load approved and paid attendees who are not in any team
+  try {
+    const teamMemberRegistrationIds = new Set(
+      teams.value.flatMap(t => t.members?.map(m => m.registration_id) || [])
+    );
+
+    // Include both approved and paid attendees
+    const eligibleAttendees = [...approvedAttendees.value, ...paidAttendees.value];
+
+    availableAttendees.value = eligibleAttendees
+      .filter(attendee => !teamMemberRegistrationIds.has(attendee.registration_id))
+      .map(attendee => ({
+        registration_id: attendee.registration_id,
+        display_name: attendee.user?.full_name || attendee.user?.email || 'Unknown',
+        email: attendee.user?.email || ''
+      }));
+  } catch (error) {
+    console.error('Failed to load available attendees:', error);
+  } finally {
+    addMemberDialog.value.loadingAttendees = false;
+  }
+}
+
+function closeAddMemberDialog() {
+  addMemberDialog.value.show = false;
+  addMemberDialog.value = {
+    show: false,
+    teamId: null,
+    teamName: '',
+    selectedRegistrationId: null,
+    loadingAttendees: false,
+    saving: false
+  };
+  availableAttendees.value = [];
+}
+
+async function addMemberToTeam() {
+  addMemberDialog.value.saving = true;
+
+  try {
+    await TeamService.addMemberToTeam(
+      route.params.id,
+      addMemberDialog.value.teamId,
+      addMemberDialog.value.selectedRegistrationId
+    );
+
+    snackbar.value = {
+      show: true,
+      text: 'Member added to team successfully.',
+      color: 'success'
+    };
+
+    closeAddMemberDialog();
+    await fetchTeams();
+    await fetchAttendees(); // Refresh attendees to update available list
+  } catch (error) {
+    console.error('Failed to add member:', error);
+    snackbar.value = {
+      show: true,
+      text: error.response?.data?.detail || 'Failed to add member to team.',
+      color: 'error'
+    };
+  } finally {
+    addMemberDialog.value.saving = false;
+  }
+}
+
+function confirmRemoveMember(team, member) {
+  removeMemberDialog.value = {
+    show: true,
+    teamId: team.team_id,
+    teamName: team.team_name,
+    registrationId: member.registration_id,
+    memberName: member.full_name || 'Unknown'
+  };
+}
+
+async function removeMember() {
+  const { teamId, registrationId } = removeMemberDialog.value;
+  removeMemberDialog.value.show = false;
+
+  try {
+    await TeamService.removeMemberFromTeam(route.params.id, teamId, registrationId);
+    snackbar.value = { show: true, text: 'Member removed successfully.', color: 'success' };
+    await fetchTeams();
+  } catch (error) {
+    console.error('Remove member failed:', error);
+    snackbar.value = { show: true, text: error.response?.data?.detail || 'Failed to remove member.', color: 'error' };
+  }
+}
+
+async function deleteTeam() {
+  const { team } = deleteTeamDialog.value;
+  deleteTeamDialog.value.show = false;
+
+  try {
+    await TeamService.deleteTeam(route.params.id, team.team_id, true);
+    snackbar.value = { show: true, text: 'Team deleted successfully.', color: 'success' };
+    await fetchTeams();
+  } catch (error) {
+    console.error('Delete team failed:', error);
+    snackbar.value = { show: true, text: error.response?.data?.detail || 'Failed to delete team.', color: 'error' };
   }
 }
 
@@ -674,16 +1167,19 @@ async function sendBulkEmail() {
 watch(() => route.params.id, () => {
   fetchEventDetails();
   fetchAttendees();
+  fetchTeams();
 });
 
 onMounted(() => {
   fetchEventDetails();
   fetchAttendees();
+  fetchTeams();
 });
 
 // Refresh when component is reactivated (e.g., navigating back from edit page)
 onActivated(() => {
   fetchEventDetails();
   fetchAttendees();
+  fetchTeams();
 });
 </script>

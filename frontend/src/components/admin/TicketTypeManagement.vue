@@ -72,15 +72,24 @@
                   <v-icon start size="x-small">mdi-star</v-icon>
                   Free for members
                 </v-chip>
+                <v-chip
+                  v-if="ticketType.requires_team"
+                  size="small"
+                  color="purple"
+                  class="ml-2"
+                >
+                  <v-icon start size="x-small">mdi-account-group</v-icon>
+                  Team Required
+                </v-chip>
               </v-list-item-subtitle>
 
               <template v-slot:append>
                 <v-btn
-                  icon="mdi-power"
                   :color="ticketType.is_active ? 'success' : 'grey'"
                   variant="text"
                   @click="toggleActive(ticketType)"
                   size="small"
+                  icon
                 >
                   <v-icon>{{ ticketType.is_active ? 'mdi-check-circle' : 'mdi-close-circle' }}</v-icon>
                   <v-tooltip activator="parent">
@@ -89,23 +98,25 @@
                 </v-btn>
 
                 <v-btn
-                  icon="mdi-pencil"
                   color="primary"
                   variant="text"
                   @click="openEditDialog(ticketType)"
                   size="small"
+                  icon
                 >
+                  <v-icon>mdi-pencil</v-icon>
                   <v-tooltip activator="parent">Edit</v-tooltip>
                 </v-btn>
 
                 <v-btn
-                  icon="mdi-delete"
                   color="error"
                   variant="text"
                   @click="confirmDelete(ticketType)"
                   size="small"
                   :disabled="ticketType.tickets_sold > 0"
+                  icon
                 >
+                  <v-icon>mdi-delete</v-icon>
                   <v-tooltip activator="parent">
                     {{ ticketType.tickets_sold > 0 ? 'Cannot delete (tickets sold)' : 'Delete' }}
                   </v-tooltip>
@@ -185,6 +196,36 @@
               persistent-hint
               color="primary"
             ></v-checkbox>
+
+            <v-divider class="my-4"></v-divider>
+
+            <h3 class="text-subtitle-1 font-weight-bold mb-3">
+              <v-icon left color="purple">mdi-account-group</v-icon>
+              Team Settings
+            </h3>
+
+            <v-checkbox
+              v-model="editedTicketType.requires_team"
+              label="Require Team Registration"
+              hint="Users must join or create a team to register with this ticket type"
+              persistent-hint
+              color="purple"
+              class="mb-2"
+            ></v-checkbox>
+
+            <v-text-field
+              v-if="editedTicketType.requires_team"
+              v-model.number="editedTicketType.team_max_members"
+              label="Default Max Team Size"
+              type="number"
+              min="1"
+              variant="outlined"
+              hint="Leave empty for unlimited team size"
+              persistent-hint
+              class="mb-2"
+            ></v-text-field>
+
+            <v-divider class="my-4"></v-divider>
 
             <v-checkbox
               v-model="editedTicketType.is_active"
@@ -268,6 +309,8 @@ const defaultTicketType = {
   form_template_id: null,
   is_active: true,
   is_free_for_members: false,
+  requires_team: false,
+  team_max_members: null,
   display_order: 0
 };
 

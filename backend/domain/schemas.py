@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict, field_serializer, Field
+from pydantic import BaseModel, EmailStr, ConfigDict, field_serializer, Field, field_validator
 from core import s3_service
 import uuid
 from datetime import datetime
@@ -224,6 +224,7 @@ class RegistrationCreate(BaseModel):
     ticket_type_id: int | None = Field(None, description="Required if event has ticket types")
     form_responses: dict | None = None
     discount_code: str | None = Field(None, description="Optional discount code")
+    team_selection: Optional["TeamSelectionRequest"] = Field(None, description="Required if ticket type requires teams")
 
 class RegistrationResponse(BaseModel):
     registration: Registration
@@ -268,6 +269,8 @@ class TicketTypeBase(BaseModel):
     display_order: int = Field(default=0, ge=0, description="Order in which ticket types are displayed")
     is_active: bool = Field(default=True, description="Whether this ticket type is available for purchase")
     is_free_for_members: bool = Field(default=False, description="Whether Ennova members get this ticket free")
+    requires_team: bool = Field(default=False, description="Whether users must join/create a team for this ticket type")
+    team_max_members: int | None = Field(None, gt=0, description="Default max team size for this ticket type")
 
 
 class TicketTypeCreate(TicketTypeBase):
@@ -285,6 +288,8 @@ class TicketTypeUpdate(BaseModel):
     display_order: int | None = Field(None, ge=0)
     is_active: bool | None = None
     is_free_for_members: bool | None = None
+    requires_team: bool | None = None
+    team_max_members: int | None = Field(None, gt=0)
 
 
 class TicketTypeResponse(TicketTypeBase):
@@ -314,6 +319,8 @@ class TicketTypeResponse(TicketTypeBase):
             "display_order": ticket_type.display_order,
             "is_active": ticket_type.is_active,
             "is_free_for_members": ticket_type.is_free_for_members,
+            "requires_team": ticket_type.requires_team,
+            "team_max_members": ticket_type.team_max_members,
             "created_at": ticket_type.created_at,
             "updated_at": ticket_type.updated_at,
         }
@@ -611,6 +618,76 @@ class ChatDetailResponse(ChatResponse):
 
 class ChatTitleUpdate(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
+
+
+
+class TeamMemberInfo(BaseModel):
+    """Information about a team member for display purposes"""
+    registration_id: int
+    user_id: uuid.UUID
+    full_name: str | None
+    joined_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EventTeamBase(BaseModel):
+    team_name: str = Field(..., min_length=1, max_length=255, description="Team name")
+    max_members: int | None = Field(None, gt=0, description="Maximum team size (null = unlimited)")
+
+
+class EventTeamCreate(BaseModel):
+    """Schema for creating a new team during registration or by admin"""
+    team_name: str = Field(..., min_length=1, max_length=255, description="Team name")
+    max_members: int | None = Field(None, gt=0, description="Maximum team size (optional, set by admin)")
+
+
+class EventTeamUpdate(BaseModel):
+    """Schema for organizers to update team details"""
+    team_name: str | None = Field(None, min_length=1, max_length=255, description="New team name")
+    max_members: int | None = Field(None, gt=0, description="New maximum team size")
+
+
+class EventTeamResponse(EventTeamBase):
+    """Full team information with members"""
+    team_id: int
+    event_id: int
+    created_by_user_id: uuid.UUID | None
+    member_count: int
+    is_full: bool
+    members: list[TeamMemberInfo] = []
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EventTeamListResponse(BaseModel):
+    """Response for listing teams"""
+    teams: list[EventTeamResponse]
+    total_count: int
+
+
+class TeamSelectionRequest(BaseModel):
+    """Used during registration to select or create a team"""
+    action: Literal['join', 'create', 'skip'] = Field(..., description="Whether to join existing team, create new one, or skip team selection (admin will assign later)")
+    team_id: int | None = Field(None, description="Required when action='join'")
+    team_name: str | None = Field(None, min_length=1, max_length=255, description="Required when action='create'")
+
+    @field_validator('team_id')
+    def validate_team_id_for_join(cls, v, info):
+        """Ensure team_id is provided when action is 'join'"""
+        if info.data.get('action') == 'join' and v is None:
+            raise ValueError('team_id is required when action is "join"')
+        return v
+
+    @field_validator('team_name')
+    def validate_team_name_for_create(cls, v, info):
+        """Ensure team_name is provided when action is 'create'"""
+        if info.data.get('action') == 'create' and not v:
+            raise ValueError('team_name is required when action is "create"')
+        return v
+
 
 class DocumentVectorizeResponse(BaseModel):
     filename: str

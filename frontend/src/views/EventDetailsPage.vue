@@ -280,6 +280,15 @@
             class="mb-6"
           />
 
+          <TeamSelector
+            v-if="selectedTicketType?.requires_team"
+            :event-id="eventStore.currentEvent.event_id"
+            :ticket-type-id="selectedTicketType.ticket_type_id"
+            :ticket-type-max-members="selectedTicketType.team_max_members"
+            @update:teamSelection="handleTeamSelection"
+            class="mb-6"
+          />
+
           <v-form ref="customFormRef" v-if="customForm.fields.length > 0">
             <h3 class="text-subtitle-1 font-weight-bold mb-3">Additional Details</h3>
             <div v-for="field in customForm.fields" :key="field.name" class="mb-2">
@@ -333,6 +342,7 @@ import SponsorLogos from '@/components/events/SponsorLogos.vue';
 import EventPhotos from '@/components/events/EventPhotos.vue';
 import DiscountCodeInput from '@/components/DiscountCodeInput.vue';
 import TicketTypeSelector from '@/components/events/TicketTypeSelector.vue';
+import TeamSelector from '@/components/events/TeamSelector.vue';
 import EventLocationMap from '@/components/events/EventLocationMap.vue';
 import { generateGoogleCalendarUrl, downloadIcsFile as downloadIcs } from '@/utils/calendarHelpers.js';
 
@@ -357,6 +367,7 @@ const validationError = ref('');
 const appliedDiscountCode = ref(null);
 const selectedTicketTypeId = ref(null);
 const selectedTicketType = ref(null);
+const teamSelection = ref(null);
 
 // --- Computed Properties ---
 
@@ -428,14 +439,20 @@ function handleUrlPaymentParams() {
 
 function validateForm() {
   validationError.value = '';
-  
+
   // 1. Validate Ticket Selection
   if (hasTicketTypes.value && !selectedTicketTypeId.value) {
     validationError.value = 'Please select a ticket type.';
     return false;
   }
 
-  // 2. Validate Custom Fields
+  // 2. Validate Team Selection
+  if (selectedTicketType.value?.requires_team && !teamSelection.value) {
+    validationError.value = 'Please join or create a team for this ticket type.';
+    return false;
+  }
+
+  // 3. Validate Custom Fields
   for (const field of customForm.value.fields) {
     if (field.required) {
       const textResponse = formResponses.value[field.name];
@@ -481,6 +498,7 @@ async function loadInitialForm() {
   selectedTicketTypeId.value = null;
   selectedTicketType.value = null;
   appliedDiscountCode.value = null;
+  teamSelection.value = null;
 
   // If there's a base form template (and no tickets, or as a default), load it
   if (event.form_template_id && !hasTicketTypes.value) {
@@ -500,13 +518,16 @@ async function handleTicketTypeSelected(ticketType) {
   selectedTicketType.value = ticketType;
   selectedTicketTypeId.value = ticketType.ticket_type_id; // Ensure ID is synced
 
+  // Reset team selection when ticket type changes
+  teamSelection.value = null;
+
   // Dynamic Form Loading based on ticket
   if (ticketType?.form_template_id) {
     try {
       const response = await FormTemplateService.getTemplateById(ticketType.form_template_id);
       customForm.value = response.data;
       // Note: We might want to preserve common fields, but usually resetting is safer on ticket switch
-      formResponses.value = {}; 
+      formResponses.value = {};
       formFiles.value = {};
     } catch (error) {
       console.error("Failed to load ticket form", error);
@@ -520,6 +541,10 @@ async function handleTicketTypeSelected(ticketType) {
   } else {
     customForm.value = { fields: [] };
   }
+}
+
+function handleTeamSelection(selection) {
+  teamSelection.value = selection;
 }
 
 async function submitApplicationWithForm() {
@@ -541,7 +566,8 @@ async function submitApplicationWithForm() {
     const registrationData = {
       form_responses: finalFormResponses,
       discount_code: appliedDiscountCode.value,
-      ticket_type_id: selectedTicketTypeId.value 
+      ticket_type_id: selectedTicketTypeId.value,
+      team_selection: teamSelection.value
     };
 
     const registrationResponse = await eventStore.registerForEvent(

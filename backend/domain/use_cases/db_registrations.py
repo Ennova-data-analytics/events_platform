@@ -4,7 +4,8 @@ from domain import models
 from domain.services import notification_service
 from domain.use_cases.db_discount_codes import DiscountCodeUseCases
 from domain.use_cases.db_ticket_types import TicketTypeUseCases
-from domain.schemas import DiscountCodeValidation
+from domain.use_cases import db_teams
+from domain.schemas import DiscountCodeValidation, TeamSelectionRequest
 import uuid
 import logging
 
@@ -16,7 +17,8 @@ def create_registration(
     user_id: uuid.UUID,
     form_responses: dict | None = None,
     discount_code: str | None = None,
-    ticket_type_id: int | None = None
+    ticket_type_id: int | None = None,
+    team_selection: TeamSelectionRequest | None = None
 ):
     """Handles db operations for creating a new registration with ticket type support"""
     existing_registration = db.query(models.Registration).filter(
@@ -96,8 +98,25 @@ def create_registration(
             form_template_id = ticket_type.form_template_id
 
         is_member_free = ticket_type.is_free_for_members and user.is_ennova_member
+
+        if ticket_type.requires_team:
+            if not team_selection:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This ticket type requires you to join or create a team"
+                )
+
+            if team_selection.action == "join":
+                team = db_teams.get_team_by_id(db, team_selection.team_id, event_id=event_id)
+
+                if team.is_full:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Team '{team.team_name}' is full"
+                    )
+            elif team_selection.action == "create":
+                pass
     else:
-        # Event does NOT have ticket types - use event-level settings
         if ticket_type_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -106,7 +125,6 @@ def create_registration(
 
         is_member_free = event.is_free_for_members and user.is_ennova_member
 
-        # Only check event-level capacity if event doesn't use ticket types
         if event.capacity is not None:
             current_registrations = db.query(models.Registration).filter(
                 models.Registration.event_id == event_id,
@@ -173,6 +191,28 @@ def create_registration(
     )
 
     db.add(db_registration)
+    db.flush() 
+
+    if team_selection and team_selection.action != "skip":
+        team_id = None
+        if team_selection.action == "create":
+            team = db_teams.create_team(
+                db=db,
+                event_id=event_id,
+                team_name=team_selection.team_name,
+                user_id=user_id,
+                max_members=ticket_type.team_max_members if ticket_type else None
+            )
+            team_id = team.team_id
+        else:
+            team_id = team_selection.team_id
+
+        try:
+            db_teams.join_team(db, team_id, db_registration.registration_id)
+        except HTTPException as e:
+            db.rollback()
+            raise e
+
     db.commit()
     db.refresh(db_registration)
 
