@@ -181,6 +181,7 @@ class TicketType(Base):
     is_active = Column(Boolean, nullable=False, default=True)
 
     is_free_for_members = Column(Boolean, default=False, nullable=False)
+    show_availability = Column(Boolean, default=True, nullable=False)
 
     # Team-related fields
     requires_team = Column(Boolean, default=False, nullable=False)

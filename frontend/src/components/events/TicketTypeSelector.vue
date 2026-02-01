@@ -39,14 +39,14 @@
 
               <template v-slot:append>
                 <v-chip
-                  v-if="item.raw.capacity"
+                  v-if="item.raw.show_availability && item.raw.capacity"
                   :color="getAvailabilityColor(item.raw)"
                   size="small"
                   variant="flat"
                 >
                   {{ item.raw.tickets_available }}/{{ item.raw.capacity }} available
                 </v-chip>
-                <v-chip v-else color="success" size="small" variant="flat">
+                <v-chip v-else-if="item.raw.show_availability && !item.raw.capacity" color="success" size="small" variant="flat">
                   Unlimited
                 </v-chip>
               </template>
@@ -82,7 +82,7 @@
                   </div>
                 </div>
 
-                <div v-if="selectedTicketType.capacity" class="text-right">
+                <div v-if="selectedTicketType.show_availability && selectedTicketType.capacity" class="text-right">
                   <div class="text-caption text-grey-darken-1">Availability</div>
                   <div class="text-body-1">
                     <v-chip
@@ -152,7 +152,7 @@ const availableTicketTypes = computed(() => {
     .filter(tt => tt.is_active)
     .map(tt => ({
       ...tt,
-      displayText: `${tt.name} - €${tt.price_euros}${tt.capacity ? ` (${tt.tickets_available} available)` : ''}`
+      displayText: `${tt.name} - €${tt.price_euros}${tt.show_availability && tt.capacity ? ` (${tt.tickets_available} available)` : ''}`
     }));
 });
 

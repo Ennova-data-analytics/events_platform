@@ -269,6 +269,7 @@ class TicketTypeBase(BaseModel):
     display_order: int = Field(default=0, ge=0, description="Order in which ticket types are displayed")
     is_active: bool = Field(default=True, description="Whether this ticket type is available for purchase")
     is_free_for_members: bool = Field(default=False, description="Whether Ennova members get this ticket free")
+    show_availability: bool = Field(default=True, description="Whether to show ticket availability to users")
     requires_team: bool = Field(default=False, description="Whether users must join/create a team for this ticket type")
     team_max_members: int | None = Field(None, gt=0, description="Default max team size for this ticket type")
 
@@ -288,6 +289,7 @@ class TicketTypeUpdate(BaseModel):
     display_order: int | None = Field(None, ge=0)
     is_active: bool | None = None
     is_free_for_members: bool | None = None
+    show_availability: bool | None = None
     requires_team: bool | None = None
     team_max_members: int | None = Field(None, gt=0)
 

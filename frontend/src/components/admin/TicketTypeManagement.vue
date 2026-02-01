@@ -197,6 +197,14 @@
               color="primary"
             ></v-checkbox>
 
+            <v-checkbox
+              v-model="editedTicketType.show_availability"
+              label="Show Ticket Availability"
+              hint="Display remaining ticket count to users (e.g., '48/50 available')"
+              persistent-hint
+              color="primary"
+            ></v-checkbox>
+
             <v-divider class="my-4"></v-divider>
 
             <h3 class="text-subtitle-1 font-weight-bold mb-3">
@@ -309,6 +317,7 @@ const defaultTicketType = {
   form_template_id: null,
   is_active: true,
   is_free_for_members: false,
+  show_availability: true,
   requires_team: false,
   team_max_members: null,
   display_order: 0
