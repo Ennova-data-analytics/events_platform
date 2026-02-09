@@ -1,52 +1,56 @@
 <template>
-  <v-row align="center" justify="center" style="height: 70vh;">
-    <v-col cols="12" sm="8" md="4">
-      <v-card class="elevation-12">
-        <v-toolbar color="primary">
-          <v-toolbar-title>Forgot Password</v-toolbar-title>
-        </v-toolbar>
-        <v-card-text class="pa-6">
-          <v-alert v-if="successMessage" type="success" density="compact" class="mb-4">
-            {{ successMessage }}
-          </v-alert>
-          <v-alert v-if="errorMessage" type="error" density="compact" class="mb-4">
-            {{ errorMessage }}
-          </v-alert>
+  <div class="forgot-page d-flex align-center justify-center">
+    <v-container>
+      <v-row justify="center">
+        <v-col cols="12" sm="10" md="6" lg="5">
 
-          <p class="mb-4" v-if="!successMessage">
-            Enter your email address below and we will send you a link to reset your password.
-          </p>
+          <v-card class="ennova-card pa-8 pa-md-12" flat rounded="xl">
+            <div class="text-center mb-8">
+              <h1 class="form-title mb-2">Forgot Password</h1>
+              <p class="form-subtitle">Enter your email and we'll send you a reset link.</p>
+            </div>
 
-          <v-form v-if="!successMessage" @submit.prevent="handleSubmit">
-            <v-text-field
-              v-model="email"
-              label="Email Address"
-              type="email"
-              prepend-inner-icon="mdi-email-outline"
-              variant="outlined"
-              :rules="[rules.required, rules.email]"
-            ></v-text-field>
-            <v-btn
-              type="submit"
-              block
-              class="mt-2"
-              color="primary"
-              size="large"
-              :loading="isLoading"
-            >
-              Send Reset Link
-            </v-btn>
-          </v-form>
+            <v-alert v-if="successMessage" type="success" variant="tonal" density="compact" class="mb-6">
+              {{ successMessage }}
+            </v-alert>
+            <v-alert v-if="errorMessage" type="error" variant="tonal" density="compact" class="mb-6">
+              {{ errorMessage }}
+            </v-alert>
 
-          <div class="text-center mt-4">
-            <router-link to="/login" class="text-primary" style="text-decoration: none;">
-              Back to Login
-            </router-link>
-          </div>
-        </v-card-text>
-      </v-card>
-    </v-col>
-  </v-row>
+            <v-form v-if="!successMessage" @submit.prevent="handleSubmit">
+              <v-text-field
+                v-model="email"
+                label="Email Address"
+                type="email"
+                prepend-inner-icon="mdi-email-outline"
+                variant="outlined"
+                :rules="[rules.required, rules.email]"
+                class="mb-2"
+              ></v-text-field>
+              <v-btn
+                type="submit"
+                block
+                color="primary"
+                size="large"
+                :loading="isLoading"
+                class="mt-2"
+              >
+                Send Reset Link
+              </v-btn>
+            </v-form>
+
+            <div class="text-center mt-8">
+              <p class="page-footer">
+                Remember your password?
+                <router-link to="/login" class="page-link">Log in</router-link>
+              </p>
+            </div>
+          </v-card>
+
+        </v-col>
+      </v-row>
+    </v-container>
+  </div>
 </template>
 
 <script setup>
@@ -84,3 +88,38 @@ const handleSubmit = async () => {
   }
 };
 </script>
+
+<style scoped>
+.forgot-page {
+  background-color: #F8F9FA;
+  min-height: 100vh;
+}
+
+.ennova-card {
+  background-color: #FFFFFF !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05) !important;
+}
+
+.form-title {
+  color: #001529;
+  font-weight: 800;
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.form-subtitle {
+  color: #6B7280;
+  font-size: 1rem;
+}
+
+.page-footer {
+  color: #6B7280;
+  font-size: 0.9rem;
+}
+
+.page-link {
+  color: #001529;
+  font-weight: 700;
+  text-decoration: none;
+}
+</style>

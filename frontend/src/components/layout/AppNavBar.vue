@@ -1,34 +1,36 @@
 <template>
-  <v-app-bar color="primary" density="default" app class="px-4 px-md-6">
+  <v-app-bar app class="px-4 px-md-10 ennova-navbar" elevation="0" height="80">
     <div class="d-flex align-center" style="cursor: pointer;" @click="$router.push('/')">
       <v-img
         :src="logoUrl"
-        :height="$vuetify.display.mobile ? 32 : 48"
-        :width="$vuetify.display.mobile ? 130 : 200"
+        height="40"
+        width="160"
         contain
-        :class="$vuetify.display.mobile ? 'mr-1' : 'mr-3'"
+        class="mr-3"
       ></v-img>
     </div>
 
     <v-spacer></v-spacer>
 
-    <template v-if="$vuetify.display.mobile">
-      <v-app-bar-nav-icon @click="drawer = !drawer"></v-app-bar-nav-icon>
-    </template>
+    <div v-if="!$vuetify.display.mobile" class="d-flex align-center ga-4">
+      <v-btn to="/" variant="text" class="nav-link">EVENTS</v-btn>
 
-    <template v-else>
-      <v-btn to="/" text class="mx-1">Events</v-btn>
       <template v-if="!authStore.isAuthenticated">
-        <v-btn to="/login" text class="mx-1">Login</v-btn>
-        <v-btn to="/register" text class="mx-1">Sign Up</v-btn>
+        <v-btn to="/login" variant="text" class="nav-link">LOGIN</v-btn>
+        <v-btn to="/register" color="white" rounded="pill" class="signup-btn px-6">
+          SIGN UP
+        </v-btn>
       </template>
+
       <template v-else>
-        <NotificationBell class="mx-1" />
-        <v-btn to="/profile" text class="mx-1">Profile</v-btn>
-        <v-btn v-if="authStore.isOrganiser" to="/admin" text class="mx-1">Admin</v-btn>
-        <v-btn @click="authStore.logout()" text class="mx-1">Logout</v-btn>
+        <NotificationBell />
+        <v-btn to="/profile" variant="text" class="nav-link">PROFILE</v-btn>
+        <v-btn v-if="authStore.isOrganiser" to="/admin" variant="text" class="nav-link">ADMIN</v-btn>
+        <v-btn @click="authStore.logout()" variant="text" class="nav-link">LOGOUT</v-btn>
       </template>
-    </template>
+    </div>
+
+    <v-app-bar-nav-icon v-else color="white" @click="drawer = !drawer"></v-app-bar-nav-icon>
   </v-app-bar>
 
   <v-navigation-drawer v-model="drawer" location="right" temporary>
@@ -75,4 +77,25 @@ const drawer = ref(false);
 </script>
 
 <style scoped>
+.ennova-navbar {
+  background-color: #001529 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nav-link {
+  color: white !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase;
+}
+
+.signup-btn {
+  background-color: white !important;
+  color: #001529 !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
 </style>

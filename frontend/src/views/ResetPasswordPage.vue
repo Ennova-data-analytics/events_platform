@@ -1,60 +1,73 @@
 <template>
-  <v-row align="center" justify="center" style="height: 70vh;">
-    <v-col cols="12" sm="8" md="4">
-      <v-card class="elevation-12">
-        <v-toolbar color="primary">
-          <v-toolbar-title>Reset Your Password</v-toolbar-title>
-        </v-toolbar>
-        <v-card-text class="pa-6">
-          <v-alert v-if="successMessage" type="success" density="compact" class="mb-4">
-            {{ successMessage }}
-          </v-alert>
-          <v-alert v-if="errorMessage" type="error" density="compact" class="mb-4">
-            {{ errorMessage }}
-          </v-alert>
+  <div class="reset-page d-flex align-center justify-center">
+    <v-container>
+      <v-row justify="center">
+        <v-col cols="12" sm="10" md="6" lg="5">
 
-          <v-form v-if="!successMessage" @submit.prevent="handleSubmit">
-            <v-text-field
-              v-model="formData.newPassword"
-              label="New Password"
-              type="password"
-              prepend-inner-icon="mdi-lock-outline"
-              variant="outlined"
-              :rules="[rules.required, rules.minLength]"
-              class="mb-2"
-            ></v-text-field>
+          <v-card class="ennova-card pa-8 pa-md-12" flat rounded="xl">
+            <div class="text-center mb-8">
+              <h1 class="form-title mb-2">Reset Password</h1>
+              <p class="form-subtitle">Choose a new password for your account.</p>
+            </div>
 
-            <v-text-field
-              v-model="formData.confirmPassword"
-              label="Confirm Password"
-              type="password"
-              prepend-inner-icon="mdi-lock-check-outline"
-              variant="outlined"
-              :rules="[rules.required, rules.passwordMatch]"
-            ></v-text-field>
+            <v-alert v-if="successMessage" type="success" variant="tonal" density="compact" class="mb-6">
+              {{ successMessage }}
+            </v-alert>
+            <v-alert v-if="errorMessage" type="error" variant="tonal" density="compact" class="mb-6">
+              {{ errorMessage }}
+            </v-alert>
 
-            <v-btn
-              type="submit"
-              block
-              class="mt-2"
-              color="primary"
-              size="large"
-              :loading="isLoading"
-              :disabled="!isFormValid"
-            >
-              Reset Password
-            </v-btn>
-          </v-form>
+            <v-form v-if="!successMessage" @submit.prevent="handleSubmit">
+              <v-text-field
+                v-model="formData.newPassword"
+                label="New Password"
+                type="password"
+                prepend-inner-icon="mdi-lock-outline"
+                variant="outlined"
+                :rules="[rules.required, rules.minLength]"
+                class="mb-2"
+              ></v-text-field>
 
-          <div v-if="successMessage" class="text-center mt-4">
-            <v-btn to="/login" color="primary" variant="outlined">
-              Go to Login
-            </v-btn>
-          </div>
-        </v-card-text>
-      </v-card>
-    </v-col>
-  </v-row>
+              <v-text-field
+                v-model="formData.confirmPassword"
+                label="Confirm Password"
+                type="password"
+                prepend-inner-icon="mdi-lock-check-outline"
+                variant="outlined"
+                :rules="[rules.required, rules.passwordMatch]"
+              ></v-text-field>
+
+              <v-btn
+                type="submit"
+                block
+                color="primary"
+                size="large"
+                :loading="isLoading"
+                :disabled="!isFormValid"
+                class="mt-2"
+              >
+                Reset Password
+              </v-btn>
+            </v-form>
+
+            <div v-if="successMessage" class="text-center mt-6">
+              <v-btn to="/login" color="primary" variant="outlined" size="large">
+                Go to Login
+              </v-btn>
+            </div>
+
+            <div v-if="!successMessage" class="text-center mt-8">
+              <p class="page-footer">
+                Remember your password?
+                <router-link to="/login" class="page-link">Log in</router-link>
+              </p>
+            </div>
+          </v-card>
+
+        </v-col>
+      </v-row>
+    </v-container>
+  </div>
 </template>
 
 <script setup>
@@ -114,3 +127,38 @@ const handleSubmit = async () => {
   }
 };
 </script>
+
+<style scoped>
+.reset-page {
+  background-color: #F8F9FA;
+  min-height: 100vh;
+}
+
+.ennova-card {
+  background-color: #FFFFFF !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05) !important;
+}
+
+.form-title {
+  color: #001529;
+  font-weight: 800;
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.form-subtitle {
+  color: #6B7280;
+  font-size: 1rem;
+}
+
+.page-footer {
+  color: #6B7280;
+  font-size: 0.9rem;
+}
+
+.page-link {
+  color: #001529;
+  font-weight: 700;
+  text-decoration: none;
+}
+</style>

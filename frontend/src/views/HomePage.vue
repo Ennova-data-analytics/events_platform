@@ -31,6 +31,9 @@
           location: ev.location,
           description: ev.description,
           image_url: ev.image_url || 'https://cdn.vuetifyjs.com/images/cards/docks.jpg',
+          price_euros: ev.price_euros,
+          ticket_types: ev.ticket_types,
+          category: ev.category,
         }" />
       </v-col>
     </v-row>
