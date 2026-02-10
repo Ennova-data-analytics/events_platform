@@ -26,5 +26,9 @@ export const AuthService = {
       token,
       new_password: newPassword
     });
+  },
+
+  registerAndApply(eventId, payload) {
+    return ApiClient.post(`/events/${eventId}/register-and-create-account`, payload);
   }
 };

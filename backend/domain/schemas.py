@@ -231,6 +231,26 @@ class RegistrationResponse(BaseModel):
     checkout_url: str | None = None
     requires_immediate_payment: bool = False
 
+class RegisterAndCreateAccountRequest(BaseModel):
+    """Combined user registration + event registration for unauthenticated users"""
+    email: EmailStr
+    full_name: str | None = None
+    password: str
+    degree: str | None = None
+    study_year: str | None = None
+    ticket_type_id: int | None = Field(None, description="Required if event has ticket types")
+    form_responses: dict | None = None
+    discount_code: str | None = Field(None, description="Optional discount code")
+    team_selection: Optional["TeamSelectionRequest"] = Field(None, description="Required if ticket type requires teams")
+
+class RegisterAndCreateAccountResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: User
+    registration: Registration
+    checkout_url: str | None = None
+    requires_immediate_payment: bool = False
+
 class RegistrationApprove(BaseModel):
     custom_amount_euros: float | None = None
 

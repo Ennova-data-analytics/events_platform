@@ -27,7 +27,6 @@ def read_all_templates(
 def read_template(
     template_id: int,
     db: Session = Depends(deps.get_db),
-    current_user: models.User = Depends(deps.get_current_user)
 ):
     db_template = db_form_templates.get_template(db, template_id=template_id)
     if db_template is None:

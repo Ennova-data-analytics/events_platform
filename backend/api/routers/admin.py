@@ -133,6 +133,11 @@ def delete_registration(
     if reg.status == 'Paid' and reg.ticket_type_id:
         TicketTypeUseCases.decrement_tickets_sold(db, reg.ticket_type_id)
 
+    # Delete associated team membership first (NOT NULL FK constraint)
+    db.query(models.TeamMember).filter(
+        models.TeamMember.registration_id == reg.registration_id
+    ).delete()
+
     db.delete(reg)
     db.commit()
 

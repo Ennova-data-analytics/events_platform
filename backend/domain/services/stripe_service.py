@@ -47,7 +47,7 @@ class StripeService:
                     'quantity': 1,
                 }],
                 mode='payment',
-                success_url=f"{settings.FRONTEND_URL}/event/{event.event_id}?payment=success",
+                success_url=f"{settings.FRONTEND_URL}/event/{event.event_id}/registered?payment=success",
                 cancel_url=f"{settings.FRONTEND_URL}/event/{event.event_id}?payment=cancelled",
                 client_reference_id=str(registration.registration_id),
                 customer_email=user.email,

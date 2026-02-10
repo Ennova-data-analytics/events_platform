@@ -73,8 +73,8 @@
           </div>
 
           <div :class="$vuetify.display.mobile ? 'mt-4' : 'mt-6'">
-            <v-btn v-if="!authStore.isAuthenticated" to="/login" color="primary" :size="$vuetify.display.mobile ? 'default' : 'large'" block>
-              Login to Apply
+            <v-btn v-if="!authStore.isAuthenticated" color="primary" :size="$vuetify.display.mobile ? 'default' : 'large'" block @click="goToRegistrationPage">
+              Register / Apply
             </v-btn>
 
             <v-chip v-else-if="registrationStatus === 'Pending Approval'" color="info" variant="tonal" size="large" block>
@@ -107,8 +107,7 @@
               color="primary"
               :size="$vuetify.display.mobile ? 'default' : 'large'"
               block
-              @click="handleRegistration"
-              :loading="eventStore.isLoading"
+              @click="goToRegistrationPage"
               elevation="3"
             >
               <template v-if="hasTicketTypes">
@@ -254,95 +253,19 @@
       </v-row>
     </div>
 
-    <v-dialog v-model="isFormModalVisible" max-width="700px" persistent>
-      <v-card>
-        <v-card-title class="d-flex justify-space-between align-center pa-4 bg-primary text-white">
-          <span class="text-h6">
-            {{ hasTicketTypes ? 'Select Tickets & Register' : 'Complete Registration' }}
-          </span>
-          <v-btn icon="mdi-close" variant="text" color="white" @click="isFormModalVisible = false"></v-btn>
-        </v-card-title>
-
-        <v-card-text class="pa-4">
-          <p class="mb-4 text-body-1" v-if="hasTicketTypes">
-            Please choose your ticket type below.
-          </p>
-          
-          <v-alert v-if="validationError" type="error" variant="tonal" density="compact" class="mb-4">
-             {{ validationError }}
-          </v-alert>
-
-          <TicketTypeSelector
-            v-if="hasTicketTypes"
-            v-model="selectedTicketTypeId"
-            :ticket-types="eventStore.currentEvent.ticket_types"
-            @ticket-type-selected="handleTicketTypeSelected"
-            class="mb-6"
-          />
-
-          <TeamSelector
-            v-if="selectedTicketType?.requires_team"
-            :event-id="eventStore.currentEvent.event_id"
-            :ticket-type-id="selectedTicketType.ticket_type_id"
-            :ticket-type-max-members="selectedTicketType.team_max_members"
-            @update:teamSelection="handleTeamSelection"
-            class="mb-6"
-          />
-
-          <v-form ref="customFormRef" v-if="customForm.fields.length > 0">
-            <h3 class="text-subtitle-1 font-weight-bold mb-3">Additional Details</h3>
-            <div v-for="field in customForm.fields" :key="field.name" class="mb-2">
-              <v-text-field v-if="field.type === 'text'" v-model="formResponses[field.name]" :label="field.label" :required="field.required" variant="outlined"></v-text-field>
-              <v-textarea v-if="field.type === 'textarea'" v-model="formResponses[field.name]" :label="field.label" :required="field.required" variant="outlined"></v-textarea>
-              <v-select v-if="field.type === 'select'" v-model="formResponses[field.name]" :items="field.options" :label="field.label" :required="field.required" variant="outlined"></v-select>
-              <v-radio-group v-if="field.type === 'radio'" v-model="formResponses[field.name]" :label="field.label" :required="field.required" inline>
-                <v-radio v-for="option in field.options" :key="option" :label="option" :value="option"></v-radio>
-              </v-radio-group>
-              <v-file-input v-if="field.type === 'file'" v-model="formFiles[field.name]" :label="field.label" :required="field.required" variant="outlined"></v-file-input>
-              <v-checkbox v-if="field.type === 'checkbox'" v-model="formResponses[field.name]" :label="field.label" :required="field.required"></v-checkbox>
-            </div>
-          </v-form>
-
-          <div class="mt-4">
-             <DiscountCodeInput
-               v-if="shouldShowDiscountInput"
-               :event-id="eventStore.currentEvent.event_id"
-               @discount-applied="handleDiscountApplied"
-               @discount-removed="handleDiscountRemoved"
-             />
-          </div>
-        </v-card-text>
-
-        <v-divider></v-divider>
-
-        <v-card-actions class="pa-4">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="isFormModalVisible = false">Cancel</v-btn>
-          <v-btn color="primary" variant="flat" :loading="isSubmitting" @click="submitApplicationWithForm">
-            {{ isSubmitting ? 'Processing...' : 'Confirm Registration' }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, onMounted, computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useEventStore } from '@/stores/events.store.js';
 import { useAuthStore } from '@/stores/auth.store.js';
-import { FormTemplateService } from '@/services/FormTemplateService.js';
-import { UploadService } from '@/services/UploadService.js';
 import ApiClient from '@/services/ApiClient.js';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import SponsorLogos from '@/components/events/SponsorLogos.vue';
 import EventPhotos from '@/components/events/EventPhotos.vue';
-import DiscountCodeInput from '@/components/DiscountCodeInput.vue';
-import TicketTypeSelector from '@/components/events/TicketTypeSelector.vue';
-import TeamSelector from '@/components/events/TeamSelector.vue';
 import EventLocationMap from '@/components/events/EventLocationMap.vue';
 import { generateGoogleCalendarUrl, downloadIcsFile as downloadIcs } from '@/utils/calendarHelpers.js';
 
@@ -351,23 +274,14 @@ marked.setOptions({ breaks: true, gfm: true, headerIds: false });
 
 // --- State ---
 const route = useRoute();
+const router = useRouter();
 const eventStore = useEventStore();
 const authStore = useAuthStore();
-    
+
 const showSuccess = ref(false);
 const successMessage = ref('');
 const showError = ref(false);
-
-const isFormModalVisible = ref(false);
-const customForm = ref({ fields: [] });
-const formResponses = ref({});
-const formFiles = ref({});
 const isSubmitting = ref(false);
-const validationError = ref('');
-const appliedDiscountCode = ref(null);
-const selectedTicketTypeId = ref(null);
-const selectedTicketType = ref(null);
-const teamSelection = ref(null);
 
 // --- Computed Properties ---
 
@@ -389,16 +303,7 @@ const hasTicketTypes = computed(() => {
   return eventStore.currentEvent?.ticket_types?.length > 0;
 });
 
-// UX Helper: Determine if discount input is needed
-const shouldShowDiscountInput = computed(() => {
-  // Case 1: A ticket is selected and it costs money
-  if (selectedTicketType.value && parseFloat(selectedTicketType.value.price_euros) > 0) return true;
-  // Case 2: No tickets, but base event costs money
-  if (!hasTicketTypes.value && eventStore.currentEvent?.price_euros > 0) return true;
-  return false;
-});
-
-// --- Lifecycle & Watchers ---
+// --- Lifecycle ---
 
 onMounted(async () => {
   const eventId = route.params.id;
@@ -408,197 +313,44 @@ onMounted(async () => {
     await authStore.fetchCurrentUser();
   }
 
-  handleUrlPaymentParams();
-});
-
-watch(isFormModalVisible, (isVisible) => {
-  if (!isVisible) validationError.value = '';
+  await handleUrlParams();
 });
 
 // --- Methods ---
+
+function goToRegistrationPage() {
+  router.push({ name: 'event-register', params: { id: route.params.id } });
+}
 
 function formatPrice(price) {
   const num = parseFloat(price);
   return num > 0 ? `€${num.toFixed(2)}` : 'Free';
 }
 
-function handleUrlPaymentParams() {
+async function handleUrlParams() {
   const urlParams = new URLSearchParams(window.location.search);
   const paymentStatus = urlParams.get('payment');
+  console.log('[EventDetails] handleUrlParams called, payment =', paymentStatus, 'url =', window.location.href);
+
   if (paymentStatus === 'success') {
     showSuccess.value = true;
     successMessage.value = 'Payment successful! Your registration is confirmed.';
-    authStore.fetchCurrentUser();
     window.history.replaceState({}, '', window.location.pathname);
+
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      await authStore.fetchCurrentUser();
+      const registration = authStore.user?.registrations?.find(
+        reg => reg.event.event_id === eventStore.currentEvent?.event_id
+      );
+      if (registration?.status === 'Paid') break;
+    }
   } else if (paymentStatus === 'cancelled') {
     showError.value = true;
     eventStore.error = 'Payment was cancelled. Please try again when ready.';
     window.history.replaceState({}, '', window.location.pathname);
   }
-}
-
-function validateForm() {
-  validationError.value = '';
-
-  // 1. Validate Ticket Selection
-  if (hasTicketTypes.value && !selectedTicketTypeId.value) {
-    validationError.value = 'Please select a ticket type.';
-    return false;
-  }
-
-  // 2. Validate Team Selection
-  if (selectedTicketType.value?.requires_team && !teamSelection.value) {
-    validationError.value = 'Please join or create a team for this ticket type.';
-    return false;
-  }
-
-  // 3. Validate Custom Fields
-  for (const field of customForm.value.fields) {
-    if (field.required) {
-      const textResponse = formResponses.value[field.name];
-      const fileResponse = formFiles.value[field.name];
-      const isTextFilled = textResponse !== undefined && textResponse !== null && textResponse !== '';
-      const isFileFilled = fileResponse !== undefined && fileResponse !== null;
-
-      if (!isTextFilled && !isFileFilled) {
-        validationError.value = `The field "${field.label}" is required.`;
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-async function handleRegistration() {
-  const event = eventStore.currentEvent;
-  if (!event) return;
-
-  if (!event.signups_enabled) {
-    eventStore.error = "Signups are currently closed for this event.";
-    showError.value = true;
-    return;
-  }
-
-  // Determine if we need to open the modal
-  const needsModal = hasTicketTypes.value || event.form_template_id || event.price_euros > 0;
-
-  if (needsModal) {
-    await loadInitialForm();
-    isFormModalVisible.value = true;
-  } else {
-    // Simple free event, no tickets, no form
-    submitApplicationWithForm();
-  }
-}
-
-async function loadInitialForm() {
-  const event = eventStore.currentEvent;
-  formResponses.value = {};
-  formFiles.value = {};
-  selectedTicketTypeId.value = null;
-  selectedTicketType.value = null;
-  appliedDiscountCode.value = null;
-  teamSelection.value = null;
-
-  // If there's a base form template (and no tickets, or as a default), load it
-  if (event.form_template_id && !hasTicketTypes.value) {
-    try {
-      const response = await FormTemplateService.getTemplateById(event.form_template_id);
-      customForm.value = response.data;
-    } catch (e) {
-      console.error(e);
-      customForm.value = { fields: [] };
-    }
-  } else {
-    customForm.value = { fields: [] };
-  }
-}
-
-async function handleTicketTypeSelected(ticketType) {
-  selectedTicketType.value = ticketType;
-  selectedTicketTypeId.value = ticketType.ticket_type_id; // Ensure ID is synced
-
-  // Reset team selection when ticket type changes
-  teamSelection.value = null;
-
-  // Dynamic Form Loading based on ticket
-  if (ticketType?.form_template_id) {
-    try {
-      const response = await FormTemplateService.getTemplateById(ticketType.form_template_id);
-      customForm.value = response.data;
-      // Note: We might want to preserve common fields, but usually resetting is safer on ticket switch
-      formResponses.value = {};
-      formFiles.value = {};
-    } catch (error) {
-      console.error("Failed to load ticket form", error);
-    }
-  } else if (eventStore.currentEvent?.form_template_id) {
-    // Fallback to event form if ticket has none
-    try {
-      const response = await FormTemplateService.getTemplateById(eventStore.currentEvent.form_template_id);
-      customForm.value = response.data;
-    } catch(e) { console.error(e); }
-  } else {
-    customForm.value = { fields: [] };
-  }
-}
-
-function handleTeamSelection(selection) {
-  teamSelection.value = selection;
-}
-
-async function submitApplicationWithForm() {
-  if (!validateForm()) return;
-
-  isSubmitting.value = true;
-  const finalFormResponses = { ...formResponses.value };
-
-  try {
-    // Handle File Uploads first
-    for (const fieldName in formFiles.value) {
-      const file = formFiles.value[fieldName];
-      if (file) {
-        const response = await UploadService.uploadFile(file);
-        finalFormResponses[fieldName] = response.data.file_key;
-      }
-    }
-
-    const registrationData = {
-      form_responses: finalFormResponses,
-      discount_code: appliedDiscountCode.value,
-      ticket_type_id: selectedTicketTypeId.value,
-      team_selection: teamSelection.value
-    };
-
-    const registrationResponse = await eventStore.registerForEvent(
-      eventStore.currentEvent.event_id,
-      registrationData
-    );
-
-    if (registrationResponse.requires_immediate_payment && registrationResponse.checkout_url) {
-      window.location.href = registrationResponse.checkout_url;
-      return;
-    }
-
-    successMessage.value = 'Application submitted successfully!';
-    showSuccess.value = true;
-    isFormModalVisible.value = false;
-    await authStore.fetchCurrentUser();
-
-  } catch (error) {
-    console.error(error);
-    showError.value = true;
-  } finally {
-    isSubmitting.value = false;
-  }
-}
-
-function handleDiscountApplied(data) {
-  appliedDiscountCode.value = data.code;
-}
-
-function handleDiscountRemoved() {
-  appliedDiscountCode.value = null;
 }
 
 async function handlePayment() {

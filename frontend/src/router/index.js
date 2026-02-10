@@ -15,6 +15,16 @@ const routes = [
     component: () => import('../views/EventDetailsPage.vue')
   },
   {
+    path: '/event/:id/register',
+    name: 'event-register',
+    component: () => import('../views/EventRegistrationPage.vue')
+  },
+  {
+    path: '/event/:id/registered',
+    name: 'event-registered',
+    component: () => import('../views/EventRegistrationConfirmationPage.vue')
+  },
+  {
     path: '/login',
     name: 'login',
     component: () => import('../views/LoginPage.vue')
@@ -162,7 +172,7 @@ router.beforeEach((to, from, next) => {
   const requiresAuth = to.meta.requiresAuth;
 
   if (requiresAuth && !authStore.isAuthenticated) {
-    next({ name: 'login'});
+    next({ name: 'login', query: { redirect: to.fullPath } });
   } else {
     next();
   }

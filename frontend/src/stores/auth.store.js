@@ -38,15 +38,23 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await AuthService.login(credentials);
       token.value = response.data.access_token;
       user.value = response.data.user;
-      
+
       localStorage.setItem('authToken', token.value);
       localStorage.setItem('authUser', JSON.stringify(user.value));
-      
-      router.push('/profile');
+
+      const redirectPath = router.currentRoute.value.query.redirect || '/profile';
+      router.push(redirectPath);
     } catch (err) {
       console.error('Login failed:', err.response.data);
       error.value = err.response.data.detail || 'Login failed.';
     }
+  }
+
+  function setAuthFromResponse(tokenValue, userData) {
+    token.value = tokenValue;
+    user.value = userData;
+    localStorage.setItem('authToken', tokenValue);
+    localStorage.setItem('authUser', JSON.stringify(userData));
   }
 
   async function fetchCurrentUser() {
@@ -67,5 +75,5 @@ export const useAuthStore = defineStore('auth', () => {
     router.push('/login');
   }
 
-  return { token, user, error, isAuthenticated, isOrganiser, register, login, logout, fetchCurrentUser };
+  return { token, user, error, isAuthenticated, isOrganiser, register, login, logout, fetchCurrentUser, setAuthFromResponse };
 });

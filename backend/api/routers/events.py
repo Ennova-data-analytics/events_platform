@@ -7,11 +7,11 @@ import logging
 import os
 
 from domain import schemas, models
-from domain.use_cases import db_events, db_registrations, db_event_photos, db_event_attachments
+from domain.use_cases import db_events, db_registrations, db_event_photos, db_event_attachments, users_uc
 from domain.use_cases.calendar_export import GenerateEventCalendarUseCase
 from domain.exceptions import EventNotFoundException, RegistrationNotFoundException, UnauthorizedCalendarAccessException
 from api import deps
-from core import s3_service
+from core import s3_service, security
 from core.image_processing_service import image_processing_service
 
 logger = logging.getLogger(__name__)
@@ -101,6 +101,77 @@ def register_user_for_event(event_id: int, registration_data: schemas.Registrati
             }
 
     return {
+        "registration": registration,
+        "requires_immediate_payment": False
+    }
+
+@router.post("/{event_id}/register-and-create-account", response_model=schemas.RegisterAndCreateAccountResponse, status_code=status.HTTP_201_CREATED)
+def register_and_create_account(event_id: int, payload: schemas.RegisterAndCreateAccountRequest, db: Session = Depends(deps.get_db)):
+    """Create a new user account and register them for an event in a single atomic operation."""
+    db_event = db_events.get_event(db, event_id=event_id)
+    if not db_event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    if not db_event.signups_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Signups are currently disabled for this event")
+
+    user_data = schemas.UserCreate(
+        email=payload.email,
+        full_name=payload.full_name,
+        password=payload.password,
+        degree=payload.degree,
+        study_year=payload.study_year
+    )
+
+    try:
+        new_user = users_uc.register_new_user(db=db, user_data=user_data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating user account: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to create account")
+
+    access_token = security.create_access_token(data={"sub": new_user.email})
+
+    registration = db_registrations.create_registration(
+        db=db,
+        event_id=event_id,
+        user_id=new_user.user_id,
+        form_responses=payload.form_responses,
+        discount_code=payload.discount_code,
+        ticket_type_id=payload.ticket_type_id,
+        team_selection=payload.team_selection
+    )
+
+    if not db_event.requires_approval and registration.final_amount_euros and registration.final_amount_euros > 0:
+        from domain.services.stripe_service import stripe_service
+        try:
+            session_data = stripe_service.create_checkout_session(
+                registration=registration,
+                db=db
+            )
+            return {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "user": new_user,
+                "registration": registration,
+                "checkout_url": session_data['checkout_url'],
+                "requires_immediate_payment": True
+            }
+        except Exception as e:
+            logger.error(f"Error creating checkout session: {str(e)}")
+            return {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "user": new_user,
+                "registration": registration,
+                "requires_immediate_payment": False
+            }
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": new_user,
         "registration": registration,
         "requires_immediate_payment": False
     }
