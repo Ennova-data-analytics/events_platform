@@ -196,6 +196,7 @@ import { useAuthStore } from '@/stores/auth.store.js';
 import { AuthService } from '@/services/AuthService.js';
 import { FormTemplateService } from '@/services/FormTemplateService.js';
 import { UploadService } from '@/services/UploadService.js';
+import { EventService } from '@/services/EventService.js';
 import TicketTypeSelector from '@/components/events/TicketTypeSelector.vue';
 import TeamSelector from '@/components/events/TeamSelector.vue';
 import DiscountCodeInput from '@/components/DiscountCodeInput.vue';
@@ -384,6 +385,22 @@ function validate() {
   return true;
 }
 
+async function uploadFiles() {
+  const fileResponses = {};
+  for (const fieldName in formFiles.value) {
+    const file = formFiles.value[fieldName];
+    if (file) {
+      const response = await UploadService.uploadFile(file);
+      fileResponses[fieldName] = response.data.file_key;
+    }
+  }
+  return fileResponses;
+}
+
+function hasFiles() {
+  return Object.values(formFiles.value).some(f => f);
+}
+
 async function submitRegistration() {
   if (!validate()) return;
 
@@ -391,20 +408,12 @@ async function submitRegistration() {
   errorMessage.value = '';
 
   try {
-    // Handle file uploads first
-    const finalFormResponses = { ...formResponses.value };
-    for (const fieldName in formFiles.value) {
-      const file = formFiles.value[fieldName];
-      if (file) {
-        const response = await UploadService.uploadFile(file);
-        finalFormResponses[fieldName] = response.data.file_key;
-      }
-    }
-
     let result;
 
     if (authStore.isAuthenticated) {
-      // Authenticated user flow
+      // Authenticated user flow — upload files first (user already has a token)
+      const finalFormResponses = { ...formResponses.value, ...(await uploadFiles()) };
+
       const registrationData = {
         form_responses: finalFormResponses,
         discount_code: appliedDiscountCode.value,
@@ -414,7 +423,7 @@ async function submitRegistration() {
 
       result = await eventStore.registerForEvent(event.value.event_id, registrationData);
     } else {
-      // Guest flow (create account + register)
+      // Guest flow: create account + register first, then upload files with the new token
       const payload = {
         email: userForm.value.email,
         full_name: userForm.value.full_name,
@@ -422,7 +431,7 @@ async function submitRegistration() {
         degree: userForm.value.degree,
         study_year: userForm.value.study_year,
         ticket_type_id: selectedTicketTypeId.value,
-        form_responses: finalFormResponses,
+        form_responses: { ...formResponses.value },
         discount_code: appliedDiscountCode.value,
         team_selection: teamSelection.value
       };
@@ -430,6 +439,12 @@ async function submitRegistration() {
       const response = await AuthService.registerAndApply(event.value.event_id, payload);
       authStore.setAuthFromResponse(response.data.access_token, response.data.user);
       result = response.data;
+
+      // Now authenticated — upload files and patch the registration
+      if (hasFiles()) {
+        const fileResponses = await uploadFiles();
+        await EventService.updateRegistrationFormResponses(event.value.event_id, fileResponses);
+      }
     }
 
     // Handle Stripe redirect if needed

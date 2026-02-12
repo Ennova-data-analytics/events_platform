@@ -231,6 +231,9 @@ class RegistrationResponse(BaseModel):
     checkout_url: str | None = None
     requires_immediate_payment: bool = False
 
+class RegistrationUpdateFormResponses(BaseModel):
+    form_responses: dict
+
 class RegisterAndCreateAccountRequest(BaseModel):
     """Combined user registration + event registration for unauthenticated users"""
     email: EmailStr

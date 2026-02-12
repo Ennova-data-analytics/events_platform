@@ -25,6 +25,10 @@ export const EventService = {
     return ApiClient.post(`/events/${eventId}/register`, registrationData);
   },
 
+  updateRegistrationFormResponses(eventId, formResponses) {
+    return ApiClient.patch(`/events/${eventId}/registration/form-responses`, { form_responses: formResponses });
+  },
+
   getEventRegistrations(eventId) {
     return ApiClient.get(`/events/${eventId}/registrations`);
   },
@@ -121,6 +125,7 @@ export const {
   updateEvent,
   deleteEvent,
   registerForEvent,
+  updateRegistrationFormResponses,
   getEventRegistrations,
   toggleSignups,
   uploadEventPhotos,

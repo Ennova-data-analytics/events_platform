@@ -176,6 +176,32 @@ def register_and_create_account(event_id: int, payload: schemas.RegisterAndCreat
         "requires_immediate_payment": False
     }
 
+@router.patch("/{event_id}/registration/form-responses", response_model=schemas.Registration)
+def update_registration_form_responses(
+    event_id: int,
+    payload: schemas.RegistrationUpdateFormResponses,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User = Depends(deps.get_current_user)
+):
+    """Update form_responses on the current user's registration (e.g. after uploading files)."""
+    registration = db.query(models.Registration).filter(
+        models.Registration.event_id == event_id,
+        models.Registration.user_id == current_user.user_id
+    ).first()
+
+    if not registration:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration not found")
+
+    existing = registration.form_responses or {}
+    existing.update(payload.form_responses)
+    registration.form_responses = existing
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(registration, 'form_responses')
+
+    db.commit()
+    db.refresh(registration)
+    return registration
+
 @router.get("/{event_id}/registrations", response_model=list[schemas.RegistrationWithUser], tags=["Admin"])
 def read_event_registrations(event_id: int, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
     """Retrieve a list of all registered attendees for a specific event"""
