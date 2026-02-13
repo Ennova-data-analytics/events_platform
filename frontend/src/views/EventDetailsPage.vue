@@ -319,7 +319,8 @@ onMounted(async () => {
 // --- Methods ---
 
 function goToRegistrationPage() {
-  router.push({ name: 'event-register', params: { id: route.params.id } });
+  const query = route.query.ref ? { ref: route.query.ref } : undefined;
+  router.push({ name: 'event-register', params: { id: route.params.id }, query });
 }
 
 function formatPrice(price) {

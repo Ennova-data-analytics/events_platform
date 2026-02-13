@@ -229,6 +229,7 @@ const customForm = ref({ fields: [] });
 const formResponses = ref({});
 const formFiles = ref({});
 const appliedDiscountCode = ref(null);
+const referralCode = ref(null);
 
 // UI state
 const isSubmitting = ref(false);
@@ -258,6 +259,7 @@ const isAlreadyRegistered = computed(() => {
 // Lifecycle
 onMounted(async () => {
   const eventId = route.params.id;
+  referralCode.value = route.query.ref || null;
   isLoadingEvent.value = true;
   try {
     await eventStore.fetchEventById(eventId);
@@ -417,6 +419,7 @@ async function submitRegistration() {
       const registrationData = {
         form_responses: finalFormResponses,
         discount_code: appliedDiscountCode.value,
+        referral_code: referralCode.value,
         ticket_type_id: selectedTicketTypeId.value,
         team_selection: teamSelection.value
       };
@@ -433,6 +436,7 @@ async function submitRegistration() {
         ticket_type_id: selectedTicketTypeId.value,
         form_responses: { ...formResponses.value },
         discount_code: appliedDiscountCode.value,
+        referral_code: referralCode.value,
         team_selection: teamSelection.value
       };
 

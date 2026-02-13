@@ -49,6 +49,7 @@ class Registration(BaseModel):
     member_discount_applied: bool | None = None
     ticket_type_id: int | None = None
     ticket_type: Optional["TicketTypeResponse"] = None
+    referral_link_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True) 
 
@@ -224,6 +225,7 @@ class RegistrationCreate(BaseModel):
     ticket_type_id: int | None = Field(None, description="Required if event has ticket types")
     form_responses: dict | None = None
     discount_code: str | None = Field(None, description="Optional discount code")
+    referral_code: str | None = Field(None, description="Optional referral link code")
     team_selection: Optional["TeamSelectionRequest"] = Field(None, description="Required if ticket type requires teams")
 
 class RegistrationResponse(BaseModel):
@@ -244,6 +246,7 @@ class RegisterAndCreateAccountRequest(BaseModel):
     ticket_type_id: int | None = Field(None, description="Required if event has ticket types")
     form_responses: dict | None = None
     discount_code: str | None = Field(None, description="Optional discount code")
+    referral_code: str | None = Field(None, description="Optional referral link code")
     team_selection: Optional["TeamSelectionRequest"] = Field(None, description="Required if ticket type requires teams")
 
 class RegisterAndCreateAccountResponse(BaseModel):
@@ -569,6 +572,33 @@ class DiscountCodeValidationResponse(BaseModel):
     original_price: Decimal | None = None
     discount_amount: Decimal | None = None
     final_price: Decimal | None = None
+
+class ReferralLinkCreate(BaseModel):
+    event_id: int
+    referrer_name: str = Field(..., min_length=1, max_length=255)
+    commission_percentage: Decimal = Field(..., ge=0, le=100)
+
+class ReferralLinkUpdate(BaseModel):
+    referrer_name: str | None = Field(None, min_length=1, max_length=255)
+    commission_percentage: Decimal | None = Field(None, ge=0, le=100)
+    is_active: bool | None = None
+
+class ReferralLinkResponse(BaseModel):
+    link_id: int
+    event_id: int
+    code: str
+    referrer_name: str
+    commission_percentage: Decimal
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    registration_count: int = 0
+    paid_registration_count: int = 0
+    total_revenue: Decimal = Decimal('0.00')
+    commission_owed: Decimal = Decimal('0.00')
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 class EnnovaMemberAdd(BaseModel):
     user_id: uuid.UUID

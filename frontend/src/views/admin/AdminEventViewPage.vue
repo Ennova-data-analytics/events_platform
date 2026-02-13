@@ -31,6 +31,7 @@
       <v-tab value="rejected">Rejected ({{ rejectedAttendees.length }})</v-tab>
       <v-tab value="teams">Teams</v-tab>
       <v-tab value="discounts">Discount Codes</v-tab>
+      <v-tab value="referrals">Referral Links</v-tab>
     </v-tabs>
 
     <v-card>
@@ -237,6 +238,11 @@
         <!-- Discount Codes Tab -->
         <v-window-item value="discounts">
           <DiscountCodeManager v-if="eventId" :event-id="parseInt(eventId)" />
+        </v-window-item>
+
+        <!-- Referral Links Tab -->
+        <v-window-item value="referrals">
+          <ReferralLinkManager v-if="eventId" :event-id="parseInt(eventId)" />
         </v-window-item>
       </v-window>
     </v-card>
@@ -596,6 +602,7 @@ import { UploadService } from '@/services/UploadService.js';
 import { TeamService } from '@/services/TeamService.js';
 import FeedbackSection from '@/components/feedback/FeedbackSection.vue';
 import DiscountCodeManager from '@/components/admin/DiscountCodeManager.vue';
+import ReferralLinkManager from '@/components/admin/ReferralLinkManager.vue';
 
 
 const route = useRoute();

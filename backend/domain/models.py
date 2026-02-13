@@ -158,6 +158,7 @@ class Event(Base):
 
     event_photos = relationship("EventPhoto", back_populates="event", cascade="all, delete-orphan", order_by="EventPhoto.display_order")
     discount_codes = relationship("DiscountCode", back_populates="event", cascade="all, delete-orphan")
+    referral_links = relationship("ReferralLink", back_populates="event", cascade="all, delete-orphan")
     attachments = relationship("EventAttachment", back_populates="event", cascade="all, delete-orphan", order_by="EventAttachment.display_order")
     ticket_types = relationship("TicketType", back_populates="event", cascade="all, delete-orphan", order_by="TicketType.display_order")
     teams = relationship("EventTeam", back_populates="event", cascade="all, delete-orphan", order_by="EventTeam.created_at")
@@ -226,11 +227,13 @@ class Registration(Base):
     final_amount_euros = Column(DECIMAL(10, 2), nullable=True)
     registration_date = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     member_discount_applied = Column(Boolean, default=False, nullable=False)
+    referral_link_id = Column(Integer, ForeignKey('referral_links.link_id', ondelete='SET NULL'), nullable=True, index=True)
 
     user = relationship("User", back_populates="registrations")
     event = relationship("Event", back_populates="registrations")
     discount_code = relationship("DiscountCode", back_populates="registrations")
     ticket_type = relationship("TicketType", back_populates="registrations")
+    referral_link = relationship("ReferralLink", back_populates="registrations")
 
 
 class Feedback(Base):
@@ -344,6 +347,26 @@ class DiscountCode(Base):
         CheckConstraint("discount_value > 0", name='check_discount_value_positive'),
         CheckConstraint("max_uses IS NULL OR max_uses > 0", name='check_max_uses_positive'),
         CheckConstraint("used_count >= 0", name='check_used_count_non_negative'),
+    )
+
+
+class ReferralLink(Base):
+    __tablename__ = 'referral_links'
+
+    link_id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete='CASCADE'), nullable=False, index=True)
+    code = Column(String(50), unique=True, nullable=False, index=True)
+    referrer_name = Column(String(255), nullable=False)
+    commission_percentage = Column(DECIMAL(5, 2), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    event = relationship("Event", back_populates="referral_links")
+    registrations = relationship("Registration", back_populates="referral_link")
+
+    __table_args__ = (
+        CheckConstraint("commission_percentage >= 0 AND commission_percentage <= 100", name='check_commission_percentage_range'),
     )
 
 

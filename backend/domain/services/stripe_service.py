@@ -56,6 +56,7 @@ class StripeService:
                     'event_id': event.event_id,
                     'user_id': str(user.user_id),
                     'discount_code_id': str(registration.discount_code_id) if registration.discount_code_id else None,
+                    'referral_link_id': str(registration.referral_link_id) if registration.referral_link_id else None,
                 }
             )
 

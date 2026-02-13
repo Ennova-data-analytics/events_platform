@@ -4,6 +4,7 @@ from domain import models
 from domain.services import notification_service
 from domain.use_cases.db_discount_codes import DiscountCodeUseCases
 from domain.use_cases.db_ticket_types import TicketTypeUseCases
+from domain.use_cases.db_referral_links import ReferralLinkUseCases
 from domain.use_cases import db_teams
 from domain.schemas import DiscountCodeValidation, TeamSelectionRequest
 import uuid
@@ -18,7 +19,8 @@ def create_registration(
     form_responses: dict | None = None,
     discount_code: str | None = None,
     ticket_type_id: int | None = None,
-    team_selection: TeamSelectionRequest | None = None
+    team_selection: TeamSelectionRequest | None = None,
+    referral_code: str | None = None
 ):
     """Handles db operations for creating a new registration with ticket type support"""
     existing_registration = db.query(models.Registration).filter(
@@ -178,16 +180,21 @@ def create_registration(
             )
 
  
+    referral_link_id = None
+    if referral_code:
+        referral_link_id = ReferralLinkUseCases.validate_referral_code(db, referral_code, event_id)
+
     db_registration = models.Registration(
         event_id=event_id,
         user_id=user_id,
-        ticket_type_id=ticket_type_id,  
+        ticket_type_id=ticket_type_id,
         form_responses=form_responses,
         status=initial_status,
         discount_code_id=discount_code_id,
         discount_amount_euros=discount_amount,
         final_amount_euros=final_amount,
-        member_discount_applied=member_discount_applied
+        member_discount_applied=member_discount_applied,
+        referral_link_id=referral_link_id
     )
 
     db.add(db_registration)

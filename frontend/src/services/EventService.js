@@ -114,6 +114,22 @@ export const EventService = {
 
   deleteDiscountCode(codeId) {
     return ApiClient.delete(`/discount-codes/${codeId}`);
+  },
+
+  createReferralLink(data) {
+    return ApiClient.post('/referral-links', data);
+  },
+
+  getEventReferralLinks(eventId) {
+    return ApiClient.get(`/referral-links/event/${eventId}`);
+  },
+
+  updateReferralLink(linkId, updateData) {
+    return ApiClient.put(`/referral-links/${linkId}`, updateData);
+  },
+
+  deleteReferralLink(linkId) {
+    return ApiClient.delete(`/referral-links/${linkId}`);
   }
 };
 
@@ -142,5 +158,9 @@ export const {
   createDiscountCode,
   getEventDiscountCodes,
   updateDiscountCode,
-  deleteDiscountCode
+  deleteDiscountCode,
+  createReferralLink,
+  getEventReferralLinks,
+  updateReferralLink,
+  deleteReferralLink
 } = EventService;
