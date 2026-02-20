@@ -484,6 +484,27 @@ class BulkEmailResponse(BaseModel):
     failed_emails: list[str] = []
 
 
+class BulkEmailLogResponse(BaseModel):
+    log_id: int
+    event_id: int
+    sent_by_user_id: uuid.UUID | None = None
+    subject: str
+    body: str
+    recipient_statuses: list[str]
+    sent_to_emails: list[str] = []
+    total_sent: int
+    total_failed: int
+    failed_emails: list[str] = []
+    sent_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BulkEmailLogListResponse(BaseModel):
+    logs: list[BulkEmailLogResponse]
+    total_count: int
+
+
 
 class AISummaryCreate(BaseModel):
     pass

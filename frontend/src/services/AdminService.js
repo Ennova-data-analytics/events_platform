@@ -36,5 +36,11 @@ export const AdminService = {
     },
     sendBulkEmail(eventId, emailData) {
         return ApiClient.post(`/admin/events/${eventId}/send-bulk-email`, emailData);
+    },
+    getBulkEmailLogs(eventId) {
+        return ApiClient.get(`/admin/events/${eventId}/bulk-email-logs`);
+    },
+    resendBulkEmail(eventId, logId) {
+        return ApiClient.post(`/admin/events/${eventId}/bulk-email-logs/${logId}/resend`);
     }
 };

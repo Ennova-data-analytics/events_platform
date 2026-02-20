@@ -162,6 +162,7 @@ class Event(Base):
     attachments = relationship("EventAttachment", back_populates="event", cascade="all, delete-orphan", order_by="EventAttachment.display_order")
     ticket_types = relationship("TicketType", back_populates="event", cascade="all, delete-orphan", order_by="TicketType.display_order")
     teams = relationship("EventTeam", back_populates="event", cascade="all, delete-orphan", order_by="EventTeam.created_at")
+    bulk_email_logs = relationship("BulkEmailLog", back_populates="event", cascade="all, delete-orphan", order_by="desc(BulkEmailLog.sent_at)")
 
 
 class TicketType(Base):
@@ -414,6 +415,27 @@ class EventAttachment(Base):
 
     event = relationship("Event", back_populates="attachments")
     uploaded_by = relationship("User", foreign_keys=[uploaded_by_user_id])
+
+
+class BulkEmailLog(Base):
+    __tablename__ = "bulk_email_logs"
+
+    log_id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
+    sent_by_user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="SET NULL"), nullable=True)
+
+    subject = Column(String(500), nullable=False)
+    body = Column(Text, nullable=False)
+    recipient_statuses = Column(ARRAY(String), nullable=False)
+    sent_to_emails = Column(ARRAY(String), default=list)
+    total_sent = Column(Integer, nullable=False, default=0)
+    total_failed = Column(Integer, nullable=False, default=0)
+    failed_emails = Column(ARRAY(String), default=list)
+
+    sent_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+
+    event = relationship("Event", back_populates="bulk_email_logs")
+    sent_by = relationship("User", foreign_keys=[sent_by_user_id])
 
 
 class EventTeam(Base):

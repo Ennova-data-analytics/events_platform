@@ -178,6 +178,7 @@ def send_bulk_email_to_attendees(
 
     emails_sent = 0
     failed_emails = []
+    successful_emails = []
 
     for idx, reg in enumerate(registrations):
         try:
@@ -204,10 +205,11 @@ def send_bulk_email_to_attendees(
 
             if success:
                 emails_sent += 1
+                successful_emails.append(user.email)
             else:
                 failed_emails.append(user.email)
 
-           
+
             if idx < len(registrations) - 1:
                 time.sleep(0.6)
 
@@ -218,12 +220,134 @@ def send_bulk_email_to_attendees(
             else:
                 failed_emails.append(f"Registration ID {reg.registration_id}")
 
+    log = models.BulkEmailLog(
+        event_id=event_id,
+        sent_by_user_id=current_organiser.user_id,
+        subject=email_data.subject,
+        body=email_data.body,
+        recipient_statuses=email_data.recipient_statuses,
+        sent_to_emails=successful_emails,
+        total_sent=emails_sent,
+        total_failed=len(failed_emails),
+        failed_emails=failed_emails
+    )
+    db.add(log)
+    db.commit()
+
     return schemas.BulkEmailResponse(
         success=emails_sent > 0,
         emails_sent=emails_sent,
         total_recipients=len(registrations),
         failed_emails=failed_emails
     )
+
+
+@router.get("/events/{event_id}/bulk-email-logs", response_model=schemas.BulkEmailLogListResponse)
+def get_bulk_email_logs(
+    event_id: int,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """Get all bulk email logs for an event"""
+    event = db.query(models.Event).filter(models.Event.event_id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    logs = db.query(models.BulkEmailLog).filter(
+        models.BulkEmailLog.event_id == event_id
+    ).order_by(models.BulkEmailLog.sent_at.desc()).all()
+
+    return schemas.BulkEmailLogListResponse(
+        logs=[schemas.BulkEmailLogResponse.model_validate(log) for log in logs],
+        total_count=len(logs)
+    )
+
+
+@router.post("/events/{event_id}/bulk-email-logs/{log_id}/resend", response_model=schemas.BulkEmailResponse)
+def resend_bulk_email_to_new_recipients(
+    event_id: int,
+    log_id: int,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """Resend a past bulk email to new recipients who haven't received it yet"""
+    event = db.query(models.Event).filter(models.Event.event_id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    log = db.query(models.BulkEmailLog).filter(
+        models.BulkEmailLog.log_id == log_id,
+        models.BulkEmailLog.event_id == event_id
+    ).first()
+    if not log:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email log not found")
+
+    registrations = db.query(models.Registration).filter(
+        models.Registration.event_id == event_id,
+        models.Registration.status.in_(log.recipient_statuses)
+    ).all()
+
+    already_sent = set(log.sent_to_emails or [])
+
+    new_recipients = []
+    for reg in registrations:
+        user = db.query(models.User).filter(models.User.user_id == reg.user_id).first()
+        if user and user.email and user.email not in already_sent:
+            new_recipients.append((reg, user))
+
+    if not new_recipients:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No new recipients found. All matching registrations have already received this email."
+        )
+
+    emails_sent = 0
+    failed_emails_list = []
+
+    for idx, (reg, user) in enumerate(new_recipients):
+        try:
+            html_content, text_content = email_templates.render_bulk_email(
+                user_name=user.full_name or user.email,
+                event_name=event.event_name,
+                header_title=log.subject,
+                body_content=log.body
+            )
+
+            success = email_service.email_service.send_email(
+                to_email=user.email,
+                to_name=user.full_name or user.email,
+                subject=log.subject,
+                html_content=html_content,
+                text_content=text_content
+            )
+
+            if success:
+                emails_sent += 1
+            else:
+                failed_emails_list.append(user.email)
+
+            if idx < len(new_recipients) - 1:
+                time.sleep(0.6)
+
+        except Exception as e:
+            logger.error(f"Failed to resend email for registration {reg.registration_id}: {str(e)}")
+            failed_emails_list.append(user.email)
+
+    new_successful = [user.email for _, user in new_recipients if user.email not in failed_emails_list]
+    log.sent_to_emails = list(already_sent | set(new_successful))
+    log.total_sent = log.total_sent + emails_sent
+    log.total_failed = log.total_failed + len(failed_emails_list)
+    if failed_emails_list:
+        log.failed_emails = list(set((log.failed_emails or []) + failed_emails_list))
+    db.commit()
+
+    return schemas.BulkEmailResponse(
+        success=emails_sent > 0,
+        emails_sent=emails_sent,
+        total_recipients=len(new_recipients),
+        failed_emails=failed_emails_list
+    )
+
 
 @router.get("/ennova-members", response_model=schemas.EnnovaMemberListResponse)
 def get_ennova_members(skip: int = 0, limit: int = 100, search: str | None = None, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):

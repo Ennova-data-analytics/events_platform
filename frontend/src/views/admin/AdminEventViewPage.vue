@@ -32,6 +32,7 @@
       <v-tab value="teams">Teams</v-tab>
       <v-tab value="discounts">Discount Codes</v-tab>
       <v-tab value="referrals">Referral Links</v-tab>
+      <v-tab value="email-history">Email History</v-tab>
     </v-tabs>
 
     <v-card>
@@ -243,6 +244,85 @@
         <!-- Referral Links Tab -->
         <v-window-item value="referrals">
           <ReferralLinkManager v-if="eventId" :event-id="parseInt(eventId)" />
+        </v-window-item>
+
+        <!-- Email History Tab -->
+        <v-window-item value="email-history">
+          <v-card-text>
+            <v-alert type="info" variant="tonal" class="mb-4">
+              View past bulk emails sent to attendees. Use "Resend to New" to send the same email to attendees who joined after the original send.
+            </v-alert>
+
+            <v-data-table
+              :headers="emailLogHeaders"
+              :items="emailLogs"
+              :loading="isLoadingEmailLogs"
+              item-value="log_id"
+              show-expand
+              v-model:expanded="expandedLogs"
+            >
+              <template v-slot:item.sent_at="{ item }">
+                {{ new Date(item.sent_at).toLocaleString() }}
+              </template>
+
+              <template v-slot:item.recipient_statuses="{ item }">
+                <v-chip v-for="s in item.recipient_statuses" :key="s" size="small" class="ma-1">
+                  {{ s }}
+                </v-chip>
+              </template>
+
+              <template v-slot:item.stats="{ item }">
+                <span class="text-success">{{ item.total_sent }} sent</span>
+                <span v-if="item.total_failed > 0" class="text-error ml-2">{{ item.total_failed }} failed</span>
+              </template>
+
+              <template v-slot:item.new_recipients="{ item }">
+                <v-chip size="small" :color="getNewRecipientCount(item) > 0 ? 'primary' : 'grey'">
+                  {{ getNewRecipientCount(item) }} new
+                </v-chip>
+              </template>
+
+              <template v-slot:item.actions="{ item }">
+                <v-btn
+                  size="small"
+                  variant="tonal"
+                  color="primary"
+                  :disabled="getNewRecipientCount(item) === 0"
+                  :loading="resendingLogId === item.log_id"
+                  @click="handleResend(item)"
+                  prepend-icon="mdi-email-fast"
+                >
+                  Resend to New
+                </v-btn>
+              </template>
+
+              <template v-slot:expanded-row="{ columns, item }">
+                <tr>
+                  <td :colspan="columns.length">
+                    <div class="pa-4">
+                      <h4 class="text-subtitle-1 font-weight-bold mb-2">Email Body</h4>
+                      <div class="bg-grey-lighten-4 pa-3 rounded mb-3" style="white-space: pre-wrap;">{{ item.body }}</div>
+
+                      <h4 class="text-subtitle-1 font-weight-bold mb-2">Sent To ({{ item.sent_to_emails?.length || 0 }})</h4>
+                      <div class="mb-3">
+                        <v-chip v-for="email in item.sent_to_emails" :key="email" size="small" class="ma-1">
+                          {{ email }}
+                        </v-chip>
+                        <span v-if="!item.sent_to_emails?.length" class="text-grey">None</span>
+                      </div>
+
+                      <div v-if="item.failed_emails?.length > 0">
+                        <h4 class="text-subtitle-1 font-weight-bold mb-2">Failed Emails</h4>
+                        <v-chip v-for="email in item.failed_emails" :key="email" size="small" color="error" class="ma-1">
+                          {{ email }}
+                        </v-chip>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </v-data-table>
+          </v-card-text>
         </v-window-item>
       </v-window>
     </v-card>
@@ -650,6 +730,20 @@ const bulkEmailDialog = ref({
 });
 
 const statusOptions = ['Pending Approval', 'Approved', 'Paid', 'Rejected'];
+
+// Email history data
+const emailLogs = ref([]);
+const isLoadingEmailLogs = ref(false);
+const expandedLogs = ref([]);
+const resendingLogId = ref(null);
+const emailLogHeaders = ref([
+  { title: 'Subject', key: 'subject' },
+  { title: 'Date Sent', key: 'sent_at' },
+  { title: 'Target Statuses', key: 'recipient_statuses', sortable: false },
+  { title: 'Results', key: 'stats', sortable: false },
+  { title: 'New Recipients', key: 'new_recipients', sortable: false },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'end' }
+]);
 
 // Teams data
 const teams = ref([]);
@@ -1139,6 +1233,8 @@ async function sendBulkEmail() {
     const response = await AdminService.sendBulkEmail(route.params.id, emailData);
     bulkEmailDialog.value.result = response.data;
 
+    await fetchEmailLogs();
+
     if (response.data.success) {
       snackbar.value = {
         show: true,
@@ -1170,17 +1266,61 @@ async function sendBulkEmail() {
   }
 }
 
+async function fetchEmailLogs() {
+  isLoadingEmailLogs.value = true;
+  try {
+    const response = await AdminService.getBulkEmailLogs(route.params.id);
+    emailLogs.value = response.data.logs || [];
+  } catch (error) {
+    console.error("Failed to fetch email logs:", error);
+  } finally {
+    isLoadingEmailLogs.value = false;
+  }
+}
+
+function getNewRecipientCount(log) {
+  const alreadySent = new Set(log.sent_to_emails || []);
+  const matchingAttendees = allAttendees.value.filter(a =>
+    log.recipient_statuses.includes(a.status)
+  );
+  return matchingAttendees.filter(a => a.user?.email && !alreadySent.has(a.user.email)).length;
+}
+
+async function handleResend(log) {
+  resendingLogId.value = log.log_id;
+  try {
+    const response = await AdminService.resendBulkEmail(route.params.id, log.log_id);
+    snackbar.value = {
+      show: true,
+      text: `Successfully sent ${response.data.emails_sent} email(s) to new recipients.`,
+      color: 'success'
+    };
+    await fetchEmailLogs();
+  } catch (error) {
+    console.error('Failed to resend bulk email:', error);
+    snackbar.value = {
+      show: true,
+      text: error.response?.data?.detail || 'Failed to resend bulk email.',
+      color: 'error'
+    };
+  } finally {
+    resendingLogId.value = null;
+  }
+}
+
 // Watch for route changes to refresh data
 watch(() => route.params.id, () => {
   fetchEventDetails();
   fetchAttendees();
   fetchTeams();
+  fetchEmailLogs();
 });
 
 onMounted(() => {
   fetchEventDetails();
   fetchAttendees();
   fetchTeams();
+  fetchEmailLogs();
 });
 
 // Refresh when component is reactivated (e.g., navigating back from edit page)
@@ -1188,5 +1328,6 @@ onActivated(() => {
   fetchEventDetails();
   fetchAttendees();
   fetchTeams();
+  fetchEmailLogs();
 });
 </script>
