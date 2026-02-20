@@ -138,6 +138,10 @@ export const EventService = {
 
   deleteReferralLink(linkId) {
     return ApiClient.delete(`/referral-links/${linkId}`);
+  },
+
+  getReferralLinkUsages(linkId) {
+    return ApiClient.get(`/referral-links/${linkId}/usages`);
   }
 };
 
@@ -172,5 +176,6 @@ export const {
   updateReferralLink,
   deleteReferralLink,
   getDiscountCodeUsages,
-  backpopulateDiscountCode
+  backpopulateDiscountCode,
+  getReferralLinkUsages
 } = EventService;

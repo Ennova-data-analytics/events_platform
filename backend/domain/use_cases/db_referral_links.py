@@ -6,8 +6,8 @@ from datetime import datetime
 from decimal import Decimal
 from fastapi import HTTPException, status
 
-from domain.models import ReferralLink, Registration, Event
-from domain.schemas import ReferralLinkCreate, ReferralLinkUpdate
+from domain.models import ReferralLink, Registration, Event, User
+from domain.schemas import ReferralLinkCreate, ReferralLinkUpdate, ReferralLinkUsageEntry, ReferralLinkUsageResponse
 
 
 class ReferralLinkUseCases:
@@ -47,13 +47,10 @@ class ReferralLinkUseCases:
         return ReferralLinkUseCases._to_response(referral_link, db)
 
     @staticmethod
-    def get_event_referral_links(db: Session, event_id: int, user_id: str) -> List[dict]:
+    def get_event_referral_links(db: Session, event_id: int) -> List[dict]:
         event = db.query(Event).filter(Event.event_id == event_id).first()
         if not event:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Event with ID {event_id} not found")
-
-        if str(event.created_by_user_id) != user_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have permission to view referral links for this event")
 
         links = db.query(ReferralLink).filter(
             ReferralLink.event_id == event_id
@@ -94,6 +91,41 @@ class ReferralLinkUseCases:
         db.delete(referral_link)
         db.commit()
         return True
+
+    @staticmethod
+    def get_referral_link_usages(db: Session, link_id: int) -> ReferralLinkUsageResponse:
+        """Get all registrations that used a specific referral link."""
+        referral_link = db.query(ReferralLink).filter(ReferralLink.link_id == link_id).first()
+        if not referral_link:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Referral link not found")
+
+        registrations = (
+            db.query(Registration)
+            .join(User, Registration.user_id == User.user_id)
+            .filter(Registration.referral_link_id == link_id)
+            .order_by(Registration.registration_date.desc())
+            .all()
+        )
+
+        usages = [
+            ReferralLinkUsageEntry(
+                registration_id=reg.registration_id,
+                user_email=reg.user.email,
+                user_full_name=reg.user.full_name,
+                registration_status=reg.status,
+                final_amount_euros=reg.final_amount_euros,
+                registration_date=reg.registration_date,
+            )
+            for reg in registrations
+        ]
+
+        return ReferralLinkUsageResponse(
+            link_id=referral_link.link_id,
+            code=referral_link.code,
+            referrer_name=referral_link.referrer_name,
+            registration_count=len(usages),
+            usages=usages,
+        )
 
     @staticmethod
     def validate_referral_code(db: Session, code: str, event_id: int) -> int | None:

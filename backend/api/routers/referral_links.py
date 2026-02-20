@@ -35,8 +35,23 @@ def get_event_referral_links(
     """Get all referral links for an event with stats (organizer only)"""
     try:
         return ReferralLinkUseCases.get_event_referral_links(
-            db=db, event_id=event_id, user_id=str(current_user.user_id)
+            db=db, event_id=event_id
         )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/{link_id}/usages", response_model=schemas.ReferralLinkUsageResponse)
+def get_referral_link_usages(
+    link_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_active_organiser)
+):
+    """Get all registrations that used a specific referral link"""
+    try:
+        return ReferralLinkUseCases.get_referral_link_usages(db=db, link_id=link_id)
     except HTTPException:
         raise
     except Exception as e:

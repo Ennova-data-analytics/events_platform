@@ -41,7 +41,13 @@
         </template>
 
         <template v-slot:item.registrations="{ item }">
-          {{ item.registration_count }} total / {{ item.paid_registration_count }} paid
+          <a
+            href="#"
+            class="text-decoration-none"
+            @click.prevent="viewUsages(item)"
+          >
+            {{ item.registration_count }} total / {{ item.paid_registration_count }} paid
+          </a>
         </template>
 
         <template v-slot:item.total_revenue="{ item }">
@@ -69,6 +75,14 @@
         </template>
 
         <template v-slot:item.actions="{ item }">
+          <v-btn
+            icon="mdi-eye"
+            variant="text"
+            color="info"
+            size="small"
+            @click="viewUsages(item)"
+            title="View Usage"
+          ></v-btn>
           <v-btn
             icon="mdi-pencil"
             variant="text"
@@ -162,6 +176,65 @@
       {{ snackbar.text }}
     </v-snackbar>
 
+    <!-- Usage Details Dialog -->
+    <v-dialog v-model="usageDialog.show" max-width="750px">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <span class="text-h5">Usage: {{ usageDialog.referrerName }}</span>
+          <v-spacer></v-spacer>
+          <v-chip size="small" color="primary" variant="tonal" class="ml-2">
+            {{ usageDialog.registrationCount }} used
+          </v-chip>
+        </v-card-title>
+
+        <v-card-text>
+          <v-progress-linear v-if="usageDialog.loading" indeterminate color="primary" class="mb-4"></v-progress-linear>
+
+          <div v-else-if="usageDialog.usages.length === 0" class="text-center pa-4">
+            <v-icon size="48" color="grey-lighten-1">mdi-account-off-outline</v-icon>
+            <p class="text-grey mt-2">No one has registered through this referral link yet.</p>
+          </div>
+
+          <v-table v-else density="compact">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Status</th>
+                <th class="text-right">Paid</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="usage in usageDialog.usages" :key="usage.registration_id">
+                <td>
+                  <div>{{ usage.user_full_name || 'N/A' }}</div>
+                  <div class="text-caption text-grey">{{ usage.user_email }}</div>
+                </td>
+                <td>
+                  <v-chip
+                    :color="usage.registration_status === 'Paid' ? 'success' : 'warning'"
+                    size="x-small"
+                    variant="tonal"
+                  >
+                    {{ usage.registration_status }}
+                  </v-chip>
+                </td>
+                <td class="text-right">
+                  {{ usage.final_amount_euros != null ? `€${Number(usage.final_amount_euros).toFixed(2)}` : '-' }}
+                </td>
+                <td>{{ usage.registration_date ? formatDate(usage.registration_date) : '-' }}</td>
+              </tr>
+            </tbody>
+          </v-table>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="usageDialog.show = false">Close</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="deleteDialog.show" max-width="500">
       <v-card>
         <v-card-title class="text-h5">
@@ -199,7 +272,8 @@ import {
   getEventReferralLinks,
   createReferralLink,
   updateReferralLink,
-  deleteReferralLink
+  deleteReferralLink,
+  getReferralLinkUsages
 } from '@/services/EventService'
 
 const props = defineProps({
@@ -237,6 +311,16 @@ const snackbar = ref({
   show: false,
   text: '',
   color: 'success'
+})
+
+const usageDialog = ref({
+  show: false,
+  linkId: null,
+  code: '',
+  referrerName: '',
+  registrationCount: 0,
+  usages: [],
+  loading: false
 })
 
 const deleteDialog = ref({
@@ -322,6 +406,37 @@ const confirmDelete = async () => {
   } finally {
     deleteDialog.value.show = false
   }
+}
+
+const viewUsages = async (link) => {
+  usageDialog.value = {
+    show: true,
+    linkId: link.link_id,
+    code: link.code,
+    referrerName: link.referrer_name,
+    registrationCount: link.registration_count,
+    usages: [],
+    loading: true
+  }
+
+  try {
+    const response = await getReferralLinkUsages(link.link_id)
+    usageDialog.value.usages = response.data.usages
+    usageDialog.value.registrationCount = response.data.registration_count
+  } catch (error) {
+    console.error('Error loading referral link usages:', error)
+    showSnackbar('Failed to load usage details', 'error')
+  } finally {
+    usageDialog.value.loading = false
+  }
+}
+
+const formatDate = (dateString) => {
+  return new Date(dateString).toLocaleDateString('en-GB', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
 }
 
 const copyLink = async (code) => {

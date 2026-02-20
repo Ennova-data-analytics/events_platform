@@ -652,6 +652,25 @@ class ReferralLinkResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ReferralLinkUsageEntry(BaseModel):
+    registration_id: int
+    user_email: str
+    user_full_name: str | None = None
+    registration_status: str
+    final_amount_euros: Decimal | None = None
+    registration_date: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReferralLinkUsageResponse(BaseModel):
+    link_id: int
+    code: str
+    referrer_name: str
+    registration_count: int
+    usages: list[ReferralLinkUsageEntry]
+
+
 class EnnovaMemberAdd(BaseModel):
     user_id: uuid.UUID
 

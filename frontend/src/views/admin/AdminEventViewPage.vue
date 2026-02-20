@@ -35,6 +35,12 @@
       <v-tab value="email-history">Email History</v-tab>
     </v-tabs>
 
+    <v-btn-toggle v-model="ennovaFilter" mandatory density="compact" class="mb-4">
+      <v-btn value="all" size="small">All</v-btn>
+      <v-btn value="members" size="small">Ennova Members</v-btn>
+      <v-btn value="non-members" size="small">Non-Members</v-btn>
+    </v-btn-toggle>
+
     <v-card>
       <v-window v-model="tab">
         <v-window-item value="pending">
@@ -74,6 +80,11 @@
                   </div>
                 </td>
               </tr>
+            </template>
+
+            <template v-slot:item.user.is_ennova_member="{ item }">
+              <v-chip v-if="item.user?.is_ennova_member" color="success" size="small" variant="tonal">Yes</v-chip>
+              <v-chip v-else size="small" variant="tonal">No</v-chip>
             </template>
 
             <template v-slot:item.actions="{ item }">
@@ -122,6 +133,11 @@
                             </div>
                         </td>
                     </tr>
+                </template>
+
+                <template v-slot:item.user.is_ennova_member="{ item }">
+                  <v-chip v-if="item.user?.is_ennova_member" color="success" size="small" variant="tonal">Yes</v-chip>
+                  <v-chip v-else size="small" variant="tonal">No</v-chip>
                 </template>
 
                 <template v-slot:item.actions="{ item }">
@@ -790,22 +806,27 @@ watch(tab, () => {
   expanded.value = [];
 });
 
-const pendingAttendees = computed(() => allAttendees.value.filter(a => a.status === 'Pending Approval'));
-const approvedAttendees = computed(() => allAttendees.value.filter(a => a.status === 'Approved'));
-const paidAttendees = computed(() => allAttendees.value.filter(a => a.status === 'Paid'));
-const rejectedAttendees = computed(() => allAttendees.value.filter(a => a.status === 'Rejected'));
+const ennovaFilter = ref('all');
+
+const applyEnnovaFilter = (list) => {
+  if (ennovaFilter.value === 'members') return list.filter(a => a.user?.is_ennova_member);
+  if (ennovaFilter.value === 'non-members') return list.filter(a => !a.user?.is_ennova_member);
+  return list;
+};
+
+const pendingAttendees = computed(() => applyEnnovaFilter(allAttendees.value.filter(a => a.status === 'Pending Approval')));
+const approvedAttendees = computed(() => applyEnnovaFilter(allAttendees.value.filter(a => a.status === 'Approved')));
+const paidAttendees = computed(() => applyEnnovaFilter(allAttendees.value.filter(a => a.status === 'Paid')));
+const rejectedAttendees = computed(() => applyEnnovaFilter(allAttendees.value.filter(a => a.status === 'Rejected')));
 
 const attendeeHeaders = ref([
   { title: 'Full Name', key: 'user.full_name' },
   { title: 'Email', key: 'user.email' },
+  { title: 'Ennova Member', key: 'user.is_ennova_member' },
   { title: 'Ticket Type', key: 'ticket_type.name' },
   { title: 'Registration Date', key: 'registration_date' },
   { title: 'Degree', key: 'user.degree' },
   { title: 'Year', key: 'user.study_year' },
-  // { title: 'CV', key: 'user.cv_url', sortable: false},
-
-
-
 ]);
 const pendingHeaders = ref([...attendeeHeaders.value, { title: 'Actions', key: 'actions', sortable: false, align: 'end' }]);
 const attendeeHeadersWithRevert = ref([...attendeeHeaders.value, { title: 'Actions', key: 'actions', sortable: false, align: 'end' }]);
