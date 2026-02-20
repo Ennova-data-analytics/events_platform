@@ -462,11 +462,18 @@ class FeedbackWithUser(Feedback):
 
 
 # Feedback Statistics Schema
+class TemplateGroupStats(BaseModel):
+    template_id: int | None = None
+    template_name: str
+    response_count: int
+    field_statistics: dict
+
 class FeedbackStats(BaseModel):
     total_responses: int
     total_registrations: int | None = None
     response_rate: float | None = None
     field_statistics: dict
+    template_groups: list[TemplateGroupStats] = []
     recent_responses: list[Feedback]
 
 

@@ -60,7 +60,8 @@ def create_feedback(
 def get_feedback_statistics(db: Session, event_id: int) -> dict:
     """
     Calculate statistics for event feedback.
-    Returns aggregated data including response count and field statistics.
+    Returns aggregated data including response count, field statistics,
+    and per-template grouped statistics.
     """
     total_responses = db.query(func.count(models.Feedback.feedback_id)).filter(
         models.Feedback.event_id == event_id
@@ -81,6 +82,8 @@ def get_feedback_statistics(db: Session, event_id: int) -> dict:
 
     field_statistics = _aggregate_field_statistics(all_feedback)
 
+    template_groups = _group_by_template(db, all_feedback)
+
     recent_responses = db.query(models.Feedback).filter(
         models.Feedback.event_id == event_id
     ).order_by(models.Feedback.submitted_at.desc()).limit(10).all()
@@ -90,8 +93,42 @@ def get_feedback_statistics(db: Session, event_id: int) -> dict:
         "total_registrations": total_registrations,
         "response_rate": response_rate,
         "field_statistics": field_statistics,
+        "template_groups": template_groups,
         "recent_responses": recent_responses
     }
+
+
+def _group_by_template(db: Session, feedback_list: list[models.Feedback]) -> list[dict]:
+    """Group feedback by template and compute per-group field statistics."""
+    if not feedback_list:
+        return []
+
+    groups: dict[int | None, list[models.Feedback]] = {}
+    for fb in feedback_list:
+        groups.setdefault(fb.feedback_template_id, []).append(fb)
+
+    if len(groups) <= 1:
+        return []
+
+    template_ids = [tid for tid in groups if tid is not None]
+    templates = {}
+    if template_ids:
+        for t in db.query(models.FeedbackTemplate).filter(
+            models.FeedbackTemplate.template_id.in_(template_ids)
+        ).all():
+            templates[t.template_id] = t.template_name
+
+    result = []
+    for tid, fb_list in groups.items():
+        result.append({
+            "template_id": tid,
+            "template_name": templates.get(tid, "Other") if tid else "Other",
+            "response_count": len(fb_list),
+            "field_statistics": _aggregate_field_statistics(fb_list)
+        })
+
+    result.sort(key=lambda g: (g["template_name"] == "Other", g["template_name"]))
+    return result
 
 
 def _aggregate_field_statistics(feedback_list: list[models.Feedback]) -> dict:

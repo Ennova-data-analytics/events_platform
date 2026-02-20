@@ -45,8 +45,45 @@
           </v-col>
         </v-row>
 
-        <!-- Field Statistics -->
-        <div v-if="Object.keys(stats.field_statistics || {}).length > 0" class="mb-4">
+        <!-- Field Statistics - Grouped by Template -->
+        <div v-if="hasTemplateGroups" class="mb-4">
+          <h3 class="text-h6 mb-3">Response Summary</h3>
+          <div v-for="group in stats.template_groups" :key="group.template_id ?? 'other'" class="mb-5">
+            <div class="d-flex align-center mb-2">
+              <h4 class="text-subtitle-1 font-weight-bold">{{ group.template_name }}</h4>
+              <v-chip size="small" class="ml-2">{{ group.response_count }} responses</v-chip>
+            </div>
+            <v-expansion-panels>
+              <v-expansion-panel
+                v-for="(fieldData, fieldName) in group.field_statistics"
+                :key="fieldName"
+              >
+                <v-expansion-panel-title>
+                  {{ fieldName }}
+                  <template v-slot:actions>
+                    <v-chip size="small">{{ fieldData.response_count }} responses</v-chip>
+                  </template>
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <div v-if="fieldData.average !== undefined">
+                    <p><strong>Average:</strong> {{ fieldData.average.toFixed(2) }}</p>
+                    <p><strong>Min:</strong> {{ fieldData.min }} | <strong>Max:</strong> {{ fieldData.max }}</p>
+                  </div>
+                  <div v-if="fieldData.value_distribution">
+                    <p class="mb-2"><strong>Distribution:</strong></p>
+                    <div v-for="(count, value) in fieldData.value_distribution" :key="value" class="mb-1">
+                      <v-chip size="small" class="mr-2">{{ count }}</v-chip> {{ value }}
+                    </div>
+                  </div>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+            <v-divider v-if="stats.template_groups.indexOf(group) < stats.template_groups.length - 1" class="mt-4"></v-divider>
+          </div>
+        </div>
+
+        <!-- Field Statistics - Flat (single template or no grouping) -->
+        <div v-else-if="Object.keys(stats.field_statistics || {}).length > 0" class="mb-4">
           <h3 class="text-h6 mb-3">Response Summary</h3>
           <v-expansion-panels>
             <v-expansion-panel
@@ -60,13 +97,10 @@
                 </template>
               </v-expansion-panel-title>
               <v-expansion-panel-text>
-                <!-- Numeric statistics -->
                 <div v-if="fieldData.average !== undefined">
                   <p><strong>Average:</strong> {{ fieldData.average.toFixed(2) }}</p>
                   <p><strong>Min:</strong> {{ fieldData.min }} | <strong>Max:</strong> {{ fieldData.max }}</p>
                 </div>
-
-                <!-- Value distribution -->
                 <div v-if="fieldData.value_distribution">
                   <p class="mb-2"><strong>Distribution:</strong></p>
                   <div v-for="(count, value) in fieldData.value_distribution" :key="value" class="mb-1">
@@ -112,7 +146,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { FeedbackService } from '@/services/FeedbackService.js';
 import QRCodeModal from './QRCodeModal.vue';
 
@@ -129,6 +163,10 @@ const props = defineProps({
 
 const stats = ref({});
 const isLoading = ref(false);
+
+const hasTemplateGroups = computed(() => {
+  return stats.value.template_groups && stats.value.template_groups.length > 0;
+});
 
 async function loadFeedbackStats() {
   if (!props.hasFeedbackTemplate) {
