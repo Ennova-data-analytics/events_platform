@@ -32,7 +32,13 @@
         </template>
 
         <template v-slot:item.usage="{ item }">
-          {{ item.used_count }}{{ item.max_uses ? ` / ${item.max_uses}` : ' / ∞' }}
+          <a
+            href="#"
+            class="text-decoration-none"
+            @click.prevent="viewUsages(item)"
+          >
+            {{ item.used_count }}{{ item.max_uses ? ` / ${item.max_uses}` : ' / ∞' }}
+          </a>
         </template>
 
         <template v-slot:item.expires_at="{ item }">
@@ -50,6 +56,14 @@
         </template>
 
         <template v-slot:item.actions="{ item }">
+          <v-btn
+            icon="mdi-eye"
+            variant="text"
+            color="info"
+            size="small"
+            @click="viewUsages(item)"
+            title="View Usage"
+          ></v-btn>
           <v-btn
             icon="mdi-pencil"
             variant="text"
@@ -171,6 +185,111 @@
       </v-card>
     </v-dialog>
 
+    <!-- Usage Details Dialog -->
+    <v-dialog v-model="usageDialog.show" max-width="750px">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <span class="text-h5">Usage: {{ usageDialog.code }}</span>
+          <v-spacer></v-spacer>
+          <v-chip size="small" color="primary" variant="tonal" class="ml-2">
+            {{ usageDialog.usedCount }} used
+          </v-chip>
+        </v-card-title>
+
+        <v-card-text>
+          <v-progress-linear v-if="usageDialog.loading" indeterminate color="primary" class="mb-4"></v-progress-linear>
+
+          <div v-else-if="usageDialog.usages.length === 0" class="text-center pa-4">
+            <v-icon size="48" color="grey-lighten-1">mdi-account-off-outline</v-icon>
+            <p class="text-grey mt-2">No one has used this discount code yet.</p>
+          </div>
+
+          <v-table v-else density="compact">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Status</th>
+                <th class="text-right">Discount</th>
+                <th class="text-right">Paid</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="usage in usageDialog.usages" :key="usage.registration_id">
+                <td>
+                  <div>{{ usage.user_full_name || 'N/A' }}</div>
+                  <div class="text-caption text-grey">{{ usage.user_email }}</div>
+                </td>
+                <td>
+                  <v-chip
+                    :color="usage.registration_status === 'Paid' ? 'success' : 'warning'"
+                    size="x-small"
+                    variant="tonal"
+                  >
+                    {{ usage.registration_status }}
+                  </v-chip>
+                </td>
+                <td class="text-right">
+                  {{ usage.discount_amount_euros != null ? `€${Number(usage.discount_amount_euros).toFixed(2)}` : '-' }}
+                </td>
+                <td class="text-right">
+                  {{ usage.final_amount_euros != null ? `€${Number(usage.final_amount_euros).toFixed(2)}` : '-' }}
+                </td>
+                <td>{{ usage.registration_date ? formatDate(usage.registration_date) : '-' }}</td>
+              </tr>
+            </tbody>
+          </v-table>
+
+          <!-- Backpopulate section -->
+          <v-divider class="my-4"></v-divider>
+          <div class="d-flex align-center">
+            <div class="flex-grow-1">
+              <div class="text-subtitle-2">Backpopulate from payments</div>
+              <div class="text-caption text-grey">
+                Find paid registrations that match this discount's expected price and link them to this code.
+              </div>
+            </div>
+            <v-btn
+              color="secondary"
+              variant="tonal"
+              size="small"
+              prepend-icon="mdi-database-search"
+              :loading="usageDialog.backpopulating"
+              @click="runBackpopulate"
+            >
+              Backpopulate
+            </v-btn>
+          </div>
+
+          <v-alert
+            v-if="usageDialog.backpopulateResult !== null"
+            :type="usageDialog.backpopulateResult.matched_count > 0 ? 'success' : 'info'"
+            variant="tonal"
+            density="compact"
+            class="mt-3"
+          >
+            <template v-if="usageDialog.backpopulateResult.matched_count > 0">
+              Found and linked {{ usageDialog.backpopulateResult.matched_count }} registration(s) to this discount code.
+            </template>
+            <template v-else>
+              No matching registrations found. All paid registrations either already have a discount code assigned or don't match the expected discounted price.
+            </template>
+          </v-alert>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn
+            color="grey"
+            variant="text"
+            @click="usageDialog.show = false"
+          >
+            Close
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Snackbar for notifications -->
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000">
       {{ snackbar.text }}
@@ -214,7 +333,9 @@ import {
   getEventDiscountCodes,
   createDiscountCode,
   updateDiscountCode,
-  deleteDiscountCode
+  deleteDiscountCode,
+  getDiscountCodeUsages,
+  backpopulateDiscountCode
 } from '@/services/EventService'
 
 const props = defineProps({
@@ -262,6 +383,17 @@ const deleteDialog = ref({
   codeName: ''
 })
 
+const usageDialog = ref({
+  show: false,
+  codeId: null,
+  code: '',
+  usedCount: 0,
+  usages: [],
+  loading: false,
+  backpopulating: false,
+  backpopulateResult: null
+})
+
 const loadDiscountCodes = async () => {
   isLoading.value = true
   try {
@@ -272,6 +404,53 @@ const loadDiscountCodes = async () => {
     showSnackbar('Failed to load discount codes', 'error')
   } finally {
     isLoading.value = false
+  }
+}
+
+const viewUsages = async (code) => {
+  usageDialog.value = {
+    show: true,
+    codeId: code.code_id,
+    code: code.code,
+    usedCount: code.used_count,
+    usages: [],
+    loading: true,
+    backpopulating: false,
+    backpopulateResult: null
+  }
+
+  try {
+    const response = await getDiscountCodeUsages(code.code_id)
+    usageDialog.value.usages = response.data.usages
+    usageDialog.value.usedCount = response.data.used_count
+  } catch (error) {
+    console.error('Error loading usage details:', error)
+    showSnackbar('Failed to load usage details', 'error')
+  } finally {
+    usageDialog.value.loading = false
+  }
+}
+
+const runBackpopulate = async () => {
+  usageDialog.value.backpopulating = true
+  usageDialog.value.backpopulateResult = null
+
+  try {
+    const response = await backpopulateDiscountCode(usageDialog.value.codeId)
+    usageDialog.value.backpopulateResult = response.data
+
+    if (response.data.matched_count > 0) {
+      // Refresh the usage list and the main table
+      const usageResponse = await getDiscountCodeUsages(usageDialog.value.codeId)
+      usageDialog.value.usages = usageResponse.data.usages
+      usageDialog.value.usedCount = usageResponse.data.used_count
+      await loadDiscountCodes()
+    }
+  } catch (error) {
+    console.error('Error backpopulating:', error)
+    showSnackbar('Failed to backpopulate discount code usage', 'error')
+  } finally {
+    usageDialog.value.backpopulating = false
   }
 }
 

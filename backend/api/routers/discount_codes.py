@@ -83,6 +83,44 @@ def delete_discount_code(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+@router.get("/{code_id}/usages", response_model=schemas.DiscountCodeUsageResponse)
+def get_discount_code_usages(
+    code_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user = Depends(deps.get_current_active_organiser)
+):
+    """Get all registrations that used a specific discount code (organizer only)"""
+    try:
+        return DiscountCodeUseCases.get_discount_code_usages(
+            db=db,
+            code_id=code_id,
+            user_id=str(current_user.user_id)
+        )
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/{code_id}/backpopulate", response_model=schemas.DiscountCodeBackpopulateResponse)
+def backpopulate_discount_code(
+    code_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user = Depends(deps.get_current_active_organiser)
+):
+    """Backpopulate discount code usage by matching payment amounts (organizer only)"""
+    try:
+        return DiscountCodeUseCases.backpopulate_discount_code(
+            db=db,
+            code_id=code_id,
+            user_id=str(current_user.user_id)
+        )
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 @router.post("/validate", response_model=schemas.DiscountCodeValidationResponse)
 def validate_discount_code(
     validation_data: schemas.DiscountCodeValidation,

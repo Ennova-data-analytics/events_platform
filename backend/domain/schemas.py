@@ -586,6 +586,30 @@ class DiscountCodeResponse(DiscountCodeBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DiscountCodeUsageEntry(BaseModel):
+    registration_id: int
+    user_email: str
+    user_full_name: str | None = None
+    registration_status: str
+    discount_amount_euros: Decimal | None = None
+    final_amount_euros: Decimal | None = None
+    registration_date: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DiscountCodeUsageResponse(BaseModel):
+    code_id: int
+    code: str
+    used_count: int
+    usages: list[DiscountCodeUsageEntry]
+
+
+class DiscountCodeBackpopulateResponse(BaseModel):
+    matched_count: int
+    matched_registrations: list[DiscountCodeUsageEntry]
+
+
 class DiscountCodeValidation(BaseModel):
     code: str
     event_id: int

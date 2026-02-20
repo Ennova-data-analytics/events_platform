@@ -5,12 +5,15 @@ from datetime import datetime
 from decimal import Decimal
 from fastapi import HTTPException, status
 
-from domain.models import DiscountCode, Event
+from domain.models import DiscountCode, Event, Registration, User
 from domain.schemas import (
     DiscountCodeCreate,
     DiscountCodeUpdate,
     DiscountCodeValidation,
-    DiscountCodeValidationResponse
+    DiscountCodeValidationResponse,
+    DiscountCodeUsageEntry,
+    DiscountCodeUsageResponse,
+    DiscountCodeBackpopulateResponse,
 )
 
 
@@ -240,3 +243,140 @@ class DiscountCodeUseCases:
         if discount_code:
             discount_code.used_count += 1
             db.commit()
+
+    @staticmethod
+    def get_discount_code_usages(db: Session, code_id: int, user_id: str) -> DiscountCodeUsageResponse:
+        """Get all registrations that used a specific discount code"""
+        discount_code = db.query(DiscountCode).filter(DiscountCode.code_id == code_id).first()
+        if not discount_code:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Discount code not found"
+            )
+
+        event = discount_code.event
+        if str(event.created_by_user_id) != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to view this discount code's usage"
+            )
+
+        registrations = (
+            db.query(Registration)
+            .join(User, Registration.user_id == User.user_id)
+            .filter(Registration.discount_code_id == code_id)
+            .order_by(Registration.registration_date.desc())
+            .all()
+        )
+
+        usages = [
+            DiscountCodeUsageEntry(
+                registration_id=reg.registration_id,
+                user_email=reg.user.email,
+                user_full_name=reg.user.full_name,
+                registration_status=reg.status,
+                discount_amount_euros=reg.discount_amount_euros,
+                final_amount_euros=reg.final_amount_euros,
+                registration_date=reg.registration_date,
+            )
+            for reg in registrations
+        ]
+
+        return DiscountCodeUsageResponse(
+            code_id=discount_code.code_id,
+            code=discount_code.code,
+            used_count=discount_code.used_count,
+            usages=usages,
+        )
+
+    @staticmethod
+    def backpopulate_discount_code(db: Session, code_id: int, user_id: str) -> DiscountCodeBackpopulateResponse:
+        """
+        Find paid registrations that likely used this discount code by comparing
+        the amount paid (via Stripe) against the event/ticket price.
+        Only considers registrations that don't already have a discount_code_id set.
+        """
+        discount_code = db.query(DiscountCode).filter(DiscountCode.code_id == code_id).first()
+        if not discount_code:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Discount code not found"
+            )
+
+        event = discount_code.event
+        if str(event.created_by_user_id) != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to manage this discount code"
+            )
+
+        def calc_expected(base_price):
+            bp = Decimal(str(base_price))
+            if discount_code.discount_type == 'percentage':
+                disc = (bp * discount_code.discount_value) / Decimal('100')
+            else:
+                disc = discount_code.discount_value
+            disc = min(disc, bp)
+            final = max(Decimal('0.00'), bp - disc)
+            return disc, final
+
+        registrations = (
+            db.query(Registration)
+            .join(User, Registration.user_id == User.user_id)
+            .filter(
+                Registration.event_id == event.event_id,
+                Registration.status == 'Paid',
+                Registration.discount_code_id.is_(None),
+                not Registration.member_discount_applied,
+            )
+            .all()
+        )
+
+        matched = []
+        for reg in registrations:
+            if reg.ticket_type_id and reg.ticket_type:
+                base_price = reg.ticket_type.price_euros
+            else:
+                base_price = event.price_euros
+
+            if not base_price or base_price <= 0:
+                continue
+
+            expected_discount, expected_final = calc_expected(base_price)
+
+            paid_amount = reg.custom_amount_euros or reg.final_amount_euros
+            if paid_amount is None:
+                continue
+
+            if abs(Decimal(str(paid_amount)) - expected_final) <= Decimal('0.01'):
+                reg.discount_code_id = discount_code.code_id
+                reg.discount_amount_euros = expected_discount
+                reg.final_amount_euros = expected_final
+                matched.append(reg)
+
+        if matched:
+            actual_total = (
+                db.query(Registration)
+                .filter(Registration.discount_code_id == code_id)
+                .count()
+            )
+            discount_code.used_count = actual_total
+            db.commit()
+
+        entries = [
+            DiscountCodeUsageEntry(
+                registration_id=reg.registration_id,
+                user_email=reg.user.email,
+                user_full_name=reg.user.full_name,
+                registration_status=reg.status,
+                discount_amount_euros=reg.discount_amount_euros,
+                final_amount_euros=reg.final_amount_euros,
+                registration_date=reg.registration_date,
+            )
+            for reg in matched
+        ]
+
+        return DiscountCodeBackpopulateResponse(
+            matched_count=len(matched),
+            matched_registrations=entries,
+        )
