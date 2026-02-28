@@ -515,3 +515,30 @@ class GuestTicket(Base):
 
     event = relationship("Event")
     created_by = relationship("User", foreign_keys=[created_by_user_id])
+
+
+class AttendanceSession(Base):
+    __tablename__ = "attendance_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
+    label = Column(String(100), nullable=False)
+    frozen_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+    total_checked_in = Column(Integer, nullable=False, default=0)
+
+    event = relationship("Event")
+    records = relationship("AttendanceRecord", back_populates="session", cascade="all, delete-orphan")
+
+
+class AttendanceRecord(Base):
+    __tablename__ = "attendance_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey('attendance_sessions.id', ondelete="CASCADE"), nullable=False, index=True)
+    registration_id = Column(Integer, ForeignKey('registrations.registration_id', ondelete="CASCADE"), nullable=True)
+    guest_ticket_id = Column(Integer, ForeignKey('guest_tickets.id', ondelete="CASCADE"), nullable=True)
+    attendee_name = Column(String(200), nullable=False)
+    checked_in = Column(Boolean, nullable=False)
+    checked_in_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    session = relationship("AttendanceSession", back_populates="records")

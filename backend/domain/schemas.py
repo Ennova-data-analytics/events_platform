@@ -870,3 +870,26 @@ class GuestTicketResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class FreezeSessionRequest(BaseModel):
+    label: str = Field(..., min_length=1, max_length=100)
+
+
+class AttendanceSessionResponse(BaseModel):
+    id: int
+    event_id: int
+    label: str
+    frozen_at: datetime
+    total_checked_in: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AttendanceRecordResponse(BaseModel):
+    id: int
+    attendee_name: str
+    checked_in: bool
+    checked_in_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)

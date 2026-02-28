@@ -297,6 +297,41 @@ def resend_guest_ticket_email(
 
 
 # ---------------------------------------------------------------------------
+# Attendance sessions (multi-day support)
+# ---------------------------------------------------------------------------
+
+@router.post("/admin/events/{event_id}/sessions/freeze", response_model=schemas.AttendanceSessionResponse, status_code=status.HTTP_201_CREATED)
+def freeze_attendance_session(
+    event_id: int,
+    data: schemas.FreezeSessionRequest,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser),
+):
+    """Freeze the current check-in state as a named session and reset all tickets for a new session."""
+    return db_tickets.freeze_session(db, event_id, data.label)
+
+
+@router.get("/admin/events/{event_id}/sessions", response_model=list[schemas.AttendanceSessionResponse])
+def list_attendance_sessions(
+    event_id: int,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser),
+):
+    """List all frozen sessions for an event."""
+    return db_tickets.list_sessions(db, event_id)
+
+
+@router.get("/admin/sessions/{session_id}/records", response_model=list[schemas.AttendanceRecordResponse])
+def get_session_records(
+    session_id: int,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser),
+):
+    """Get the per-attendee snapshot for a specific session."""
+    return db_tickets.get_session_records(db, session_id)
+
+
+# ---------------------------------------------------------------------------
 # Email helper
 # ---------------------------------------------------------------------------
 

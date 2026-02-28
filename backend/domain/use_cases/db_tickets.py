@@ -211,3 +211,86 @@ def get_guest_by_id(db: Session, ticket_id: int) -> models.GuestTicket:
     if not guest:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guest ticket not found")
     return guest
+
+
+# ---------------------------------------------------------------------------
+# Attendance sessions (multi-day support)
+# ---------------------------------------------------------------------------
+
+def freeze_session(db: Session, event_id: int, label: str) -> models.AttendanceSession:
+    """
+    Snapshot all current check-in state into an AttendanceSession + AttendanceRecord rows,
+    then reset checked_in on all tickets for the event so a new session can begin.
+    """
+    registrations = (
+        db.query(models.Registration)
+        .filter(
+            models.Registration.event_id == event_id,
+            models.Registration.status.in_(TICKET_STATUSES),
+            models.Registration.ticket_token.isnot(None),
+        )
+        .all()
+    )
+    guests = (
+        db.query(models.GuestTicket)
+        .filter(models.GuestTicket.event_id == event_id)
+        .all()
+    )
+
+    total = sum(1 for r in registrations if r.checked_in) + sum(1 for g in guests if g.checked_in)
+
+    session = models.AttendanceSession(
+        event_id=event_id,
+        label=label,
+        total_checked_in=total,
+    )
+    db.add(session)
+    db.flush()  # get session.id before inserting records
+
+    for reg in registrations:
+        db.add(models.AttendanceRecord(
+            session_id=session.id,
+            registration_id=reg.registration_id,
+            attendee_name=reg.user.full_name or reg.user.email,
+            checked_in=reg.checked_in,
+            checked_in_at=reg.checked_in_at,
+        ))
+        reg.checked_in = False
+        reg.checked_in_at = None
+
+    for guest in guests:
+        db.add(models.AttendanceRecord(
+            session_id=session.id,
+            guest_ticket_id=guest.id,
+            attendee_name=guest.guest_name,
+            checked_in=guest.checked_in,
+            checked_in_at=guest.checked_in_at,
+        ))
+        guest.checked_in = False
+        guest.checked_in_at = None
+
+    db.commit()
+    db.refresh(session)
+    logger.info(f"Session '{label}' frozen for event {event_id}: {total} checked-in")
+    return session
+
+
+def list_sessions(db: Session, event_id: int) -> list[models.AttendanceSession]:
+    return (
+        db.query(models.AttendanceSession)
+        .filter(models.AttendanceSession.event_id == event_id)
+        .order_by(models.AttendanceSession.frozen_at.desc())
+        .all()
+    )
+
+
+def get_session_records(db: Session, session_id: int) -> list[models.AttendanceRecord]:
+    session = db.query(models.AttendanceSession).filter(models.AttendanceSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    return (
+        db.query(models.AttendanceRecord)
+        .filter(models.AttendanceRecord.session_id == session_id)
+        .order_by(models.AttendanceRecord.attendee_name)
+        .all()
+    )

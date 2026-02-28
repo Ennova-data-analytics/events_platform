@@ -1,15 +1,23 @@
 <template>
   <div>
-    <div class="d-flex align-center mb-6">
+    <div class="d-flex align-center mb-6 flex-wrap gap-2">
       <v-btn icon variant="text" @click="$router.back()" class="mr-2">
         <v-icon>mdi-arrow-left</v-icon>
       </v-btn>
-      <h1 class="text-h5 font-weight-bold">Entrance Scanner</h1>
+      <div>
+        <h1 class="text-h5 font-weight-bold">Entrance Scanner</h1>
+        <div v-if="currentSessionLabel" class="text-caption text-grey">
+          Current session: <strong>{{ currentSessionLabel }}</strong>
+        </div>
+      </div>
       <v-spacer />
-      <v-btn-toggle v-model="mode" mandatory color="primary" density="compact" rounded="lg">
+      <v-btn-toggle v-model="mode" mandatory color="primary" density="compact" rounded="lg" class="mr-2">
         <v-btn value="camera" prepend-icon="mdi-camera">Camera</v-btn>
         <v-btn value="manual" prepend-icon="mdi-keyboard">Manual</v-btn>
       </v-btn-toggle>
+      <v-btn color="warning" variant="tonal" prepend-icon="mdi-snowflake" @click="openFreezeDialog">
+        Freeze & New Session
+      </v-btn>
     </div>
 
     <!-- Camera mode -->
@@ -107,13 +115,48 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Freeze session dialog -->
+    <v-dialog v-model="freezeDialog" max-width="420" persistent>
+      <v-card rounded="xl">
+        <v-card-title class="pa-6 pb-2 font-weight-bold">Freeze & Start New Session</v-card-title>
+        <v-card-text class="pa-6 pt-2">
+          <p class="text-body-2 text-grey mb-4">
+            This will archive today's check-ins under a session name, then reset all tickets so attendees can be scanned again for the next session.
+          </p>
+          <v-text-field
+            v-model="freezeLabel"
+            label="Session name"
+            variant="outlined"
+            density="compact"
+            placeholder="e.g. Day 1, Morning Session"
+            :error-messages="freezeError ? [freezeError] : []"
+          />
+        </v-card-text>
+        <v-card-actions class="pa-6 pt-0">
+          <v-spacer />
+          <v-btn variant="text" @click="freezeDialog = false">Cancel</v-btn>
+          <v-btn color="warning" :loading="freezing" @click="doFreeze">
+            Freeze & Reset
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="4000" location="top">
+      {{ snackbar.message }}
+    </v-snackbar>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import { QrcodeStream } from 'vue-qrcode-reader';
 import { TicketService } from '@/services/TicketService';
+
+const route = useRoute();
+const eventId = computed(() => Number(route.params.id));
 
 const mode = ref('camera');
 const manualToken = ref('');
@@ -122,6 +165,20 @@ const cameraError = ref(null);
 
 const result = ref(null);
 const resultDialog = ref(false);
+
+// Session freeze
+const freezeDialog = ref(false);
+const freezeLabel = ref('');
+const freezeError = ref(null);
+const freezing = ref(false);
+const sessionCount = ref(0);
+const currentSessionLabel = ref(null);
+
+const snackbar = ref({ show: false, message: '', color: 'success' });
+
+function showSnack(message, color = 'success') {
+  snackbar.value = { show: true, message, color };
+}
 
 const resultColor = computed(() => {
   if (!result.value) return 'grey';
@@ -137,6 +194,44 @@ const resultIcon = computed(() => {
   return 'mdi-check-circle';
 });
 
+async function loadSessions() {
+  try {
+    const res = await TicketService.listSessions(eventId.value);
+    sessionCount.value = res.data.length;
+    if (res.data.length > 0) {
+      currentSessionLabel.value = res.data[0].label; // most recent first
+    }
+  } catch {
+    // non-fatal
+  }
+}
+
+function openFreezeDialog() {
+  freezeLabel.value = `Day ${sessionCount.value + 1}`;
+  freezeError.value = null;
+  freezeDialog.value = true;
+}
+
+async function doFreeze() {
+  if (!freezeLabel.value.trim()) {
+    freezeError.value = 'Session name is required';
+    return;
+  }
+  freezing.value = true;
+  freezeError.value = null;
+  try {
+    await TicketService.freezeSession(eventId.value, freezeLabel.value.trim());
+    const label = freezeLabel.value.trim();
+    freezeDialog.value = false;
+    await loadSessions();
+    showSnack(`"${label}" archived — scanner reset for new session`);
+  } catch (e) {
+    freezeError.value = e.response?.data?.detail || 'Failed to freeze session';
+  } finally {
+    freezing.value = false;
+  }
+}
+
 function onCameraError(err) {
   console.error('Camera error:', err);
   cameraError.value = err?.message || 'Camera access denied. Please allow camera permissions.';
@@ -147,7 +242,6 @@ async function onDetect(detectedCodes) {
   const raw = detectedCodes?.[0]?.rawValue;
   if (!raw) return;
 
-  // Extract token from URL if the QR encodes the full URL
   const token = raw.includes('/ticket/') ? raw.split('/ticket/').pop() : raw;
   await performCheckIn(token);
 }
@@ -188,6 +282,8 @@ function closeResult() {
 function formatTime(dateStr) {
   return new Date(dateStr).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
+
+onMounted(loadSessions);
 </script>
 
 <style scoped>

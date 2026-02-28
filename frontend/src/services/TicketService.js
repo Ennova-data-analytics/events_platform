@@ -90,4 +90,20 @@ export const TicketService = {
   resendGuestTicketEmail(ticketId) {
     return ApiClient.post(`/admin/guest-tickets/${ticketId}/resend`);
   },
+
+  // -------------------------------------------------------------------------
+  // Attendance sessions (multi-day)
+  // -------------------------------------------------------------------------
+
+  freezeSession(eventId, label) {
+    return ApiClient.post(`/admin/events/${eventId}/sessions/freeze`, { label });
+  },
+
+  listSessions(eventId) {
+    return ApiClient.get(`/admin/events/${eventId}/sessions`);
+  },
+
+  getSessionRecords(sessionId) {
+    return ApiClient.get(`/admin/sessions/${sessionId}/records`);
+  },
 };

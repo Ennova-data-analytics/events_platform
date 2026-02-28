@@ -43,6 +43,7 @@
       <v-tab value="referrals">Referral Links</v-tab>
       <v-tab value="email-history">Email History</v-tab>
       <v-tab value="guests">Guest Tickets</v-tab>
+      <v-tab value="sessions">Sessions</v-tab>
     </v-tabs>
 
     <v-btn-toggle v-model="ennovaFilter" mandatory density="compact" class="mb-4">
@@ -307,6 +308,70 @@
         <!-- Guest Tickets Tab -->
         <v-window-item value="guests">
           <GuestTicketManager v-if="eventId" :event-id="parseInt(eventId)" />
+        </v-window-item>
+
+        <!-- Sessions Tab -->
+        <v-window-item value="sessions">
+          <div class="pa-4">
+            <div class="d-flex align-center mb-4">
+              <div>
+                <h3 class="text-subtitle-1 font-weight-bold">Attendance Sessions</h3>
+                <p class="text-caption text-grey">Frozen attendance snapshots for each day or session.</p>
+              </div>
+            </div>
+
+            <div v-if="sessionsLoading" class="text-center py-8">
+              <v-progress-circular indeterminate color="primary" />
+            </div>
+
+            <v-alert v-else-if="sessions.length === 0" type="info" variant="tonal">
+              No sessions have been frozen yet. Use the <strong>Freeze &amp; New Session</strong> button on the scanner page to archive a day's attendance.
+            </v-alert>
+
+            <v-expansion-panels v-else variant="accordion">
+              <v-expansion-panel
+                v-for="session in sessions"
+                :key="session.id"
+                @group:selected="loadSessionRecords(session)"
+              >
+                <v-expansion-panel-title>
+                  <div class="d-flex align-center ga-4 w-100">
+                    <v-icon>mdi-calendar-check</v-icon>
+                    <div>
+                      <div class="font-weight-medium">{{ session.label }}</div>
+                      <div class="text-caption text-grey">Frozen {{ formatDateTime(session.frozen_at) }}</div>
+                    </div>
+                    <v-spacer />
+                    <v-chip color="primary" size="small" variant="tonal" class="mr-4">
+                      {{ session.total_checked_in }} checked in
+                    </v-chip>
+                  </div>
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <div v-if="sessionRecords[session.id] === undefined" class="text-center py-4">
+                    <v-progress-circular indeterminate size="24" color="primary" />
+                  </div>
+                  <v-data-table
+                    v-else
+                    :headers="sessionRecordHeaders"
+                    :items="sessionRecords[session.id]"
+                    density="compact"
+                    no-data-text="No attendees recorded"
+                  >
+                    <template #item.checked_in="{ item }">
+                      <v-chip :color="item.checked_in ? 'success' : 'default'" size="x-small" variant="tonal">
+                        <v-icon start size="12">{{ item.checked_in ? 'mdi-check-circle' : 'mdi-clock-outline' }}</v-icon>
+                        {{ item.checked_in ? 'Attended' : 'Absent' }}
+                      </v-chip>
+                    </template>
+                    <template #item.checked_in_at="{ item }">
+                      {{ item.checked_in_at ? formatTime(item.checked_in_at) : '—' }}
+                    </template>
+                  </v-data-table>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+          </div>
         </v-window-item>
 
         <!-- Email History Tab -->
@@ -747,6 +812,7 @@ import FeedbackSection from '@/components/feedback/FeedbackSection.vue';
 import DiscountCodeManager from '@/components/admin/DiscountCodeManager.vue';
 import ReferralLinkManager from '@/components/admin/ReferralLinkManager.vue';
 import GuestTicketManager from '@/components/tickets/GuestTicketManager.vue';
+import { TicketService } from '@/services/TicketService';
 
 
 const route = useRoute();
@@ -759,6 +825,50 @@ const customAmount = ref(null);
 const hasFeedbackTemplate = ref(false);
 const feedbackSectionKey = ref(0);
 const isLoading = ref(false);
+
+// Sessions
+const sessions = ref([]);
+const sessionsLoading = ref(false);
+const sessionRecords = ref({});
+const sessionRecordHeaders = [
+  { title: 'Name', key: 'attendee_name' },
+  { title: 'Status', key: 'checked_in', sortable: false },
+  { title: 'Time', key: 'checked_in_at', sortable: false },
+];
+
+async function loadSessions() {
+  if (!eventId.value) return;
+  sessionsLoading.value = true;
+  try {
+    const res = await TicketService.listSessions(eventId.value);
+    sessions.value = res.data;
+  } catch {
+    // non-fatal
+  } finally {
+    sessionsLoading.value = false;
+  }
+}
+
+async function loadSessionRecords(session) {
+  if (sessionRecords.value[session.id] !== undefined) return;
+  sessionRecords.value[session.id] = undefined; // trigger loading state
+  try {
+    const res = await TicketService.getSessionRecords(session.id);
+    sessionRecords.value = { ...sessionRecords.value, [session.id]: res.data };
+  } catch {
+    sessionRecords.value = { ...sessionRecords.value, [session.id]: [] };
+  }
+}
+
+function formatDateTime(dateStr) {
+  return new Date(dateStr).toLocaleString('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+function formatTime(dateStr) {
+  return new Date(dateStr).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
 const expanded = ref([]);
 const signupsEnabled = ref(true);
 const isTogglingSignups = ref(false);
@@ -1385,6 +1495,7 @@ watch(() => route.params.id, () => {
   fetchAttendees();
   fetchTeams();
   fetchEmailLogs();
+  loadSessions();
 });
 
 onMounted(() => {
@@ -1392,6 +1503,7 @@ onMounted(() => {
   fetchAttendees();
   fetchTeams();
   fetchEmailLogs();
+  loadSessions();
 });
 
 // Refresh when component is reactivated (e.g., navigating back from edit page)
@@ -1400,5 +1512,6 @@ onActivated(() => {
   fetchAttendees();
   fetchTeams();
   fetchEmailLogs();
+  loadSessions();
 });
 </script>
