@@ -1,6 +1,7 @@
-import stripe 
+import stripe
+import secrets
 from core.config import settings
-from domain import models 
+from domain import models
 from sqlalchemy.orm import Session
 import logging
 
@@ -95,6 +96,10 @@ class StripeService:
 
         registration.status = 'Paid'
         registration.stripe_payment_intent_id = payment_intent_id
+
+        # Generate ticket token on payment if not already present
+        if not registration.ticket_token:
+            registration.ticket_token = secrets.token_urlsafe(32)
 
         # Increment tickets_sold counter if this registration has a ticket type
         if registration.ticket_type_id:

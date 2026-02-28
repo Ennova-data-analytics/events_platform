@@ -5,6 +5,15 @@
       <h1 class="text-h5">Manage Attendees: {{ eventTitle }}</h1>
       <v-spacer></v-spacer>
       <v-btn
+        color="secondary"
+        variant="tonal"
+        :to="`/admin/events/${eventId}/scanner`"
+        prepend-icon="mdi-qrcode-scan"
+        class="mr-2"
+      >
+        Scanner
+      </v-btn>
+      <v-btn
         color="primary"
         variant="tonal"
         @click="openBulkEmailDialog"
@@ -33,6 +42,7 @@
       <v-tab value="discounts">Discount Codes</v-tab>
       <v-tab value="referrals">Referral Links</v-tab>
       <v-tab value="email-history">Email History</v-tab>
+      <v-tab value="guests">Guest Tickets</v-tab>
     </v-tabs>
 
     <v-btn-toggle v-model="ennovaFilter" mandatory density="compact" class="mb-4">
@@ -97,6 +107,20 @@
 
         <!-- Other Tabs: Approved, Paid, Rejected -->
         <v-window-item v-for="status in ['approved', 'paid', 'rejected']" :key="status" :value="status">
+
+            <!-- Check-in summary bar (Paid + Approved only) -->
+            <div v-if="status !== 'rejected'" class="d-flex align-center gap-3 pa-4 pb-0">
+              <v-chip color="success" variant="tonal" prepend-icon="mdi-check-circle">
+                {{ (status === 'paid' ? paidAttendees : approvedAttendees).filter(a => a.checked_in).length }} checked in
+              </v-chip>
+              <v-chip color="warning" variant="tonal" prepend-icon="mdi-clock-outline">
+                {{ (status === 'paid' ? paidAttendees : approvedAttendees).filter(a => !a.checked_in).length }} not yet
+              </v-chip>
+              <v-chip color="primary" variant="tonal" prepend-icon="mdi-account-group">
+                {{ (status === 'paid' ? paidAttendees : approvedAttendees).length }} total
+              </v-chip>
+            </div>
+
             <v-data-table
                 :headers="status === 'approved' || status === 'rejected' ? attendeeHeadersWithRevert : attendeeHeaders"
                 :items="status === 'approved' ? approvedAttendees : (status === 'paid' ? paidAttendees : rejectedAttendees)"
@@ -138,6 +162,24 @@
                 <template v-slot:item.user.is_ennova_member="{ item }">
                   <v-chip v-if="item.user?.is_ennova_member" color="success" size="small" variant="tonal">Yes</v-chip>
                   <v-chip v-else size="small" variant="tonal">No</v-chip>
+                </template>
+
+                <template v-slot:item.checked_in="{ item }">
+                  <v-chip
+                    :color="item.checked_in ? 'success' : 'default'"
+                    size="small"
+                    variant="tonal"
+                  >
+                    <v-icon start size="13">{{ item.checked_in ? 'mdi-check-circle' : 'mdi-clock-outline' }}</v-icon>
+                    {{ item.checked_in ? 'Checked in' : 'Not yet' }}
+                  </v-chip>
+                </template>
+
+                <template v-slot:item.checked_in_at="{ item }">
+                  <span v-if="item.checked_in_at" class="text-caption">
+                    {{ new Date(item.checked_in_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) }}
+                  </span>
+                  <span v-else class="text-caption text-grey">—</span>
                 </template>
 
                 <template v-slot:item.actions="{ item }">
@@ -260,6 +302,11 @@
         <!-- Referral Links Tab -->
         <v-window-item value="referrals">
           <ReferralLinkManager v-if="eventId" :event-id="parseInt(eventId)" />
+        </v-window-item>
+
+        <!-- Guest Tickets Tab -->
+        <v-window-item value="guests">
+          <GuestTicketManager v-if="eventId" :event-id="parseInt(eventId)" />
         </v-window-item>
 
         <!-- Email History Tab -->
@@ -699,6 +746,7 @@ import { TeamService } from '@/services/TeamService.js';
 import FeedbackSection from '@/components/feedback/FeedbackSection.vue';
 import DiscountCodeManager from '@/components/admin/DiscountCodeManager.vue';
 import ReferralLinkManager from '@/components/admin/ReferralLinkManager.vue';
+import GuestTicketManager from '@/components/tickets/GuestTicketManager.vue';
 
 
 const route = useRoute();
@@ -824,11 +872,13 @@ const attendeeHeaders = ref([
   { title: 'Email', key: 'user.email' },
   { title: 'Ennova Member', key: 'user.is_ennova_member' },
   { title: 'Ticket Type', key: 'ticket_type.name' },
+  { title: 'Check-in', key: 'checked_in', sortable: true },
+  { title: 'Checked in at', key: 'checked_in_at', sortable: true },
   { title: 'Registration Date', key: 'registration_date' },
   { title: 'Degree', key: 'user.degree' },
   { title: 'Year', key: 'user.study_year' },
 ]);
-const pendingHeaders = ref([...attendeeHeaders.value, { title: 'Actions', key: 'actions', sortable: false, align: 'end' }]);
+const pendingHeaders = ref([...attendeeHeaders.value.filter(h => h.key !== 'checked_in' && h.key !== 'checked_in_at'), { title: 'Actions', key: 'actions', sortable: false, align: 'end' }]);
 const attendeeHeadersWithRevert = ref([...attendeeHeaders.value, { title: 'Actions', key: 'actions', sortable: false, align: 'end' }]);
 
 async function fetchEventDetails() {

@@ -4,6 +4,7 @@ import pandas as pd
 from io import BytesIO
 import logging
 import time
+import secrets
 
 from domain import schemas, models
 from domain.services import notification_service, email_service, email_templates
@@ -30,6 +31,10 @@ def approve_registration(
 
     if approval_data.custom_amount_euros is not None:
         reg.custom_amount_euros = approval_data.custom_amount_euros
+
+    # Generate ticket token for free-event approvals (no payment required)
+    if not reg.ticket_token and (reg.final_amount_euros == 0 or reg.final_amount_euros is None):
+        reg.ticket_token = secrets.token_urlsafe(32)
 
     db.commit()
     db.refresh(reg)
@@ -98,6 +103,9 @@ def mark_registration_paid(
         )
 
     reg.status = 'Paid'
+
+    if not reg.ticket_token:
+        reg.ticket_token = secrets.token_urlsafe(32)
 
     # Increment tickets_sold counter if this registration has a ticket type
     if reg.ticket_type_id:

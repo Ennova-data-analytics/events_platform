@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from api.routers import users, auth, events, admin, form_templates, uploads, notifications, payments, email_templates, feedback_templates, feedback, ai_summaries, discount_codes, chat, ticket_types, teams, referral_links
+from api.routers import users, auth, events, admin, form_templates, uploads, notifications, payments, email_templates, feedback_templates, feedback, ai_summaries, discount_codes, chat, ticket_types, teams, referral_links, tickets
 from middleware import setup_middleware
 
 def create_app() -> FastAPI:
@@ -23,6 +23,7 @@ def create_app() -> FastAPI:
     app.include_router(discount_codes.router, tags=["Discount Codes"])
     app.include_router(referral_links.router, tags=["Referral Links"])
     app.include_router(chat.router, prefix="/chat", tags=["Chat"])
+    app.include_router(tickets.router, tags=["Tickets"])
 
 
     @app.get("/")

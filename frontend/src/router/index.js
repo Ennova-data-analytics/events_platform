@@ -64,6 +64,19 @@ const routes = [
     component: () => import('../views/PublicFeedbackFormPage.vue')
   },
   {
+    // Public ticket view — works for both guest tokens and registered-user shared links
+    path: '/ticket/:token',
+    name: 'ticket-view',
+    component: () => import('../views/TicketViewPage.vue')
+  },
+  {
+    // Authenticated user's own ticket for a specific registration
+    path: '/event/:id/ticket/:registrationId',
+    name: 'my-ticket',
+    component: () => import('../views/MyTicketPage.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/admin',
     component: () => import('../views/admin/AdminDashboard.vue'),
     meta: { requiresAuth: true },
@@ -142,6 +155,11 @@ const routes = [
         path: 'events/:id/feedback',
         name: 'admin-event-feedback',
         component: () => import('../views/admin/AdminEventFeedbackPage.vue')
+      },
+      {
+        path: 'events/:id/scanner',
+        name: 'admin-event-scanner',
+        component: () => import('../views/admin/AdminScannerPage.vue')
       },
       {
         path: 'tutorials',

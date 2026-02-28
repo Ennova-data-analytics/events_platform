@@ -50,8 +50,10 @@ class Registration(BaseModel):
     ticket_type_id: int | None = None
     ticket_type: Optional["TicketTypeResponse"] = None
     referral_link_id: int | None = None
+    checked_in: bool = False
+    checked_in_at: datetime | None = None
 
-    model_config = ConfigDict(from_attributes=True) 
+    model_config = ConfigDict(from_attributes=True)
 
 class User(UserBase):
     user_id: uuid.UUID
@@ -820,3 +822,51 @@ class DocumentVectorizeResponse(BaseModel):
     chunks_processed: int
     event_id: int | None = None
     message: str
+
+
+# ============================================================================
+# Ticket / QR entrance schemas
+# ============================================================================
+
+class TicketInfo(BaseModel):
+    """Public ticket info returned to the user or scanner."""
+    token: str
+    attendee_name: str
+    event_name: str
+    event_date_start: datetime
+    event_location: str | None = None
+    ticket_type: str | None = None
+    checked_in: bool
+    checked_in_at: datetime | None = None
+    is_guest: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TicketCheckInResponse(BaseModel):
+    """Response from the scanner check-in endpoint."""
+    valid: bool
+    already_checked_in: bool
+    attendee_name: str
+    event_name: str
+    ticket_type: str | None = None
+    checked_in_at: datetime | None = None
+    message: str
+
+
+class GuestTicketCreate(BaseModel):
+    guest_name: str = Field(..., min_length=1, max_length=200)
+    guest_email: EmailStr
+
+
+class GuestTicketResponse(BaseModel):
+    id: int
+    event_id: int
+    guest_name: str
+    guest_email: str
+    ticket_token: str
+    checked_in: bool
+    checked_in_at: datetime | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

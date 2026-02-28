@@ -27,3 +27,28 @@ def generate_feedback_url(event_id: int, base_url: str) -> str:
     """Generate the feedback form URL for an event"""
     return f"{base_url}/feedback/{event_id}"
 
+
+def generate_ticket_qr_png(token: str, base_url: str, box_size: int = 10, border: int = 4) -> BytesIO:
+    """Generate a QR code PNG for an entrance ticket token.
+
+    Encodes: {base_url}/ticket/{token}
+    Returns a BytesIO buffer positioned at 0.
+    """
+    ticket_url = f"{base_url}/ticket/{token}"
+
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=box_size,
+        border=border,
+    )
+    qr.add_data(ticket_url)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    buffer = BytesIO()
+    img.save(buffer, format='PNG')
+    buffer.seek(0)
+    return buffer
+

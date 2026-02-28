@@ -20,10 +20,13 @@ class EmailService:
         to_name: str,
         subject: str,
         html_content: str,
-        text_content: str | None = None
+        text_content: str | None = None,
+        attachments: list[dict] | None = None,
     ) -> bool:
         """
-        Send an email using Resend API
+        Send an email using Resend API.
+
+        attachments: list of dicts with keys 'filename' and 'content' (bytes or base64 str).
         """
 
         if not self.enabled:
@@ -41,6 +44,16 @@ class EmailService:
 
             if text_content:
                 params["text"] = text_content
+
+            if attachments:
+                import base64
+                resend_attachments = []
+                for att in attachments:
+                    content = att["content"]
+                    if isinstance(content, bytes):
+                        content = base64.b64encode(content).decode()
+                    resend_attachments.append({"filename": att["filename"], "content": content})
+                params["attachments"] = resend_attachments
 
             response = resend.Emails.send(params)
 

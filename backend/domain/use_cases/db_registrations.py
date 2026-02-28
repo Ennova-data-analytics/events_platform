@@ -8,6 +8,7 @@ from domain.use_cases.db_referral_links import ReferralLinkUseCases
 from domain.use_cases import db_teams
 from domain.schemas import DiscountCodeValidation, TeamSelectionRequest
 import uuid
+import secrets
 import logging
 
 logger = logging.getLogger(__name__)
@@ -184,6 +185,11 @@ def create_registration(
     if referral_code:
         referral_link_id = ReferralLinkUseCases.validate_referral_code(db, referral_code, event_id)
 
+    # Generate ticket token immediately for registrations that don't need payment
+    ticket_token = None
+    if initial_status in ('Paid', 'Approved'):
+        ticket_token = secrets.token_urlsafe(32)
+
     db_registration = models.Registration(
         event_id=event_id,
         user_id=user_id,
@@ -194,7 +200,8 @@ def create_registration(
         discount_amount_euros=discount_amount,
         final_amount_euros=final_amount,
         member_discount_applied=member_discount_applied,
-        referral_link_id=referral_link_id
+        referral_link_id=referral_link_id,
+        ticket_token=ticket_token,
     )
 
     db.add(db_registration)

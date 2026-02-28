@@ -401,6 +401,57 @@ For security reasons, this link can only be used once.
     return html_content, text_content
 
 
+def render_guest_ticket_email(
+    guest_name: str,
+    event_name: str,
+    event_date: str,
+    event_location: str | None = None,
+) -> tuple[str, str]:
+    """Render guest ticket invitation email (PDF attached separately)."""
+    location_line = f"<p><strong>Location:</strong> {event_location}</p>" if event_location else ""
+    location_text = f"- Location: {event_location}\n" if event_location else ""
+
+    content = f"""
+        <h2>You're invited! 🎟️</h2>
+        <p>Hi {guest_name},</p>
+        <p>You have been invited to attend <strong>{event_name}</strong>. Your entrance ticket is attached to this email as a PDF.</p>
+
+        <div class="event-details">
+            <h3>Event Details</h3>
+            <p><strong>Event:</strong> {event_name}</p>
+            <p><strong>Date:</strong> {event_date}</p>
+            {location_line}
+        </div>
+
+        <p>Please save or print the attached ticket and show it at the entrance — the QR code will be scanned to verify your entry.</p>
+        <p>We look forward to seeing you there!</p>
+    """
+
+    base = Template(get_base_template())
+    html_content = base.render(
+        header_title="Your Entrance Ticket",
+        content=content,
+    )
+
+    text_content = f"""
+Your Entrance Ticket
+
+Hi {guest_name},
+
+You have been invited to attend {event_name}. Your entrance ticket is attached to this email as a PDF.
+
+Event Details:
+- Event: {event_name}
+- Date: {event_date}
+{location_text}
+Please save or print the attached ticket and show it at the entrance.
+
+We look forward to seeing you there!
+"""
+
+    return html_content, text_content
+
+
 def render_bulk_email(
     user_name: str,
     event_name: str,

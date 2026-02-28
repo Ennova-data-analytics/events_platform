@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page {
+      size: A4;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: #f4f4f4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 40px;
+    }
+
+    .ticket {
+      background: #ffffff;
+      border-radius: 16px;
+      overflow: hidden;
+      max-width: 560px;
+      width: 100%;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+    }
+
+    .ticket-header {
+      background: #13182e;
+      color: #ffffff;
+      padding: 32px 36px 28px;
+    }
+
+    .ticket-header .label {
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      opacity: 0.6;
+      margin-bottom: 8px;
+    }
+
+    .ticket-header .event-name {
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .ticket-body {
+      padding: 28px 36px;
+      display: flex;
+      gap: 28px;
+      align-items: flex-start;
+    }
+
+    .ticket-details {
+      flex: 1;
+    }
+
+    .detail-row {
+      margin-bottom: 18px;
+    }
+
+    .detail-row .detail-label {
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #999;
+      margin-bottom: 3px;
+    }
+
+    .detail-row .detail-value {
+      font-size: 15px;
+      font-weight: 600;
+      color: #13182e;
+    }
+
+    .qr-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .qr-section img {
+      width: 140px;
+      height: 140px;
+      border: 1px solid #eee;
+      border-radius: 8px;
+    }
+
+    .qr-section .qr-hint {
+      font-size: 9px;
+      color: #aaa;
+      margin-top: 6px;
+      text-align: center;
+    }
+
+    .ticket-footer {
+      border-top: 1px dashed #e0e0e0;
+      padding: 16px 36px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #fafafa;
+    }
+
+    .ticket-footer .footer-text {
+      font-size: 11px;
+      color: #aaa;
+    }
+
+    .ticket-footer .badge {
+      background: #13182e;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+    }
+
+    {% if ticket_type == 'Guest' %}
+    .ticket-header {
+      background: #2d5016;
+    }
+    {% endif %}
+  </style>
+</head>
+<body>
+  <div class="ticket">
+    <div class="ticket-header">
+      <div class="label">Entrance Ticket</div>
+      <div class="event-name">{{ event.event_name }}</div>
+    </div>
+
+    <div class="ticket-body">
+      <div class="ticket-details">
+        <div class="detail-row">
+          <div class="detail-label">Attendee</div>
+          <div class="detail-value">{{ attendee_name }}</div>
+        </div>
+
+        <div class="detail-row">
+          <div class="detail-label">Date</div>
+          <div class="detail-value">
+            {{ event.event_date_start.strftime('%A, %d %B %Y') }}
+          </div>
+        </div>
+
+        <div class="detail-row">
+          <div class="detail-label">Time</div>
+          <div class="detail-value">
+            {{ event.event_date_start.strftime('%H:%M') }}
+            {% if event.event_date_end %}– {{ event.event_date_end.strftime('%H:%M') }}{% endif %}
+          </div>
+        </div>
+
+        {% if event.location %}
+        <div class="detail-row">
+          <div class="detail-label">Location</div>
+          <div class="detail-value">{{ event.location }}</div>
+        </div>
+        {% endif %}
+
+        {% if ticket_type %}
+        <div class="detail-row">
+          <div class="detail-label">Ticket Type</div>
+          <div class="detail-value">{{ ticket_type }}</div>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="qr-section">
+        <img src="data:image/png;base64,{{ qr_b64 }}" alt="QR Code">
+        <div class="qr-hint">Scan at entrance</div>
+      </div>
+    </div>
+
+    <div class="ticket-footer">
+      <span class="footer-text">{{ ticket_url }}</span>
+      {% if ticket_type == 'Guest' %}
+        <span class="badge">Guest</span>
+      {% else %}
+        <span class="badge">Valid</span>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

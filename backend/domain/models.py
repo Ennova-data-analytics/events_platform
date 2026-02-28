@@ -1,4 +1,5 @@
 import uuid
+import secrets
 from datetime import datetime
 from sqlalchemy import (
     Boolean, Column, ForeignKey, Integer, String, TIMESTAMP, Table,
@@ -229,6 +230,9 @@ class Registration(Base):
     registration_date = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     member_discount_applied = Column(Boolean, default=False, nullable=False)
     referral_link_id = Column(Integer, ForeignKey('referral_links.link_id', ondelete='SET NULL'), nullable=True, index=True)
+    ticket_token = Column(String(64), unique=True, nullable=True, index=True)
+    checked_in = Column(Boolean, default=False, nullable=False)
+    checked_in_at = Column(TIMESTAMP(timezone=True), nullable=True)
 
     user = relationship("User", back_populates="registrations")
     event = relationship("Event", back_populates="registrations")
@@ -494,3 +498,20 @@ class TeamMember(Base):
 
     def __repr__(self):
         return f"<TeamMember(member_id={self.member_id}, team_id={self.team_id}, registration_id={self.registration_id})>"
+
+
+class GuestTicket(Base):
+    __tablename__ = "guest_tickets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
+    guest_name = Column(String(200), nullable=False)
+    guest_email = Column(String(200), nullable=False)
+    ticket_token = Column(String(64), unique=True, nullable=False, index=True, default=lambda: secrets.token_urlsafe(32))
+    checked_in = Column(Boolean, default=False, nullable=False)
+    checked_in_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="SET NULL"), nullable=True)
+
+    event = relationship("Event")
+    created_by = relationship("User", foreign_keys=[created_by_user_id])

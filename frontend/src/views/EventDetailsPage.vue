@@ -126,6 +126,21 @@
             </v-btn>
           </div>
 
+          <div
+            v-if="(registrationStatus === 'Paid' || registrationStatus === 'Approved') && userRegistration"
+            class="mt-3"
+          >
+            <v-btn
+              color="primary"
+              size="large"
+              block
+              :to="{ name: 'my-ticket', params: { id: eventStore.currentEvent.event_id, registrationId: userRegistration.registration_id } }"
+              prepend-icon="mdi-ticket-confirmation"
+            >
+              View My Ticket
+            </v-btn>
+          </div>
+
           <div v-if="registrationStatus === 'Approved' || registrationStatus === 'Paid'" class="mt-4">
             <v-menu>
               <template v-slot:activator="{ props }">
@@ -290,12 +305,16 @@ const parsedDescription = computed(() => {
   return DOMPurify.sanitize(marked.parse(eventStore.currentEvent.description));
 });
 
+const userRegistration = computed(() => {
+  if (!authStore.user || !eventStore.currentEvent) return null;
+  return authStore.user.registrations?.find(
+    reg => reg.event.event_id === eventStore.currentEvent.event_id
+  ) ?? null;
+});
+
 const registrationStatus = computed(() => {
   if (!authStore.user || !eventStore.currentEvent) return 'loading';
-  const registration = authStore.user.registrations?.find(
-    reg => reg.event.event_id === eventStore.currentEvent.event_id
-  );
-  return registration ? registration.status : 'not_registered';
+  return userRegistration.value ? userRegistration.value.status : 'not_registered';
 });
 
 // UX Helper: Check if tickets exist
