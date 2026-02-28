@@ -824,9 +824,6 @@ class DocumentVectorizeResponse(BaseModel):
     message: str
 
 
-# ============================================================================
-# Ticket / QR entrance schemas
-# ============================================================================
 
 class TicketInfo(BaseModel):
     """Public ticket info returned to the user or scanner."""

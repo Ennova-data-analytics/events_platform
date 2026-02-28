@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, status, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from io import BytesIO
@@ -9,7 +9,6 @@ from domain.use_cases import db_tickets
 from domain.services.email_service import email_service
 from domain.services.email_templates import render_guest_ticket_email
 from api import deps
-from api.deps import get_current_active_organiser
 from core.config import settings
 from core.qr_service import generate_ticket_qr_png
 
@@ -18,17 +17,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# ---------------------------------------------------------------------------
-# PDF helper  (ReportLab — pure Python, no system deps)
-# ---------------------------------------------------------------------------
 
 def _build_ticket_pdf(event: models.Event, attendee_name: str, token: str, ticket_type: str | None) -> bytes:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import cm
-    from reportlab.lib.colors import HexColor, white, black, lightgrey
+    from reportlab.lib.colors import HexColor, white
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_LEFT, TA_CENTER
+    from reportlab.lib.enums import TA_CENTER
     from PIL import Image as PILImage
 
     buf = BytesIO()
@@ -40,7 +36,6 @@ def _build_ticket_pdf(event: models.Event, attendee_name: str, token: str, ticke
 
     DARK = HexColor('#13182e')
     GREY = HexColor('#9e9e9e')
-    LIGHT_GREY = HexColor('#f5f5f5')
 
     styles = getSampleStyleSheet()
 
@@ -56,13 +51,11 @@ def _build_ticket_pdf(event: models.Event, attendee_name: str, token: str, ticke
     def detail(label, value):
         return [Paragraph(label.upper(), label_style), Paragraph(str(value), value_style)]
 
-    # Build event date strings
     event_date = event.event_date_start.strftime('%A, %d %B %Y')
     event_time = event.event_date_start.strftime('%H:%M')
     if event.event_date_end:
         event_time += f" – {event.event_date_end.strftime('%H:%M')}"
 
-    # QR code image
     qr_buf = generate_ticket_qr_png(token, settings.FRONTEND_URL, box_size=8)
     pil_img = PILImage.open(qr_buf)
     qr_img_buf = BytesIO()
@@ -70,7 +63,6 @@ def _build_ticket_pdf(event: models.Event, attendee_name: str, token: str, ticke
     qr_img_buf.seek(0)
     qr_img = RLImage(qr_img_buf, width=4*cm, height=4*cm)
 
-    # Header block (dark background via Table)
     header_content = [
         Paragraph('ENTRANCE TICKET', header_label_style),
         Spacer(1, 4),
@@ -140,9 +132,7 @@ def _pdf_response(pdf_bytes: bytes, event_name: str) -> StreamingResponse:
     )
 
 
-# ---------------------------------------------------------------------------
-# User ticket endpoints  (auth required)
-# ---------------------------------------------------------------------------
+
 
 @router.get("/tickets/my/{registration_id}", response_model=schemas.TicketInfo)
 def get_my_ticket_info(
@@ -180,9 +170,7 @@ def download_my_ticket_pdf(
     return _pdf_response(pdf, reg.event.event_name)
 
 
-# ---------------------------------------------------------------------------
-# Public token-based endpoints  (guests + registered users via direct link)
-# ---------------------------------------------------------------------------
+
 
 @router.get("/tickets/view/{token}", response_model=schemas.TicketInfo)
 def get_ticket_by_token(token: str, db: Session = Depends(deps.get_db)):
@@ -193,7 +181,7 @@ def get_ticket_by_token(token: str, db: Session = Depends(deps.get_db)):
 @router.get("/tickets/view/{token}/qr")
 def get_ticket_qr_by_token(token: str, db: Session = Depends(deps.get_db)):
     """Public — return QR PNG for any valid token."""
-    db_tickets.get_ticket_by_token(db, token)  # validates existence
+    db_tickets.get_ticket_by_token(db, token)
     buf = generate_ticket_qr_png(token, settings.FRONTEND_URL)
     return StreamingResponse(buf, media_type="image/png", headers={"Cache-Control": "no-store"})
 
@@ -203,7 +191,6 @@ def get_ticket_pdf_by_token(token: str, db: Session = Depends(deps.get_db)):
     """Public — download PDF ticket for any valid token."""
     info = db_tickets.get_ticket_by_token(db, token)
 
-    # Re-fetch model to get event relationship for PDF template
     reg = db_tickets.get_registration_by_token(db, token)
     if reg:
         pdf = _build_ticket_pdf(reg.event, info.attendee_name, token, info.ticket_type)
@@ -214,9 +201,6 @@ def get_ticket_pdf_by_token(token: str, db: Session = Depends(deps.get_db)):
     return _pdf_response(pdf, guest.event.event_name)
 
 
-# ---------------------------------------------------------------------------
-# Scanner / check-in  (organiser only)
-# ---------------------------------------------------------------------------
 
 @router.post("/tickets/check-in/{token}", response_model=schemas.TicketCheckInResponse)
 def check_in_ticket(
@@ -228,9 +212,6 @@ def check_in_ticket(
     return db_tickets.check_in_by_token(db, token)
 
 
-# ---------------------------------------------------------------------------
-# Guest ticket management  (organiser only)
-# ---------------------------------------------------------------------------
 
 @router.post("/admin/events/{event_id}/guest-tickets", response_model=schemas.GuestTicketResponse, status_code=status.HTTP_201_CREATED)
 def create_guest_ticket(
@@ -296,9 +277,6 @@ def resend_guest_ticket_email(
     )
 
 
-# ---------------------------------------------------------------------------
-# Attendance sessions (multi-day support)
-# ---------------------------------------------------------------------------
 
 @router.post("/admin/events/{event_id}/sessions/freeze", response_model=schemas.AttendanceSessionResponse, status_code=status.HTTP_201_CREATED)
 def freeze_attendance_session(
@@ -331,9 +309,6 @@ def get_session_records(
     return db_tickets.get_session_records(db, session_id)
 
 
-# ---------------------------------------------------------------------------
-# Email helper
-# ---------------------------------------------------------------------------
 
 def _send_guest_ticket_email(guest_name: str, guest_email: str, event: models.Event, token: str):
     event_date = event.event_date_start.strftime('%A, %d %B %Y')

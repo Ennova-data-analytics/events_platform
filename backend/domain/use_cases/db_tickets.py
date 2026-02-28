@@ -1,4 +1,3 @@
-"""Use cases for ticket operations (check-in, guest tickets, token lookup)."""
 from datetime import datetime
 import secrets
 import logging
@@ -13,9 +12,7 @@ logger = logging.getLogger(__name__)
 TICKET_STATUSES = {'Paid', 'Approved'}
 
 
-# ---------------------------------------------------------------------------
-# Token lookup helpers
-# ---------------------------------------------------------------------------
+
 
 def get_registration_by_token(db: Session, token: str) -> models.Registration | None:
     return db.query(models.Registration).filter(
@@ -50,9 +47,7 @@ def get_registration_for_user(db: Session, registration_id: int, user_id) -> mod
     return reg
 
 
-# ---------------------------------------------------------------------------
-# Ticket info builders
-# ---------------------------------------------------------------------------
+
 
 def ticket_info_from_registration(reg: models.Registration) -> schemas.TicketInfo:
     return schemas.TicketInfo(
@@ -97,9 +92,7 @@ def get_ticket_by_token(db: Session, token: str) -> schemas.TicketInfo:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
 
 
-# ---------------------------------------------------------------------------
-# Check-in
-# ---------------------------------------------------------------------------
+
 
 def check_in_by_token(db: Session, token: str) -> schemas.TicketCheckInResponse:
     """Verify and check-in a ticket by token."""
@@ -160,9 +153,7 @@ def check_in_by_token(db: Session, token: str) -> schemas.TicketCheckInResponse:
     )
 
 
-# ---------------------------------------------------------------------------
-# Guest tickets
-# ---------------------------------------------------------------------------
+
 
 def create_guest_ticket(
     db: Session,
@@ -213,9 +204,6 @@ def get_guest_by_id(db: Session, ticket_id: int) -> models.GuestTicket:
     return guest
 
 
-# ---------------------------------------------------------------------------
-# Attendance sessions (multi-day support)
-# ---------------------------------------------------------------------------
 
 def freeze_session(db: Session, event_id: int, label: str) -> models.AttendanceSession:
     """
