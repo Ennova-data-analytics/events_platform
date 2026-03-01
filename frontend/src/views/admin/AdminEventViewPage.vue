@@ -38,20 +38,22 @@
       </div>
     </div>
 
-    <v-tabs v-model="tab" bg-color="surface" class="mb-4" show-arrows>
-      <v-tab value="pending" :class="$vuetify.display.mobile ? 'text-caption' : ''">Pending ({{ pendingAttendees.length }})</v-tab>
-      <v-tab value="approved" :class="$vuetify.display.mobile ? 'text-caption' : ''">Approved ({{ approvedAttendees.length }})</v-tab>
-      <v-tab value="paid" :class="$vuetify.display.mobile ? 'text-caption' : ''">Paid ({{ paidAttendees.length }})</v-tab>
-      <v-tab value="rejected" :class="$vuetify.display.mobile ? 'text-caption' : ''">Rejected ({{ rejectedAttendees.length }})</v-tab>
-      <v-tab value="teams" :class="$vuetify.display.mobile ? 'text-caption' : ''">Teams</v-tab>
-      <v-tab value="discounts" :class="$vuetify.display.mobile ? 'text-caption' : ''">Discounts</v-tab>
-      <v-tab value="referrals" :class="$vuetify.display.mobile ? 'text-caption' : ''">Referrals</v-tab>
-      <v-tab value="email-history" :class="$vuetify.display.mobile ? 'text-caption' : ''">Emails</v-tab>
-      <v-tab value="guests" :class="$vuetify.display.mobile ? 'text-caption' : ''">Guests</v-tab>
-      <v-tab value="sessions" :class="$vuetify.display.mobile ? 'text-caption' : ''">Sessions</v-tab>
+    <v-tabs v-model="tab" bg-color="surface" class="mb-1">
+      <v-tab value="pending">Pending ({{ pendingAttendees.length }})</v-tab>
+      <v-tab value="approved">Approved ({{ approvedAttendees.length }})</v-tab>
+      <v-tab value="paid">Paid ({{ paidAttendees.length }})</v-tab>
+      <v-tab value="rejected">Rejected ({{ rejectedAttendees.length }})</v-tab>
+    </v-tabs>
+    <v-tabs v-model="tab" bg-color="surface" class="mb-4" density="compact">
+      <v-tab value="teams">Teams</v-tab>
+      <v-tab value="discounts">Discounts</v-tab>
+      <v-tab value="referrals">Referrals</v-tab>
+      <v-tab value="email-history">Emails</v-tab>
+      <v-tab value="guests">Guests</v-tab>
+      <v-tab value="sessions">Sessions</v-tab>
     </v-tabs>
 
-    <v-btn-toggle v-model="ennovaFilter" mandatory density="compact" class="mb-4">
+    <v-btn-toggle v-if="['pending', 'approved', 'paid', 'rejected'].includes(tab)" v-model="ennovaFilter" mandatory density="compact" class="mb-4">
       <v-btn value="all" size="small">All</v-btn>
       <v-btn value="members" size="small">Ennova Members</v-btn>
       <v-btn value="non-members" size="small">Non-Members</v-btn>

@@ -17,7 +17,7 @@
           color="error"
           overlap
         >
-          <v-icon>mdi-bell</v-icon>
+          <v-icon color="white">mdi-bell</v-icon>
         </v-badge>
       </v-btn>
     </template>
