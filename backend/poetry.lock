@@ -3538,6 +3538,29 @@ gpu = ["onnxruntime-gpu"]
 rocm = ["onnxruntime-rocm"]
 
 [[package]]
+name = "reportlab"
+version = "4.4.10"
+description = "The Reportlab Toolkit"
+optional = false
+python-versions = "<4,>=3.9"
+groups = ["main"]
+files = [
+    {file = "reportlab-4.4.10-py3-none-any.whl", hash = "sha256:5abc815746ae2bc44e7ff25db96814f921349ca814c992c7eac3c26029bf7c24"},
+    {file = "reportlab-4.4.10.tar.gz", hash = "sha256:5cbbb34ac3546039d0086deb2938cdec06b12da3cdb836e813258eb33cd28487"},
+]
+
+[package.dependencies]
+charset-normalizer = "*"
+pillow = ">=9.0.0"
+
+[package.extras]
+accel = ["rl_accel (>=0.9.0,<1.1)"]
+bidi = ["rlbidi"]
+pycairo = ["freetype-py (>=2.3.0,<2.4)", "rlPyCairo (>=0.2.0,<1)"]
+renderpm = ["rl_renderPM (>=4.0.3,<4.1)"]
+shaping = ["uharfbuzz"]
+
+[[package]]
 name = "requests"
 version = "2.32.5"
 description = "Python HTTP for Humans."
@@ -5085,4 +5108,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.14"
-content-hash = "393df8b54671fa5279967cbcf297fe822c786264da55b2c35c2cef6171ae8073"
+content-hash = "3717766926e9bc2ce6fc73e348e3e25a68941fbc27903191be9effe3019a977b"
