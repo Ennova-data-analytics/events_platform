@@ -1,9 +1,10 @@
 <template>
   <div>
     <div class="d-flex justify-space-between align-center mb-4">
-      <h1 class="text-h5">Manage Events</h1>
-      <v-btn to="/admin/events/create" color="primary" prepend-icon="mdi-plus">
-        Create Event
+      <h1 :class="$vuetify.display.mobile ? 'text-h6' : 'text-h5'">Manage Events</h1>
+      <v-btn to="/admin/events/create" color="primary" prepend-icon="mdi-plus" :size="$vuetify.display.mobile ? 'small' : 'default'">
+        <span class="d-none d-sm-inline">Create Event</span>
+        <span class="d-sm-none">Create</span>
       </v-btn>
     </div>
     
@@ -56,7 +57,7 @@
         </v-data-table>
       </v-card-text>
     </v-card>
-    <v-dialog v-model="deleteDialog" max-width="500px">
+    <v-dialog v-model="deleteDialog" :max-width="$vuetify.display.mobile ? '90vw' : '500px'">
       <v-card>
         <v-card-title class="text-h5">Are you sure?</v-card-title>
         <v-card-text>
@@ -73,12 +74,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useDisplay } from 'vuetify';
 import { useEventStore } from '@/stores/events.store.js';
 
 const eventStore = useEventStore();
 
-const headers = ref([
+const { mobile } = useDisplay();
+const headers = computed(() => mobile.value ? [
+  { title: 'Event Name', key: 'event_name', sortable: true },
+  { title: 'Date', key: 'event_date_start', sortable: true },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'end' },
+] : [
   { title: 'Event Name', key: 'event_name', sortable: true },
   { title: 'Date', key: 'event_date_start', sortable: true },
   { title: 'Location', key: 'location', sortable: false },

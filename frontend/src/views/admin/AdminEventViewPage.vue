@@ -1,49 +1,54 @@
 <template>
   <div>
-    <div class="d-flex align-center mb-4">
-      <v-btn icon="mdi-arrow-left" variant="text" to="/admin/events" class="mr-2"></v-btn>
-      <h1 class="text-h5">Manage Attendees: {{ eventTitle }}</h1>
-      <v-spacer></v-spacer>
-      <v-btn
-        color="secondary"
-        variant="tonal"
-        :to="`/admin/events/${eventId}/scanner`"
-        prepend-icon="mdi-qrcode-scan"
-        class="mr-2"
-      >
-        Scanner
-      </v-btn>
-      <v-btn
-        color="primary"
-        variant="tonal"
-        @click="openBulkEmailDialog"
-        prepend-icon="mdi-email-multiple"
-        class="mr-2"
-      >
-        Send Bulk Email
-      </v-btn>
-      <v-btn
-        :color="signupsEnabled ? 'success' : 'error'"
-        variant="tonal"
-        @click="toggleSignups"
-        :loading="isTogglingSignups"
-        prepend-icon="mdi-account-plus"
-      >
-        {{ signupsEnabled ? 'Signups Enabled' : 'Signups Disabled' }}
-      </v-btn>
+    <div class="mb-4">
+      <div class="d-flex align-center mb-2">
+        <v-btn icon="mdi-arrow-left" variant="text" to="/admin/events" class="mr-2"></v-btn>
+        <h1 :class="$vuetify.display.mobile ? 'text-h6' : 'text-h5'">{{ $vuetify.display.mobile ? eventTitle : `Manage Attendees: ${eventTitle}` }}</h1>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <v-btn
+          color="secondary"
+          variant="tonal"
+          :to="`/admin/events/${eventId}/scanner`"
+          prepend-icon="mdi-qrcode-scan"
+          :size="$vuetify.display.mobile ? 'small' : 'default'"
+        >
+          Scanner
+        </v-btn>
+        <v-btn
+          color="primary"
+          variant="tonal"
+          @click="openBulkEmailDialog"
+          prepend-icon="mdi-email-multiple"
+          :size="$vuetify.display.mobile ? 'small' : 'default'"
+        >
+          <span class="d-none d-sm-inline">Send Bulk Email</span>
+          <span class="d-sm-none">Bulk Email</span>
+        </v-btn>
+        <v-btn
+          :color="signupsEnabled ? 'success' : 'error'"
+          variant="tonal"
+          @click="toggleSignups"
+          :loading="isTogglingSignups"
+          prepend-icon="mdi-account-plus"
+          :size="$vuetify.display.mobile ? 'small' : 'default'"
+        >
+          {{ signupsEnabled ? 'Signups Enabled' : 'Signups Disabled' }}
+        </v-btn>
+      </div>
     </div>
 
-    <v-tabs v-model="tab" bg-color="surface" class="mb-4">
-      <v-tab value="pending">Pending Approval ({{ pendingAttendees.length }})</v-tab>
-      <v-tab value="approved">Approved ({{ approvedAttendees.length }})</v-tab>
-      <v-tab value="paid">Paid ({{ paidAttendees.length }})</v-tab>
-      <v-tab value="rejected">Rejected ({{ rejectedAttendees.length }})</v-tab>
-      <v-tab value="teams">Teams</v-tab>
-      <v-tab value="discounts">Discount Codes</v-tab>
-      <v-tab value="referrals">Referral Links</v-tab>
-      <v-tab value="email-history">Email History</v-tab>
-      <v-tab value="guests">Guest Tickets</v-tab>
-      <v-tab value="sessions">Sessions</v-tab>
+    <v-tabs v-model="tab" bg-color="surface" class="mb-4" show-arrows>
+      <v-tab value="pending" :class="$vuetify.display.mobile ? 'text-caption' : ''">Pending ({{ pendingAttendees.length }})</v-tab>
+      <v-tab value="approved" :class="$vuetify.display.mobile ? 'text-caption' : ''">Approved ({{ approvedAttendees.length }})</v-tab>
+      <v-tab value="paid" :class="$vuetify.display.mobile ? 'text-caption' : ''">Paid ({{ paidAttendees.length }})</v-tab>
+      <v-tab value="rejected" :class="$vuetify.display.mobile ? 'text-caption' : ''">Rejected ({{ rejectedAttendees.length }})</v-tab>
+      <v-tab value="teams" :class="$vuetify.display.mobile ? 'text-caption' : ''">Teams</v-tab>
+      <v-tab value="discounts" :class="$vuetify.display.mobile ? 'text-caption' : ''">Discounts</v-tab>
+      <v-tab value="referrals" :class="$vuetify.display.mobile ? 'text-caption' : ''">Referrals</v-tab>
+      <v-tab value="email-history" :class="$vuetify.display.mobile ? 'text-caption' : ''">Emails</v-tab>
+      <v-tab value="guests" :class="$vuetify.display.mobile ? 'text-caption' : ''">Guests</v-tab>
+      <v-tab value="sessions" :class="$vuetify.display.mobile ? 'text-caption' : ''">Sessions</v-tab>
     </v-tabs>
 
     <v-btn-toggle v-model="ennovaFilter" mandatory density="compact" class="mb-4">
@@ -469,7 +474,7 @@
       {{ snackbar.text }}
     </v-snackbar>
 
-    <v-dialog v-model="confirmDialog.show" max-width="500">
+    <v-dialog v-model="confirmDialog.show" :max-width="$vuetify.display.mobile ? '90vw' : '500px'">
       <v-card>
         <v-card-title class="text-h5">
           {{ confirmDialog.action === 'approve' ? 'Approve' : 'Reject' }} Candidate?
@@ -509,7 +514,7 @@
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="revertDialog.show" max-width="500">
+    <v-dialog v-model="revertDialog.show" :max-width="$vuetify.display.mobile ? '90vw' : '500px'">
       <v-card>
         <v-card-title class="text-h5">
           Revert to Pending Approval?
@@ -534,7 +539,7 @@
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="deleteDialog.show" max-width="500">
+    <v-dialog v-model="deleteDialog.show" :max-width="$vuetify.display.mobile ? '90vw' : '500px'">
       <v-card>
         <v-card-title class="text-h5">
           Delete Registration?
@@ -559,7 +564,7 @@
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="markPaidDialog.show" max-width="500">
+    <v-dialog v-model="markPaidDialog.show" :max-width="$vuetify.display.mobile ? '90vw' : '500px'">
       <v-card>
         <v-card-title class="text-h5">
           Mark as Paid?
@@ -585,7 +590,7 @@
     </v-dialog>
 
     <!-- Create/Edit Team Dialog -->
-    <v-dialog v-model="teamDialog.show" max-width="600px" persistent>
+    <v-dialog v-model="teamDialog.show" :max-width="$vuetify.display.mobile ? '95vw' : '600px'" persistent>
       <v-card>
         <v-card-title>
           <span class="text-h5">{{ teamDialog.isEditing ? 'Edit' : 'Create' }} Team</span>
@@ -630,7 +635,7 @@
     </v-dialog>
 
     <!-- Add Member Dialog -->
-    <v-dialog v-model="addMemberDialog.show" max-width="600px" persistent>
+    <v-dialog v-model="addMemberDialog.show" :max-width="$vuetify.display.mobile ? '95vw' : '600px'" persistent>
       <v-card>
         <v-card-title>
           <span class="text-h5">Add Member to {{ addMemberDialog.teamName }}</span>
@@ -677,7 +682,7 @@
     </v-dialog>
 
     <!-- Remove Member Dialog -->
-    <v-dialog v-model="removeMemberDialog.show" max-width="500">
+    <v-dialog v-model="removeMemberDialog.show" :max-width="$vuetify.display.mobile ? '90vw' : '500px'">
       <v-card>
         <v-card-title class="text-h5">
           Remove Team Member?
@@ -702,7 +707,7 @@
     </v-dialog>
 
     <!-- Delete Team Dialog -->
-    <v-dialog v-model="deleteTeamDialog.show" max-width="500">
+    <v-dialog v-model="deleteTeamDialog.show" :max-width="$vuetify.display.mobile ? '90vw' : '500px'">
       <v-card>
         <v-card-title class="text-h5">
           Delete Team?
@@ -728,7 +733,7 @@
     </v-dialog>
 
     <!-- Bulk Email Dialog -->
-    <v-dialog v-model="bulkEmailDialog.show" max-width="700" scrollable>
+    <v-dialog v-model="bulkEmailDialog.show" :max-width="$vuetify.display.mobile ? '95vw' : '700px'" scrollable>
       <v-card>
         <v-card-title class="text-h5">
           Send Bulk Email

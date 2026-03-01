@@ -2,7 +2,7 @@
   <v-container fluid>
     <v-row>
       <v-col cols="12">
-        <h1 class="text-h4 mb-4">Ennova Members Management</h1>
+        <h1 :class="$vuetify.display.mobile ? 'text-h5 mb-4' : 'text-h4 mb-4'">Ennova Members Management</h1>
         <p class="text-subtitle-1 mb-6">
           Manage Ennova association members. Members marked here will automatically bypass payment for events marked as "Free for Members".
         </p>
@@ -80,7 +80,7 @@
     </v-row>
 
     <!-- Add Member Dialog -->
-    <v-dialog v-model="addMemberDialog" max-width="600px">
+    <v-dialog v-model="addMemberDialog" :max-width="$vuetify.display.mobile ? '95vw' : '600px'">
       <v-card>
         <v-card-title>
           <span class="text-h5">Add Ennova Member</span>
@@ -123,7 +123,7 @@
     </v-dialog>
 
     <!-- Excel Import Dialog -->
-    <v-dialog v-model="excelImportDialog" max-width="700px">
+    <v-dialog v-model="excelImportDialog" :max-width="$vuetify.display.mobile ? '95vw' : '700px'">
       <v-card>
         <v-card-title>
           <span class="text-h5">Import Members from Excel</span>
@@ -214,7 +214,7 @@
     </v-dialog>
 
     <!-- Remove Member Confirmation Dialog -->
-    <v-dialog v-model="removeConfirmDialog" max-width="500px">
+    <v-dialog v-model="removeConfirmDialog" :max-width="$vuetify.display.mobile ? '90vw' : '500px'">
       <v-card>
         <v-card-title class="text-h5">Confirm Removal</v-card-title>
         <v-card-text>

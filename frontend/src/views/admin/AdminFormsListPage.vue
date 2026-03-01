@@ -1,9 +1,10 @@
 <template>
   <div>
     <div class="d-flex justify-space-between align-center mb-4">
-      <h1 class="text-h5">Manage Form Templates</h1>
-      <v-btn to="/admin/forms/create" color="primary" prepend-icon="mdi-plus">
-        Create Template
+      <h1 :class="$vuetify.display.mobile ? 'text-h6' : 'text-h5'">Manage Form Templates</h1>
+      <v-btn to="/admin/forms/create" color="primary" prepend-icon="mdi-plus" :size="$vuetify.display.mobile ? 'small' : 'default'">
+        <span class="d-none d-sm-inline">Create Template</span>
+        <span class="d-sm-none">Create</span>
       </v-btn>
     </div>
     
