@@ -125,6 +125,8 @@ class Event(Base):
     is_free_for_members = Column(Boolean, default=False, nullable=False)
 
     requires_approval = Column(Boolean, default=True, nullable=False)
+    teams_enabled = Column(Boolean, default=False, nullable=False)
+    team_max_members = Column(Integer, nullable=True)
     image_url = Column(Text, nullable=True)
     sponsor_logos = Column(ARRAY(Text), nullable=True)
     form_template_id = Column(Integer, ForeignKey('form_templates.template_id', ondelete="SET NULL"))
@@ -141,6 +143,13 @@ class Event(Base):
 
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        CheckConstraint(
+            "team_max_members IS NULL OR team_max_members > 0",
+            name='check_event_team_max_members_positive'
+        ),
+    )
 
     creator = relationship("User", back_populates="created_events")
     contacts = relationship("Contact", secondary=event_contacts, back_populates="events")

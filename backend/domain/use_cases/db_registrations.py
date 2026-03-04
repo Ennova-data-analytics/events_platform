@@ -128,6 +128,14 @@ def create_registration(
 
         is_member_free = event.is_free_for_members and user.is_ennova_member
 
+        if event.teams_enabled and team_selection and team_selection.action == "join":
+            team = db_teams.get_team_by_id(db, team_selection.team_id, event_id=event_id)
+            if team.is_full:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Team '{team.team_name}' is full"
+                )
+
         if event.capacity is not None:
             current_registrations = db.query(models.Registration).filter(
                 models.Registration.event_id == event_id,
@@ -215,7 +223,7 @@ def create_registration(
                 event_id=event_id,
                 team_name=team_selection.team_name,
                 user_id=user_id,
-                max_members=ticket_type.team_max_members if ticket_type else None
+                max_members=ticket_type.team_max_members if ticket_type else event.team_max_members
             )
             team_id = team.team_id
         else:

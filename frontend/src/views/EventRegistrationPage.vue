@@ -127,10 +127,11 @@
             />
 
             <TeamSelector
-              v-if="selectedTicketType?.requires_team"
+              v-if="selectedTicketType?.requires_team || (!hasTicketTypes && event.teams_enabled)"
               :event-id="event.event_id"
-              :ticket-type-id="selectedTicketType.ticket_type_id"
-              :ticket-type-max-members="selectedTicketType.team_max_members"
+              :ticket-type-id="selectedTicketType?.ticket_type_id ?? null"
+              :ticket-type-max-members="selectedTicketType?.team_max_members ?? null"
+              :event-max-members="!hasTicketTypes && event.teams_enabled ? event.team_max_members : null"
               @update:teamSelection="handleTeamSelection"
               class="mb-6"
             />

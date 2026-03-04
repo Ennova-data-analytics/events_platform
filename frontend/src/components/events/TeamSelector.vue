@@ -100,14 +100,14 @@
       </v-text-field>
 
       <v-alert
-        v-if="ticketTypeMaxMembers"
+        v-if="effectiveMaxMembers"
         type="info"
         variant="tonal"
         density="compact"
         class="mt-3"
       >
         <v-icon start size="small">mdi-information</v-icon>
-        Max team size: {{ ticketTypeMaxMembers }} members
+        Max team size: {{ effectiveMaxMembers }} members
       </v-alert>
     </div>
 
@@ -137,9 +137,14 @@ const props = defineProps({
   },
   ticketTypeId: {
     type: Number,
-    required: true
+    required: false,
+    default: null
   },
   ticketTypeMaxMembers: {
+    type: Number,
+    default: null
+  },
+  eventMaxMembers: {
     type: Number,
     default: null
   }
@@ -191,6 +196,10 @@ const teamSelection = computed(() => {
     };
   }
   return null;
+});
+
+const effectiveMaxMembers = computed(() => {
+  return props.ticketTypeMaxMembers ?? props.eventMaxMembers ?? null;
 });
 
 // Watch for changes and emit

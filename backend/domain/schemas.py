@@ -169,7 +169,9 @@ class EventBase(BaseModel):
     feedback_template_id: int | None = None
     event_photos: list[EventPhoto] = []
     attachments: list[EventAttachment] = []
-    is_free_for_members: bool = False 
+    is_free_for_members: bool = False
+    teams_enabled: bool = False
+    team_max_members: int | None = None
 
 class EventCreate(EventBase):
     pass 
@@ -194,7 +196,9 @@ class EventUpdate(BaseModel):
     email_template_received_id: int | None = None
     email_template_payment_id: int | None = None
     feedback_template_id: int | None = None
-    is_free_for_members: bool | None = None 
+    is_free_for_members: bool | None = None
+    teams_enabled: bool | None = None
+    team_max_members: int | None = None
 
 class Event(EventBase):
     event_id: int

@@ -208,6 +208,46 @@
       </v-col>
     </v-row>
 
+    <!-- Team Registration Toggle -->
+    <v-row>
+      <v-col cols="12">
+        <v-card variant="outlined" class="mb-4">
+          <v-card-text>
+            <div class="d-flex align-center justify-space-between">
+              <div>
+                <div class="text-subtitle-1 font-weight-medium mb-1">
+                  Enable Team Registration
+                </div>
+                <div class="text-body-2 text-grey">
+                  When enabled, attendees can join or create a team when registering.
+                  Team selection is optional — attendees without teammates can still register and be assigned later.
+                  Only applies to events without ticket types.
+                </div>
+              </div>
+              <v-switch
+                v-model="editableEvent.teams_enabled"
+                color="primary"
+                hide-details
+                class="ml-4"
+              ></v-switch>
+            </div>
+
+            <v-text-field
+              v-if="editableEvent.teams_enabled"
+              v-model.number="editableEvent.team_max_members"
+              label="Default Max Team Size"
+              type="number"
+              min="1"
+              variant="outlined"
+              class="mt-4"
+              hint="Leave empty for unlimited team size"
+              persistent-hint
+            />
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+
     <v-row>
       <v-col cols="12">
         <v-select
@@ -338,8 +378,10 @@ const props = defineProps({
 const emit = defineEmits(['submit']);
 
 const editableEvent = ref({
-  requires_approval: true,  
-  is_free_for_members: false,  
+  requires_approval: true,
+  is_free_for_members: false,
+  teams_enabled: false,
+  team_max_members: null,
   map_address: null,
   latitude: null,
   longitude: null
@@ -365,6 +407,12 @@ watch(() => props.initialData, (newData) => {
   }
   if (dataToEdit.is_free_for_members === undefined) {
     dataToEdit.is_free_for_members = false;
+  }
+  if (dataToEdit.teams_enabled === undefined) {
+    dataToEdit.teams_enabled = false;
+  }
+  if (dataToEdit.team_max_members === undefined) {
+    dataToEdit.team_max_members = null;
   }
 
   if (dataToEdit.latitude && dataToEdit.longitude) {
