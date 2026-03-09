@@ -500,6 +500,76 @@ Event: {event_name}
     return html_content, text_content
 
 
+def render_feedback_invitation_email(
+    recipient_name: str,
+    event_name: str,
+    feedback_url: str,
+    expires_at: str,
+    is_external: bool = False,
+) -> tuple[str, str]:
+    """
+    Render a targeted feedback invitation email.
+
+    Args:
+        recipient_name: Name of the recipient
+        event_name: Name of the event
+        feedback_url: Pre-signed URL containing the invitation token
+        expires_at: Human-readable expiry date string
+        is_external: If True, omits any mention of platform accounts
+
+    Returns:
+        Tuple of (html_content, text_content)
+    """
+    context_line = (
+        "As a valued participant of this event, we'd love to hear your thoughts."
+        if not is_external
+        else "We'd love to hear your thoughts about the event."
+    )
+
+    content = f"""
+        <h2>Share Your Feedback</h2>
+        <p>Hi {recipient_name},</p>
+        <p>{context_line}</p>
+        <p>Please take a few minutes to complete the feedback form for <strong>{event_name}</strong>. Your responses help us improve future events.</p>
+
+        <a href="{feedback_url}" class="button">Share Your Feedback</a>
+
+        <p style="color: #666; font-size: 13px; margin-top: 20px;">
+            This link is personal to you and expires on <strong>{expires_at}</strong>.
+            Please do not share it with others.
+        </p>
+
+        <p style="color: #666; font-size: 12px; margin-top: 10px;">
+            If the button doesn't work, copy and paste this link into your browser:<br>
+            <a href="{feedback_url}">{feedback_url}</a>
+        </p>
+    """
+
+    base = Template(get_base_template())
+    html_content = base.render(
+        header_title=f"Feedback — {event_name}",
+        content=content,
+    )
+
+    text_content = f"""
+Share Your Feedback — {event_name}
+
+Hi {recipient_name},
+
+{context_line}
+
+Please take a few minutes to complete the feedback form for {event_name}.
+
+Open your feedback form here:
+{feedback_url}
+
+This link is personal to you and expires on {expires_at}.
+Please do not share it with others.
+""".strip()
+
+    return html_content, text_content
+
+
 def render_feedback_summary_email(
     event_name: str,
     summary_text: str,

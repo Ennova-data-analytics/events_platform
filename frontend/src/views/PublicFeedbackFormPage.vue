@@ -133,7 +133,7 @@
                 </div>
               </div>
 
-              <v-alert type="info" variant="tonal" class="mb-4">
+              <v-alert v-if="!invitationToken" type="info" variant="tonal" class="mb-4">
                 All feedback is submitted anonymously to encourage honest responses.
               </v-alert>
 
@@ -148,6 +148,12 @@
               </v-btn>
             </v-form>
           </v-card-text>
+        </v-card>
+
+        <v-card v-else-if="tokenError" class="pa-8 text-center">
+          <v-icon icon="mdi-link-off" color="error" size="64" class="mb-4"></v-icon>
+          <h2 class="text-h5 mb-4">Link Unavailable</h2>
+          <p class="text-body-1">{{ tokenError }}</p>
         </v-card>
 
         <v-alert v-else type="error" class="mb-0">
@@ -166,17 +172,22 @@ import { FeedbackService } from '@/services/FeedbackService.js';
 const route = useRoute();
 const eventId = route.params.id;
 
+// Support both ?token= (invitation-based) and ?template_id= (QR-based)
+const invitationToken = route.query.token || null;
+const templateId = route.query.template_id ? parseInt(route.query.template_id) : null;
+
 const template = ref(null);
 const formData = ref({});
 const isLoading = ref(true);
 const isSubmitting = ref(false);
 const submitted = ref(false);
 const formRef = ref(null);
+const tokenError = ref(null);
 
 async function loadTemplate() {
   isLoading.value = true;
   try {
-    const response = await FeedbackService.getFeedbackTemplate(eventId);
+    const response = await FeedbackService.getFeedbackTemplate(eventId, templateId);
     template.value = response.data;
 
     template.value.fields.forEach(field => {
@@ -184,6 +195,9 @@ async function loadTemplate() {
     });
   } catch (error) {
     console.error('Failed to load feedback template:', error);
+    if (error.response?.status === 400 || error.response?.status === 404) {
+      tokenError.value = error.response?.data?.detail || 'Feedback form not available.';
+    }
   } finally {
     isLoading.value = false;
   }
@@ -191,20 +205,27 @@ async function loadTemplate() {
 
 async function submitFeedback() {
   const { valid } = await formRef.value.validate();
-
   if (!valid) return;
 
   isSubmitting.value = true;
   try {
-    await FeedbackService.submitFeedback(eventId, {
-      form_responses: formData.value,
-      is_anonymous: true  
-    });
+    if (invitationToken) {
+      // Token-based submission (invitation link — registered or external)
+      await FeedbackService.submitFeedbackViaToken(eventId, invitationToken, formData.value);
+    } else {
+      // Anonymous public QR submission
+      await FeedbackService.submitFeedback(eventId, {
+        form_responses: formData.value,
+        is_anonymous: true,
+      });
+    }
     submitted.value = true;
   } catch (error) {
     console.error('Failed to submit feedback:', error);
-    if (error.response?.status === 400 && error.response?.data?.detail?.includes('already submitted')) {
-      alert('You have already submitted feedback for this event.');
+    const detail = error.response?.data?.detail || '';
+    if (detail.includes('already submitted') || detail.includes('expired') || detail.includes('Invalid')) {
+      tokenError.value = detail;
+      template.value = null;
     } else {
       alert('Failed to submit feedback. Please try again.');
     }

@@ -1,45 +1,46 @@
 <template>
   <div>
-    <h1 class="text-h5 mb-4">Create New Event</h1>
+    <h1 class="text-h5 mb-6">Create New Event</h1>
     <v-card>
-      <v-card-text>
-        <EventForm @submit="handleCreateEvent" />
+      <v-card-text class="pa-6">
+        <EventCreateStepper @submit="handleCreateEvent" />
       </v-card-text>
     </v-card>
   </div>
 </template>
 
 <script setup>
-import EventForm from '@/components/forms/EventForm.vue';
-import { useEventStore } from '@/stores/events.store.js';
-import { useRouter } from 'vue-router';
+import EventCreateStepper from '@/components/forms/EventCreateStepper.vue'
+import { useEventStore } from '@/stores/events.store.js'
+import { useRouter } from 'vue-router'
+import TicketTypeService from '@/services/TicketTypeService.js'
 
-const eventStore = useEventStore();
-const router = useRouter();
+const eventStore = useEventStore()
+const router = useRouter()
 
-
-
-const handleCreateEvent = async (eventData, imageFile) => {
-  console.log("handleCreateEvent received imageFile:", imageFile);
+const handleCreateEvent = async (eventData, imageFile, ticketTypeDefs = []) => {
   try {
-    console.log("Calling eventStore.createEvent...");
-    const newEvent = await eventStore.createEvent(eventData);
-    console.log("...createEvent finished. Received new event object:", newEvent);
+    const newEvent = await eventStore.createEvent(eventData)
 
-    if (newEvent && newEvent.event_id && imageFile) {
-      console.log(`Uploading image for new event ID: ${newEvent.event_id}`);
-      await eventStore.uploadEventImage(newEvent.event_id, imageFile);
-      console.log("...image upload finished.");
-    }
-
-    // Redirect to edit page where ticket types can be configured
     if (newEvent && newEvent.event_id) {
-      router.push({ name: 'admin-edit-event', params: { id: newEvent.event_id } });
+      const uploads = []
+
+      if (imageFile) {
+        uploads.push(eventStore.uploadEventImage(newEvent.event_id, imageFile))
+      }
+
+      for (const [idx, tt] of ticketTypeDefs.entries()) {
+        uploads.push(TicketTypeService.createTicketType(newEvent.event_id, { ...tt, display_order: idx }))
+      }
+
+      await Promise.all(uploads)
+
+      router.push({ name: 'admin-edit-event', params: { id: newEvent.event_id }, query: { tab: 'media' } })
     } else {
-      router.push({ name: 'admin-events' });
+      router.push({ name: 'admin-events' })
     }
   } catch (error) {
-    console.error("An error occurred during the creation process:", error);
+    console.error('Failed to create event:', error)
   }
-};
+}
 </script>

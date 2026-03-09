@@ -107,6 +107,56 @@ class FeedbackTemplate(Base):
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    event_links = relationship("EventFeedbackTemplate", back_populates="template", cascade="all, delete-orphan")
+
+
+class EventFeedbackTemplate(Base):
+    """Join table linking events to multiple feedback templates, with a primary flag."""
+    __tablename__ = "event_feedback_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
+    template_id = Column(Integer, ForeignKey('feedback_templates.template_id', ondelete="CASCADE"), nullable=False, index=True)
+    is_primary = Column(Boolean, nullable=False, default=False)
+    display_order = Column(Integer, nullable=False, default=0)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+
+    event = relationship("Event", back_populates="feedback_templates")
+    template = relationship("FeedbackTemplate", back_populates="event_links")
+
+    __table_args__ = (
+        CheckConstraint("display_order >= 0", name='check_eft_display_order_non_negative'),
+    )
+
+
+class FeedbackInvitation(Base):
+    """
+    Tracks targeted feedback invitations sent to both registered attendees and external participants.
+    registration_id is set for platform users; external_email/external_name for outside guests.
+    """
+    __tablename__ = "feedback_invitations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
+    feedback_template_id = Column(Integer, ForeignKey('feedback_templates.template_id', ondelete="CASCADE"), nullable=False, index=True)
+
+    # Registered attendee track
+    registration_id = Column(Integer, ForeignKey('registrations.registration_id', ondelete="CASCADE"), nullable=True, index=True)
+
+    # External participant track
+    external_email = Column(String(255), nullable=True)
+    external_name = Column(String(255), nullable=True)
+
+    token = Column(String(128), unique=True, nullable=False, index=True)
+    expires_at = Column(TIMESTAMP(timezone=True), nullable=False)
+    sent_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+    submitted_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    resent_count = Column(Integer, nullable=False, default=0)
+
+    event = relationship("Event")
+    feedback_template = relationship("FeedbackTemplate")
+    registration = relationship("Registration")
+
 class Event(Base):
     __tablename__ = "events"
     event_id = Column(Integer, primary_key=True)
@@ -163,8 +213,11 @@ class Event(Base):
     email_template_received = relationship("EmailTemplate", foreign_keys=[email_template_received_id])
     email_template_payment = relationship("EmailTemplate", foreign_keys=[email_template_payment_id])
 
-    # Relationship to feedback template
+    # Relationship to feedback template (legacy single-template, kept for QR backwards compat)
     feedback_template = relationship("FeedbackTemplate", foreign_keys=[feedback_template_id])
+
+    # Multi-template relationship
+    feedback_templates = relationship("EventFeedbackTemplate", back_populates="event", cascade="all, delete-orphan", order_by="EventFeedbackTemplate.display_order")
 
     event_photos = relationship("EventPhoto", back_populates="event", cascade="all, delete-orphan", order_by="EventPhoto.display_order")
     discount_codes = relationship("DiscountCode", back_populates="event", cascade="all, delete-orphan")

@@ -469,6 +469,7 @@
         :key="feedbackSectionKey"
         :event-id="parseInt(eventId)"
         :has-feedback-template="hasFeedbackTemplate"
+        :ticket-types="eventTicketTypes"
       />
     </div>
 
@@ -831,6 +832,7 @@ const eventPrice = ref(null);
 const customAmount = ref(null);
 const hasFeedbackTemplate = ref(false);
 const feedbackSectionKey = ref(0);
+const eventTicketTypes = ref([]);
 const isLoading = ref(false);
 
 // Sessions
@@ -1006,6 +1008,7 @@ async function fetchEventDetails() {
     eventPrice.value = response.data.price_euros;
     signupsEnabled.value = response.data.signups_enabled ?? true;
     hasFeedbackTemplate.value = !!response.data.feedback_template_id;
+    eventTicketTypes.value = response.data.ticket_types || [];
     // Force FeedbackSection to re-render when feedback template changes
     feedbackSectionKey.value++;
   } catch (error) {

@@ -30,11 +30,14 @@ def create_feedback(
     db: Session,
     event_id: int,
     feedback_data: schemas.FeedbackCreate,
-    user_id: Optional[uuid.UUID] = None
+    user_id: Optional[uuid.UUID] = None,
+    feedback_template_id: Optional[int] = None,
 ):
     """
     Create a new feedback submission.
     Can be anonymous or from an authenticated user.
+    feedback_template_id can be passed explicitly (e.g. from token-based submission);
+    otherwise falls back to the event's primary template.
     """
     event = db.query(models.Event).filter(
         models.Event.event_id == event_id
@@ -43,10 +46,12 @@ def create_feedback(
     if not event:
         return None
 
+    resolved_template_id = feedback_template_id or event.feedback_template_id
+
     db_feedback = models.Feedback(
         event_id=event_id,
         user_id=user_id if not feedback_data.is_anonymous else None,
-        feedback_template_id=event.feedback_template_id,
+        feedback_template_id=resolved_template_id,
         form_responses=feedback_data.form_responses,
         is_anonymous=feedback_data.is_anonymous
     )

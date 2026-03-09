@@ -71,6 +71,10 @@ const props = defineProps({
   eventId: {
     type: Number,
     required: true
+  },
+  templateId: {
+    type: Number,
+    default: null
   }
 });
 
@@ -89,12 +93,12 @@ async function loadQRCode() {
   isLoading.value = true;
   try {
     // Get QR code image
-    const qrResponse = await FeedbackService.getFeedbackQRCode(props.eventId);
+    const qrResponse = await FeedbackService.getFeedbackQRCode(props.eventId, props.templateId);
     const blob = new Blob([qrResponse.data], { type: 'image/png' });
     qrCodeUrl.value = URL.createObjectURL(blob);
 
     // Get feedback URL
-    const urlResponse = await FeedbackService.getFeedbackUrl(props.eventId);
+    const urlResponse = await FeedbackService.getFeedbackUrl(props.eventId, props.templateId);
     feedbackUrl.value = urlResponse.data.feedback_url;
   } catch (error) {
     console.error('Failed to load QR code:', error);

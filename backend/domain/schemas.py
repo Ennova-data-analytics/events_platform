@@ -426,6 +426,85 @@ class EmailTemplate(EmailTemplateBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Event-FeedbackTemplate join schemas
+class EventFeedbackTemplateAttach(BaseModel):
+    template_id: int
+    is_primary: bool = False
+
+class EventFeedbackTemplateResponse(BaseModel):
+    id: int
+    event_id: int
+    template_id: int
+    is_primary: bool
+    display_order: int
+    template_name: str
+    template_description: str | None = None
+    field_count: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Feedback invitation schemas
+class FeedbackInvitationExternalEntry(BaseModel):
+    email: EmailStr
+    name: str | None = None
+
+
+class FeedbackInvitationFilters(BaseModel):
+    statuses: list[str] = Field(default_factory=list, description="Registration statuses to include, e.g. ['Approved','Paid']")
+    ticket_type_ids: list[int] = Field(default_factory=list, description="Filter by ticket type IDs (empty = all)")
+    checked_in_only: bool = False
+
+
+class FeedbackInvitationSendRequest(BaseModel):
+    template_id: int
+    audience: Literal['registered', 'external']
+    filters: FeedbackInvitationFilters | None = None          # used when audience='registered'
+    externals: list[FeedbackInvitationExternalEntry] = []     # used when audience='external'
+    csv_data: str | None = None                               # base64-encoded CSV, audience='external'
+
+
+class FeedbackInvitationPreviewRequest(BaseModel):
+    template_id: int
+    audience: Literal['registered', 'external']
+    filters: FeedbackInvitationFilters | None = None
+    externals: list[FeedbackInvitationExternalEntry] = []
+    csv_data: str | None = None
+
+
+class FeedbackInvitationPreviewResponse(BaseModel):
+    recipient_count: int
+    recipients: list[dict]   # [{name, email}] preview (capped at 50)
+
+
+class FeedbackInvitationSendResponse(BaseModel):
+    sent_count: int
+    failed_count: int
+    failed_emails: list[str] = []
+
+
+class FeedbackInvitationResendRequest(BaseModel):
+    template_id: int
+    non_responders_only: bool = True
+
+
+class FeedbackInvitationStats(BaseModel):
+    template_id: int
+    template_name: str
+    sent: int
+    responded: int
+    pending: int
+
+
+class FeedbackInvitationStatsResponse(BaseModel):
+    stats: list[FeedbackInvitationStats]
+
+
+class FeedbackViaTokenRequest(BaseModel):
+    token: str
+    form_responses: dict
+
+
 # Feedback Template Schemas
 class FeedbackTemplateBase(BaseModel):
     template_name: str
