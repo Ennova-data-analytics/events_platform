@@ -148,13 +148,13 @@
             />
 
             <v-alert
-              v-if="externalEntries.length"
+              v-if="totalExternalCount > 0"
               type="info"
               density="compact"
               variant="tonal"
               class="mt-2"
             >
-              <strong>{{ externalEntries.length }}</strong> unique recipient{{ externalEntries.length !== 1 ? 's' : '' }} loaded.
+              <strong>{{ totalExternalCount }}</strong> unique recipient{{ totalExternalCount !== 1 ? 's' : '' }} loaded.
             </v-alert>
           </div>
         </div>
@@ -258,7 +258,7 @@ const filters = ref({
 const externalEmailsRaw = ref('')
 const externalEntries = ref([])
 const csvFileName = ref('')
-const csvBase64 = ref(null)
+const csvParsedEntries = ref([])
 const csvInput = ref(null)
 
 const statusOptions = ['Pending Approval', 'Approved', 'Paid', 'Rejected', 'Cancelled']
@@ -267,18 +267,24 @@ const selectedTemplate = computed(() =>
   props.attachedTemplates.find(t => t.template_id === selectedTemplateId.value) || null
 )
 
+const totalExternalCount = computed(() => {
+  const manualEmails = new Set(externalEntries.value.map(e => e.email))
+  const csvOnly = csvParsedEntries.value.filter(e => !manualEmails.has(e.email))
+  return externalEntries.value.length + csvOnly.length
+})
+
 const canProceed = computed(() => {
   if (step.value === 1) return !!selectedTemplateId.value
   if (step.value === 2) {
     if (audienceTab.value === 'registered') return true
-    return externalEntries.value.length > 0
+    return totalExternalCount.value > 0
   }
   return true
 })
 
 const canSend = computed(() => {
   if (audienceTab.value === 'registered') return preview.value && preview.value.recipient_count > 0
-  return externalEntries.value.length > 0
+  return totalExternalCount.value > 0
 })
 
 function parseManualEmails() {
@@ -308,14 +314,29 @@ async function handleCsvUpload(e) {
   if (!file) return
   csvFileName.value = file.name
   const buffer = await file.arrayBuffer()
-  const bytes = new Uint8Array(buffer)
-  let binary = ''
-  bytes.forEach(b => binary += String.fromCharCode(b))
-  csvBase64.value = btoa(binary)
-  // We'll let the backend parse — optimistically show the filename
-  externalEntries.value = [...externalEntries.value, { _csv: true }]
-  // Reset to reflect that there's at least 1 from CSV
-  if (externalEntries.value.length === 1) externalEntries.value = [{ email: '__csv__' }]
+
+  // Parse CSV client-side to show accurate recipient count
+  const text = new TextDecoder().decode(buffer)
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  if (lines.length > 1) {
+    const header = lines[0].split(',').map(h => h.trim().toLowerCase())
+    const emailIdx = header.indexOf('email')
+    const nameIdx = header.indexOf('name')
+    const seen = new Set()
+    const parsed = []
+    for (const line of lines.slice(1)) {
+      const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''))
+      const email = emailIdx >= 0 ? cols[emailIdx]?.toLowerCase() : ''
+      const name = nameIdx >= 0 ? cols[nameIdx] || null : null
+      if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !seen.has(email)) {
+        seen.add(email)
+        parsed.push({ email, name })
+      }
+    }
+    csvParsedEntries.value = parsed
+  } else {
+    csvParsedEntries.value = []
+  }
 }
 
 async function previewRecipients() {
@@ -345,8 +366,9 @@ async function send() {
     if (audienceTab.value === 'registered') {
       payload.filters = filters.value
     } else {
-      payload.externals = externalEntries.value.filter(e => e.email && e.email !== '__csv__')
-      if (csvBase64.value) payload.csv_data = csvBase64.value
+      const manualEmails = new Set(externalEntries.value.map(e => e.email))
+      const csvOnly = csvParsedEntries.value.filter(e => !manualEmails.has(e.email))
+      payload.externals = [...externalEntries.value, ...csvOnly]
     }
     const res = await FeedbackService.sendInvitations(props.eventId, payload)
     sendResult.value = res.data
@@ -373,7 +395,7 @@ watch(model, (v) => {
     externalEmailsRaw.value = ''
     externalEntries.value = []
     csvFileName.value = ''
-    csvBase64.value = null
+    csvParsedEntries.value = []
     filters.value = { statuses: ['Approved', 'Paid'], ticket_type_ids: [], checked_in_only: false }
   }
 })
