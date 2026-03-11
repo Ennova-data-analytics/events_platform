@@ -123,15 +123,21 @@ def mark_registration_paid(
 def delete_registration(
     registration_id: int,
     db: Session = Depends(deps.get_db),
-    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+    current_user: models.User = Depends(deps.get_current_user)
 ):
-    """Delete a registration (organizer only)"""
+    """Delete a registration (organizer who owns the event, or admin)"""
     reg = db.query(models.Registration).filter(models.Registration.registration_id == registration_id).first()
     if not reg:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration not found")
 
+    is_admin = any(role.role_name == 'super_admin' for role in current_user.roles)
+    is_organiser = any(role.role_name == 'organiser' for role in current_user.roles)
+
+    if not is_admin and not is_organiser:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have permission to delete this registration")
+
     event = reg.event
-    if str(event.created_by_user_id) != str(current_organiser.user_id):
+    if not is_admin and str(event.created_by_user_id) != str(current_user.user_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to delete this registration"

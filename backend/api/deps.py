@@ -49,14 +49,25 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     return user 
 
 def get_current_active_organiser(current_user: models.User = Depends(get_current_user)) -> models.User:
-    """Specifically checks if the user has the organiser role"""
-    is_organiser = any(role.role_name == 'organiser' for role in current_user.roles)
-    if not is_organiser:
+    """Checks if the user has the organiser or super_admin role"""
+    role_names = {role.role_name for role in current_user.roles}
+    if not role_names & {'organiser', 'super_admin'}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The user does not have the required permissions"
         )
 
+    return current_user
+
+
+def get_current_active_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
+    """Checks if the user has the super_admin role"""
+    is_admin = any(role.role_name == 'super_admin' for role in current_user.roles)
+    if not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The user does not have the required permissions"
+        )
     return current_user
 
 def get_current_user_optional(

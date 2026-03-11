@@ -201,7 +201,8 @@
                     class="mr-2"
                     title="Mark as Paid"
                   ></v-btn>
-                  <v-btn @click="handleRevert(item)" icon="mdi-undo" color="warning" variant="text" size="small" title="Revert to Pending"></v-btn>
+                  <v-btn @click="handleRevert(item)" icon="mdi-undo" color="warning" variant="text" size="small" class="mr-2" title="Revert to Pending"></v-btn>
+                  <v-btn @click="handleDelete(item)" icon="mdi-delete" color="error" variant="text" size="small" title="Delete"></v-btn>
                 </template>
             </v-data-table>
         </v-window-item>
@@ -550,6 +551,15 @@
         <v-card-text>
           Are you sure you want to permanently delete the registration for <strong>{{ deleteDialog.attendeeName }}</strong>?
           This action cannot be undone.
+          <v-alert
+            v-if="deleteDialog.attendee?.status === 'Paid'"
+            type="warning"
+            variant="tonal"
+            density="compact"
+            class="mt-3"
+          >
+            This registration has been paid. Deleting it will not automatically issue a refund — you must process any refund manually via Stripe.
+          </v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
