@@ -130,7 +130,7 @@
             </div>
 
             <v-data-table
-                :headers="status === 'approved' || status === 'rejected' ? attendeeHeadersWithRevert : attendeeHeaders"
+                :headers="attendeeHeadersWithRevert"
                 :items="status === 'approved' ? approvedAttendees : (status === 'paid' ? paidAttendees : rejectedAttendees)"
                 :loading="isLoading"
                 item-value="registration_id"
