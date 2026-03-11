@@ -13,7 +13,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => !!token.value);
   const isOrganiser = computed(() => {
-    return user.value?.roles?.some(role => role.role_name === 'organiser');
+    return user.value?.roles?.some(role => role.role_name === 'organiser' || role.role_name === 'super_admin');
   });
 
   async function register(userData, cvFile = null) {
