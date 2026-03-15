@@ -15,16 +15,31 @@ router = APIRouter()
 def get_event_feedback_template(
     event_id: int,
     template_id: Optional[int] = Query(None, description="Specific template ID; defaults to event primary"),
+    token: Optional[str] = Query(None, description="Invitation token; resolves to the correct template"),
     db: Session = Depends(deps.get_db)
 ):
     """
     Get a feedback template for an event (public endpoint).
+    If token is provided, resolves the template from the invitation.
     If template_id is provided, fetches that specific attached template.
     Otherwise falls back to the event's primary template.
     """
     db_event = db_events.get_event(db, event_id=event_id)
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
+
+    if token:
+        invitation, error = db_feedback_invitations.validate_invitation_token(db, token)
+        if error:
+            raise HTTPException(status_code=400, detail=error)
+        if invitation.event_id != event_id:
+            raise HTTPException(status_code=400, detail="Token does not match this event.")
+        template = db.query(models.FeedbackTemplate).filter(
+            models.FeedbackTemplate.template_id == invitation.feedback_template_id
+        ).first()
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        return template
 
     if template_id:
         # Verify the template is attached to this event

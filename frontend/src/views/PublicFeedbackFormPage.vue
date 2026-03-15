@@ -187,7 +187,9 @@ const tokenError = ref(null);
 async function loadTemplate() {
   isLoading.value = true;
   try {
-    const response = await FeedbackService.getFeedbackTemplate(eventId, templateId);
+    const response = invitationToken
+      ? await FeedbackService.getFeedbackTemplateByToken(eventId, invitationToken)
+      : await FeedbackService.getFeedbackTemplate(eventId, templateId);
     template.value = response.data;
 
     template.value.fields.forEach(field => {

@@ -6,6 +6,9 @@ export const FeedbackService = {
     const params = templateId ? { template_id: templateId } : {};
     return ApiClient.get(`/events/${eventId}/feedback/template`, { params });
   },
+  getFeedbackTemplateByToken(eventId, token) {
+    return ApiClient.get(`/events/${eventId}/feedback/template`, { params: { token } });
+  },
   submitFeedback(eventId, feedbackData) {
     return ApiClient.post(`/events/${eventId}/feedback`, feedbackData);
   },
