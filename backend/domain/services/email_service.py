@@ -1,8 +1,11 @@
 import resend
 from core.config import settings
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_BATCH_SIZE = 100
 
 
 class EmailService:
@@ -13,6 +16,59 @@ class EmailService:
         self.from_email = settings.RESEND_FROM_EMAIL
         self.from_name = settings.RESEND_FROM_NAME
         self.enabled = settings.EMAIL_NOTIFICATIONS_ENABLED
+
+    def send_batch_emails(self, messages: list[dict[str, Any]]) -> tuple[int, list[str]]:
+        """
+        Send up to 100 emails per Resend batch request.
+
+        Each item in `messages` must have:
+            to_email, to_name, subject, html_content
+        and optionally: text_content
+
+        Returns (sent_count, failed_emails).
+        """
+        if not self.enabled:
+            for m in messages:
+                logger.info(f"Email notifications disabled. Would have sent to {m['to_email']}: {m['subject']}")
+            return 0, [m["to_email"] for m in messages]
+
+        sent = 0
+        failed: list[str] = []
+        from_field = f"{self.from_name} <{self.from_email}>"
+
+        for chunk_start in range(0, len(messages), _BATCH_SIZE):
+            chunk = messages[chunk_start : chunk_start + _BATCH_SIZE]
+            params: list[dict] = []
+            for m in chunk:
+                item: dict = {
+                    "from": from_field,
+                    "to": [m["to_email"]],
+                    "subject": m["subject"],
+                    "html": m["html_content"],
+                }
+                if m.get("text_content"):
+                    item["text"] = m["text_content"]
+                params.append(item)
+
+            try:
+                response = resend.Batch.send(params)
+                # response is a list of {"id": "..."}; missing id means failure
+                results = response if isinstance(response, list) else []
+                for i, res in enumerate(results):
+                    if res and res.get("id"):
+                        sent += 1
+                        logger.info(f"Batch email sent to {chunk[i]['to_email']}. ID: {res['id']}")
+                    else:
+                        failed.append(chunk[i]["to_email"])
+                        logger.error(f"Batch email failed for {chunk[i]['to_email']}. Response: {res}")
+                # If results list is shorter than chunk (shouldn't happen), mark remainder failed
+                for i in range(len(results), len(chunk)):
+                    failed.append(chunk[i]["to_email"])
+            except Exception as e:
+                logger.error(f"Batch send error for chunk starting at {chunk_start}: {str(e)}")
+                failed.extend(m["to_email"] for m in chunk)
+
+        return sent, failed
 
     def send_email(
         self,

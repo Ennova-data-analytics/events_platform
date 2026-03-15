@@ -83,7 +83,7 @@
 
             <div v-for="(value, field) in selectedResponse.form_responses" :key="field" class="mb-4">
               <v-list-item>
-                <v-list-item-title class="font-weight-bold">{{ field }}</v-list-item-title>
+                <v-list-item-title class="font-weight-bold">{{ selectedResponseFieldLabels[field] || field }}</v-list-item-title>
                 <v-list-item-subtitle class="mt-2 text-wrap">
                   {{ value }}
                 </v-list-item-subtitle>
@@ -169,6 +169,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { FeedbackService } from '@/services/FeedbackService.js';
+import { FeedbackTemplateService } from '@/services/FeedbackTemplateService.js';
 import AISummaryService from '@/services/AISummaryService.js';
 import FeedbackSummaryModal from '@/components/admin/FeedbackSummaryModal.vue';
 
@@ -179,6 +180,7 @@ const feedbackResponses = ref([]);
 const isLoading = ref(true);
 const detailsDialog = ref(false);
 const selectedResponse = ref(null);
+const selectedResponseFieldLabels = ref({});
 
 // AI Summary state
 const summaryModalOpen = ref(false);
@@ -212,9 +214,20 @@ async function fetchFeedback() {
   }
 }
 
-function viewResponse(response) {
+async function viewResponse(response) {
   selectedResponse.value = response;
+  selectedResponseFieldLabels.value = {};
   detailsDialog.value = true;
+  if (response.feedback_template_id) {
+    try {
+      const { data } = await FeedbackTemplateService.getTemplateById(response.feedback_template_id);
+      selectedResponseFieldLabels.value = Object.fromEntries(
+        data.fields.map(f => [f.name, f.label])
+      );
+    } catch {
+      // fall back to field names silently
+    }
+  }
 }
 
 function openSummaryModal() {

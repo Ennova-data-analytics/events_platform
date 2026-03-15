@@ -383,8 +383,7 @@ def send_invitations(
     ).first()
     event = db.query(models.Event).filter(models.Event.event_id == event_id).first()
 
-    sent = 0
-    failed: list[str] = []
+    messages: list[dict] = []
 
     if request.audience == "registered":
         registrations = filter_registrations(db, event_id, request.filters)
@@ -399,17 +398,13 @@ def send_invitations(
                 expires_at=inv.expires_at.strftime("%B %d, %Y"),
                 is_external=False,
             )
-            ok = email_service.send_email(
-                to_email=reg.user.email,
-                to_name=reg.user.full_name or reg.user.email,
-                subject=f"Share your feedback — {event.event_name}",
-                html_content=html,
-                text_content=txt,
-            )
-            if ok:
-                sent += 1
-            else:
-                failed.append(reg.user.email)
+            messages.append({
+                "to_email": reg.user.email,
+                "to_name": reg.user.full_name or reg.user.email,
+                "subject": f"Share your feedback — {event.event_name}",
+                "html_content": html,
+                "text_content": txt,
+            })
 
     else:  # external
         all_externals = list(request.externals)
@@ -436,19 +431,16 @@ def send_invitations(
                 expires_at=inv.expires_at.strftime("%B %d, %Y"),
                 is_external=True,
             )
-            ok = email_service.send_email(
-                to_email=entry.email,
-                to_name=display_name,
-                subject=f"Share your feedback — {event.event_name}",
-                html_content=html,
-                text_content=txt,
-            )
-            if ok:
-                sent += 1
-            else:
-                failed.append(entry.email)
+            messages.append({
+                "to_email": entry.email,
+                "to_name": display_name,
+                "subject": f"Share your feedback — {event.event_name}",
+                "html_content": html,
+                "text_content": txt,
+            })
 
     db.commit()
+    sent, failed = email_service.send_batch_emails(messages)
     return schemas.FeedbackInvitationSendResponse(
         sent_count=sent,
         failed_count=len(failed),
@@ -479,8 +471,7 @@ def resend_invitations(
         q = q.filter(models.FeedbackInvitation.submitted_at == None)
 
     invitations = q.all()
-    sent = 0
-    failed: list[str] = []
+    messages: list[dict] = []
 
     for inv in invitations:
         # Refresh token + expiry
@@ -513,19 +504,16 @@ def resend_invitations(
             expires_at=inv.expires_at.strftime("%B %d, %Y"),
             is_external=is_external,
         )
-        ok = email_service.send_email(
-            to_email=to_email,
-            to_name=to_name,
-            subject=f"Reminder: Share your feedback — {event.event_name}",
-            html_content=html,
-            text_content=txt,
-        )
-        if ok:
-            sent += 1
-        else:
-            failed.append(to_email)
+        messages.append({
+            "to_email": to_email,
+            "to_name": to_name,
+            "subject": f"Reminder: Share your feedback — {event.event_name}",
+            "html_content": html,
+            "text_content": txt,
+        })
 
     db.commit()
+    sent, failed = email_service.send_batch_emails(messages)
     return schemas.FeedbackInvitationSendResponse(
         sent_count=sent,
         failed_count=len(failed),
