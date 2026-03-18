@@ -401,7 +401,7 @@ def send_invitations(
             messages.append({
                 "to_email": reg.user.email,
                 "to_name": reg.user.full_name or reg.user.email,
-                "subject": f"Share your feedback — {event.event_name}",
+                "subject": f"How was {event.event_name}?",
                 "html_content": html,
                 "text_content": txt,
             })
@@ -434,7 +434,7 @@ def send_invitations(
             messages.append({
                 "to_email": entry.email,
                 "to_name": display_name,
-                "subject": f"Share your feedback — {event.event_name}",
+                "subject": f"How was {event.event_name}?",
                 "html_content": html,
                 "text_content": txt,
             })
@@ -507,7 +507,7 @@ def resend_invitations(
         messages.append({
             "to_email": to_email,
             "to_name": to_name,
-            "subject": f"Reminder: Share your feedback — {event.event_name}",
+            "subject": f"Still time to share — how was {event.event_name}?",
             "html_content": html,
             "text_content": txt,
         })
