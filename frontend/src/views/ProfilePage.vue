@@ -87,9 +87,18 @@
                    <v-chip v-if="registration.status === 'Approved'" color="warning" size="small">
                       Awaiting Payment
                    </v-chip>
-                   <v-chip v-else-if="registration.status === 'Paid'" color="success" size="small">
-                      Confirmed
-                   </v-chip>
+                   <div v-else-if="registration.status === 'Paid'" class="d-flex align-center gap-2">
+                     <v-chip color="success" size="small">Confirmed</v-chip>
+                     <v-btn
+                       size="small"
+                       variant="tonal"
+                       color="primary"
+                       prepend-icon="mdi-ticket-outline"
+                       :to="{ name: 'my-ticket', params: { id: registration.event.event_id, registrationId: registration.registration_id } }"
+                     >
+                       View Ticket
+                     </v-btn>
+                   </div>
                 </template>
               </v-list-item>
             </v-list>
