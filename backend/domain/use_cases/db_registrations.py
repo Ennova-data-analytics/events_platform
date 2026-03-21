@@ -52,9 +52,10 @@ def create_registration(
 
    
     ticket_type = None
-    price_euros = event.price_euros 
-    form_template_id = event.form_template_id  
+    price_euros = event.price_euros
+    form_template_id = event.form_template_id
     is_member_free = False
+    is_paid_by_leader = False
 
     event_ticket_types = db.query(models.TicketType).filter(
         models.TicketType.event_id == event_id
@@ -101,6 +102,15 @@ def create_registration(
             form_template_id = ticket_type.form_template_id
 
         is_member_free = ticket_type.is_free_for_members and user.is_ennova_member
+
+        # Group pricing: team lead pays group_price_euros; invited teammates are covered
+        is_paid_by_leader = False
+        if ticket_type.group_payment_mode == 'leader' and ticket_type.group_size and ticket_type.group_price_euros is not None:
+            if team_selection and team_selection.action == 'create':
+                price_euros = ticket_type.group_price_euros   # leader pays full group price
+            elif team_selection and team_selection.action == 'join':
+                price_euros = 0        # invited member — covered by leader
+                is_paid_by_leader = True
 
         if ticket_type.requires_team:
             if not team_selection:
@@ -161,6 +171,10 @@ def create_registration(
         initial_status = 'Paid'
         member_discount_applied = True
         logger.info(f"Ennova member {user.email} registering for free (ticket type: {ticket_type.name if ticket_type else 'N/A'})")
+    elif is_paid_by_leader:
+        # Invite redeemer — leader already paid, treat as Paid immediately
+        initial_status = 'Paid'
+        logger.info(f"User {user.email} joining team via leader-paid invite — marking as Paid")
     elif is_completely_free_event:
         initial_status = 'Approved'
         logger.info(f"User {user.email} registering for free event")
@@ -208,6 +222,7 @@ def create_registration(
         discount_amount_euros=discount_amount,
         final_amount_euros=final_amount,
         member_discount_applied=member_discount_applied,
+        paid_by_team_leader=is_paid_by_leader,
         referral_link_id=referral_link_id,
         ticket_token=ticket_token,
     )
@@ -215,17 +230,18 @@ def create_registration(
     db.add(db_registration)
     db.flush() 
 
+    created_team = None
     if team_selection and team_selection.action != "skip":
         team_id = None
         if team_selection.action == "create":
-            team = db_teams.create_team(
+            created_team = db_teams.create_team(
                 db=db,
                 event_id=event_id,
                 team_name=team_selection.team_name,
                 user_id=user_id,
                 max_members=ticket_type.team_max_members if ticket_type else event.team_max_members
             )
-            team_id = team.team_id
+            team_id = created_team.team_id
         else:
             team_id = team_selection.team_id
 
@@ -237,6 +253,23 @@ def create_registration(
 
     db.commit()
     db.refresh(db_registration)
+
+    # Send team invites if team lead is creating a group-priced team (leader pays mode)
+    if (
+        created_team is not None
+        and ticket_type is not None
+        and ticket_type.group_payment_mode == 'leader'
+        and ticket_type.group_size is not None
+        and team_selection
+        and team_selection.teammate_emails
+    ):
+        _create_and_send_team_invites(
+            db=db,
+            team=created_team,
+            event=event,
+            ticket_type=ticket_type,
+            teammate_emails=team_selection.teammate_emails,
+        )
 
     # Increment tickets_sold counter if registration is immediately marked as Paid
     if initial_status == 'Paid' and ticket_type_id:
@@ -253,6 +286,39 @@ def create_registration(
         logger.error(f"Failed to create notification: {str(e)}")
 
     return db_registration
+
+def _create_and_send_team_invites(db: Session, team, event, ticket_type, teammate_emails: list):
+    """Create invite tokens for each teammate and send email invitations."""
+    from domain.services import notification_service
+
+    # Cap invites so total team size does not exceed group_size (leader already occupies 1 slot)
+    max_invites = (ticket_type.group_size or 0) - 1
+    emails_to_invite = list(teammate_emails)[:max_invites]
+
+    for email in emails_to_invite:
+        token = secrets.token_urlsafe(32)
+        invite = models.TeamInvite(
+            team_id=team.team_id,
+            event_id=event.event_id,
+            ticket_type_id=ticket_type.ticket_type_id,
+            invited_email=email.lower(),
+            token=token,
+        )
+        db.add(invite)
+        db.flush()
+
+        try:
+            notification_service.send_team_invite_email(
+                to_email=email,
+                team_name=team.team_name,
+                event=event,
+                invite_token=token,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send team invite email to {email}: {str(e)}")
+
+    db.commit()
+
 
 def get_registrations_for_event(db: Session, event_id: int):
     """Fetches all registrations for a specific event with ticket type data"""

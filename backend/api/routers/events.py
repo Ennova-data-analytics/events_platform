@@ -204,6 +204,125 @@ def update_registration_form_responses(
     db.refresh(registration)
     return registration
 
+@router.get("/{event_id}/my-team")
+def get_my_team(
+    event_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User = Depends(deps.get_current_user)
+):
+    """Return the current user's team details and invite progress for a group-priced ticket."""
+    registration = db.query(models.Registration).filter(
+        models.Registration.event_id == event_id,
+        models.Registration.user_id == current_user.user_id,
+        models.Registration.status != 'Cancelled'
+    ).first()
+
+    if not registration:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No registration found")
+
+    if not registration.team_membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not part of a team")
+
+    team = registration.team_membership.team
+
+    # Build member list from existing registrations on the team
+    members = []
+    for tm in team.members:
+        reg = tm.registration
+        members.append({
+            "registration_id": reg.registration_id,
+            "full_name": reg.user.full_name or reg.user.email,
+            "email": reg.user.email,
+            "status": reg.status,
+            "is_leader": not reg.paid_by_team_leader,  # leader is the one who paid themselves
+        })
+
+    # Build invite list (pending = not yet claimed)
+    invites = []
+    for inv in team.invites:
+        invites.append({
+            "invite_id": inv.invite_id,
+            "invited_email": inv.invited_email,
+            "claimed": inv.claimed,
+        })
+
+    ticket_type = registration.ticket_type
+    return {
+        "team_id": team.team_id,
+        "team_name": team.team_name,
+        "group_size": ticket_type.group_size if ticket_type else None,
+        "members": members,
+        "invites": invites,
+        "is_leader": not registration.paid_by_team_leader,
+    }
+
+
+@router.get("/{event_id}/invite-preview")
+def get_team_invite_preview(event_id: int, token: str, db: Session = Depends(deps.get_db)):
+    """Public endpoint: returns invite details (team name, event name) for display before login."""
+    invite = db.query(models.TeamInvite).filter(
+        models.TeamInvite.token == token,
+        models.TeamInvite.event_id == event_id,
+    ).first()
+
+    if not invite:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
+
+    return {
+        "invite_id": invite.invite_id,
+        "invited_email": invite.invited_email,
+        "team_name": invite.team.team_name,
+        "event_name": invite.event.event_name,
+        "claimed": invite.claimed,
+    }
+
+
+@router.post("/{event_id}/claim-invite", response_model=schemas.RegistrationResponse, status_code=status.HTTP_201_CREATED)
+def claim_team_invite(
+    event_id: int,
+    token: str,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User = Depends(deps.get_current_user)
+):
+    """Claim a team invite token and register the current user for free as a team member."""
+    invite = db.query(models.TeamInvite).filter(
+        models.TeamInvite.token == token,
+        models.TeamInvite.event_id == event_id,
+        models.TeamInvite.claimed == False  # noqa: E712
+    ).first()
+
+    if not invite:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found or already claimed")
+
+    # Check that the claimant's email matches the invited email
+    if current_user.email.lower() != invite.invited_email.lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This invite was sent to a different email address"
+        )
+
+    from domain.use_cases import db_teams
+    from domain.schemas import TeamSelectionRequest
+
+    team = db_teams.get_team_by_id(db, invite.team_id, event_id=event_id)
+    if team.is_full:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This team is already full")
+
+    registration = db_registrations.create_registration(
+        db=db,
+        event_id=event_id,
+        user_id=current_user.user_id,
+        ticket_type_id=invite.ticket_type_id,
+        team_selection=TeamSelectionRequest(action="join", team_id=invite.team_id),
+    )
+
+    invite.claimed = True
+    invite.claimed_by_user_id = current_user.user_id
+    db.commit()
+
+    return {"registration": registration, "requires_immediate_payment": False}
+
+
 @router.get("/{event_id}/registrations", response_model=list[schemas.RegistrationWithUser], tags=["Admin"])
 def read_event_registrations(event_id: int, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
     """Retrieve a list of all registered attendees for a specific event"""

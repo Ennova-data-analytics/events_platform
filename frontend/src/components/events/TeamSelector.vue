@@ -6,9 +6,9 @@
     </h3>
 
     <v-radio-group v-model="selectionMode" class="mb-4">
-      <v-radio label="Join an existing team" value="join" color="primary"></v-radio>
+      <v-radio v-if="!isLeaderPaysMode" label="Join an existing team" value="join" color="primary"></v-radio>
       <v-radio label="Create a new team" value="create" color="primary"></v-radio>
-      <v-radio label="Continue without a team (admin will assign later)" value="skip" color="primary"></v-radio>
+      <v-radio v-if="!isLeaderPaysMode" label="Continue without a team (admin will assign later)" value="skip" color="primary"></v-radio>
     </v-radio-group>
 
     <!-- Join Existing Team -->
@@ -109,6 +109,52 @@
         <v-icon start size="small">mdi-information</v-icon>
         Max team size: {{ effectiveMaxMembers }} members
       </v-alert>
+
+      <!-- Teammate email inputs for leader-pays group tickets -->
+      <div v-if="isLeaderPaysMode" class="mt-4">
+        <p class="text-subtitle-2 font-weight-bold mb-1">
+          <v-icon start size="small" color="primary">mdi-email-outline</v-icon>
+          Invite your teammates
+        </p>
+        <p class="text-caption text-grey mb-3">
+          Enter the email addresses of your {{ maxTeammateEmails }} teammate(s).
+          They will receive a free invite link to claim their spot.
+        </p>
+
+        <div v-for="(email, index) in teammateEmails" :key="index" class="d-flex align-center mb-2 gap-2">
+          <v-text-field
+            v-model="teammateEmails[index]"
+            :label="`Teammate ${index + 1} email`"
+            placeholder="teammate@example.com"
+            type="email"
+            variant="outlined"
+            density="compact"
+            hide-details="auto"
+            :rules="[rules.validEmail]"
+            style="flex: 1"
+          ></v-text-field>
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            size="small"
+            color="grey"
+            :disabled="teammateEmails.length <= 1"
+            @click="removeTeammateEmail(index)"
+          ></v-btn>
+        </div>
+
+        <v-btn
+          v-if="teammateEmails.length < maxTeammateEmails"
+          variant="text"
+          size="small"
+          color="primary"
+          prepend-icon="mdi-plus"
+          class="mt-1"
+          @click="addTeammateEmail"
+        >
+          Add teammate
+        </v-btn>
+      </div>
     </div>
 
     <!-- Continue Without Team -->
@@ -147,25 +193,36 @@ const props = defineProps({
   eventMaxMembers: {
     type: Number,
     default: null
+  },
+  // Group pricing props
+  groupPaymentMode: {
+    type: String,
+    default: null  // 'leader' | 'individual' | null
+  },
+  groupSize: {
+    type: Number,
+    default: null
   }
 });
 
 const emit = defineEmits(['update:teamSelection']);
 
 // State
-const selectionMode = ref('join');
+const selectionMode = ref(props.groupPaymentMode === 'leader' ? 'create' : 'join');
 const availableTeams = ref([]);
 const selectedTeam = ref(null);
 const newTeamName = ref('');
 const isLoadingTeams = ref(false);
 const loadError = ref('');
 const teamNameError = ref('');
+const teammateEmails = ref(['']);
 
 // Validation Rules
 const rules = {
   required: v => !!v || 'Team name is required',
   minLength: v => (v && v.length >= 2) || 'Team name must be at least 2 characters',
-  maxLength: v => (v && v.length <= 255) || 'Team name must be less than 255 characters'
+  maxLength: v => (v && v.length <= 255) || 'Team name must be less than 255 characters',
+  validEmail: v => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || 'Enter a valid email address'
 };
 
 // Computed
@@ -182,10 +239,14 @@ const teamSelection = computed(() => {
     if (!name || name.length < 2 || name.length > 255) {
       return null;
     }
+    const validEmails = isLeaderPaysMode.value
+      ? teammateEmails.value.map(e => e.trim()).filter(e => e.length > 0)
+      : null;
     return {
       action: 'create',
       team_id: null,
-      team_name: name
+      team_name: name,
+      teammate_emails: validEmails
     };
   } else if (selectionMode.value === 'skip') {
     // User wants to continue without a team - admin will assign later
@@ -202,12 +263,31 @@ const effectiveMaxMembers = computed(() => {
   return props.ticketTypeMaxMembers ?? props.eventMaxMembers ?? null;
 });
 
+const isLeaderPaysMode = computed(() => props.groupPaymentMode === 'leader' && props.groupSize != null);
+
+const maxTeammateEmails = computed(() => {
+  if (!props.groupSize) return 0;
+  return props.groupSize - 1;  // leader takes one slot
+});
+
 // Watch for changes and emit
 watch(teamSelection, (newValue) => {
   emit('update:teamSelection', newValue);
 }, { deep: true });
 
 // Methods
+function addTeammateEmail() {
+  if (teammateEmails.value.length < maxTeammateEmails.value) {
+    teammateEmails.value.push('');
+  }
+}
+
+function removeTeammateEmail(index) {
+  if (teammateEmails.value.length > 1) {
+    teammateEmails.value.splice(index, 1);
+  }
+}
+
 async function loadTeams() {
   isLoadingTeams.value = true;
   loadError.value = '';
@@ -251,6 +331,7 @@ watch(selectionMode, () => {
   selectedTeam.value = null;
   newTeamName.value = '';
   teamNameError.value = '';
+  teammateEmails.value = [''];
 
   if (selectionMode.value === 'join') {
     loadTeams();

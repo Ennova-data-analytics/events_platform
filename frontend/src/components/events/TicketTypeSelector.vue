@@ -30,11 +30,18 @@
               </template>
 
               <v-list-item-title>
-                {{ item.raw.name }} - €{{ item.raw.price_euros }}
+                {{ item.raw.name }} —
+                <template v-if="item.raw.group_payment_mode === 'leader' && item.raw.group_size && item.raw.group_price_euros != null">
+                  €{{ item.raw.group_price_euros }} for {{ item.raw.group_size }} (team lead pays)
+                </template>
+                <template v-else>
+                  €{{ item.raw.price_euros }}
+                </template>
               </v-list-item-title>
 
               <v-list-item-subtitle>
                 {{ item.raw.description }}
+                <span v-if="item.raw.group_payment_mode === 'individual' && item.raw.group_size"> · Group of {{ item.raw.group_size }}, each pays €{{ item.raw.price_euros }}</span>
               </v-list-item-subtitle>
 
               <template v-slot:append>
@@ -77,7 +84,18 @@
               <div class="d-flex justify-space-between align-center">
                 <div>
                   <div class="text-caption text-grey-darken-1">Price</div>
-                  <div class="text-h5 text-primary font-weight-bold">
+                  <!-- Group pricing: leader mode -->
+                  <div v-if="selectedTicketType.group_payment_mode === 'leader' && selectedTicketType.group_size && selectedTicketType.group_price_euros != null">
+                    <div class="text-h5 text-primary font-weight-bold">
+                      €{{ selectedTicketType.group_price_euros }}
+                      <span class="text-body-2 font-weight-regular text-grey-darken-1">for {{ selectedTicketType.group_size }}</span>
+                    </div>
+                    <div class="text-caption text-grey-darken-1">
+                      (€{{ perPersonLeader(selectedTicketType) }}/person — team lead pays all)
+                    </div>
+                  </div>
+                  <!-- Individual ticket -->
+                  <div v-else class="text-h5 text-primary font-weight-bold">
                     €{{ selectedTicketType.price_euros }}
                   </div>
                 </div>
@@ -94,6 +112,30 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Group pricing info banners -->
+              <v-alert
+                v-if="selectedTicketType.group_payment_mode === 'leader' && selectedTicketType.group_size"
+                type="info"
+                variant="tonal"
+                class="mt-3"
+                density="compact"
+              >
+                <v-icon start>mdi-account-group</v-icon>
+                <strong>Team ticket:</strong> You pay €{{ selectedTicketType.group_price_euros }} for the whole group of {{ selectedTicketType.group_size }}.
+                Your {{ selectedTicketType.group_size - 1 }} teammate(s) will receive a free invite by email.
+              </v-alert>
+
+              <v-alert
+                v-else-if="selectedTicketType.group_payment_mode === 'individual' && selectedTicketType.group_size"
+                type="info"
+                variant="tonal"
+                class="mt-3"
+                density="compact"
+              >
+                <v-icon start>mdi-account-group</v-icon>
+                <strong>Team ticket:</strong> Each member of the group of {{ selectedTicketType.group_size }} pays €{{ selectedTicketType.price_euros }} individually.
+              </v-alert>
 
               <v-alert
                 v-if="selectedTicketType.is_free_for_members && !user?.is_ennova_member"
@@ -181,6 +223,11 @@ function getTicketTypeIcon(ticketType) {
   if (!ticketType.is_active) return 'mdi-ticket-outline';
   if (ticketType.capacity && ticketType.tickets_available <= 0) return 'mdi-close-circle';
   return 'mdi-ticket-confirmation';
+}
+
+function perPersonLeader(ticketType) {
+  if (!ticketType.group_size || ticketType.group_price_euros == null) return '—';
+  return (parseFloat(ticketType.group_price_euros) / ticketType.group_size).toFixed(2);
 }
 
 function getAvailabilityColor(ticketType) {

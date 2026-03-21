@@ -81,6 +81,24 @@
                   <v-icon start size="x-small">mdi-account-group</v-icon>
                   Team Required
                 </v-chip>
+                <v-chip
+                  v-if="ticketType.group_payment_mode === 'leader' && ticketType.group_size"
+                  size="small"
+                  color="deep-orange"
+                  class="ml-2"
+                >
+                  <v-icon start size="x-small">mdi-account-cash</v-icon>
+                  €{{ ticketType.group_price_euros }} for {{ ticketType.group_size }} (lead pays)
+                </v-chip>
+                <v-chip
+                  v-else-if="ticketType.group_payment_mode === 'individual' && ticketType.group_size"
+                  size="small"
+                  color="teal"
+                  class="ml-2"
+                >
+                  <v-icon start size="x-small">mdi-account-group</v-icon>
+                  Group of {{ ticketType.group_size }}, each pays €{{ ticketType.price_euros }}
+                </v-chip>
               </v-list-item-subtitle>
 
               <template v-slot:append>
@@ -233,6 +251,81 @@
               class="mb-2"
             ></v-text-field>
 
+            <!-- Group Pricing -->
+            <div v-if="editedTicketType.requires_team" class="mt-2">
+              <p class="text-caption text-medium-emphasis mb-2">
+                <v-icon size="small">mdi-information-outline</v-icon>
+                Group pricing — who pays for the team?
+              </p>
+
+              <v-select
+                v-model="editedTicketType.group_payment_mode"
+                :items="groupPaymentModeOptions"
+                item-title="label"
+                item-value="value"
+                label="Group Payment Mode"
+                variant="outlined"
+                clearable
+                hint="Leave unset for standard per-person pricing"
+                persistent-hint
+                class="mb-2"
+              ></v-select>
+
+              <v-row v-if="editedTicketType.group_payment_mode">
+                <v-col cols="6" class="py-0">
+                  <v-text-field
+                    v-model.number="editedTicketType.group_size"
+                    label="Group Size *"
+                    type="number"
+                    min="2"
+                    variant="outlined"
+                    hint="How many people in a group"
+                    persistent-hint
+                    class="mb-2"
+                    :rules="[v => !editedTicketType.group_payment_mode || (v >= 2) || 'Must be at least 2']"
+                  ></v-text-field>
+                </v-col>
+                <v-col v-if="editedTicketType.group_payment_mode === 'leader'" cols="6" class="py-0">
+                  <v-text-field
+                    v-model.number="editedTicketType.group_price_euros"
+                    label="Group Total Price (€) *"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    variant="outlined"
+                    hint="Total charged to team lead"
+                    persistent-hint
+                    class="mb-2"
+                    :rules="[v => !editedTicketType.group_payment_mode === 'leader' || v >= 0 || 'Required']"
+                  ></v-text-field>
+                </v-col>
+              </v-row>
+
+              <v-alert
+                v-if="editedTicketType.group_payment_mode === 'leader' && editedTicketType.group_size >= 2 && editedTicketType.group_price_euros >= 0"
+                type="info"
+                variant="tonal"
+                density="compact"
+                class="mb-2"
+              >
+                Team lead pays <strong>€{{ editedTicketType.group_price_euros }}</strong> for
+                {{ editedTicketType.group_size }} people
+                (€{{ (editedTicketType.group_price_euros / editedTicketType.group_size).toFixed(2) }}/person).
+                The other {{ editedTicketType.group_size - 1 }} teammate(s) receive a free invite by email.
+              </v-alert>
+
+              <v-alert
+                v-else-if="editedTicketType.group_payment_mode === 'individual' && editedTicketType.group_size >= 2"
+                type="info"
+                variant="tonal"
+                density="compact"
+                class="mb-2"
+              >
+                Each of the {{ editedTicketType.group_size }} team members pays
+                <strong>€{{ editedTicketType.price_euros }}</strong> individually (€{{ (editedTicketType.price_euros * editedTicketType.group_size).toFixed(2) }} total).
+              </v-alert>
+            </div>
+
             <v-divider class="my-4"></v-divider>
 
             <v-checkbox
@@ -309,6 +402,11 @@ const snackbar = ref(false);
 const snackbarText = ref('');
 const snackbarColor = ref('success');
 
+const groupPaymentModeOptions = [
+  { label: 'Leader pays for the whole group', value: 'leader' },
+  { label: 'Each member pays individually', value: 'individual' },
+];
+
 const defaultTicketType = {
   name: '',
   description: '',
@@ -320,6 +418,9 @@ const defaultTicketType = {
   show_availability: true,
   requires_team: false,
   team_max_members: null,
+  group_payment_mode: null,
+  group_size: null,
+  group_price_euros: null,
   display_order: 0
 };
 

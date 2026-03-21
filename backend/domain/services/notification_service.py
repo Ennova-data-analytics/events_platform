@@ -3,6 +3,7 @@ from domain import models
 from domain.use_cases import db_notifications
 from domain.services.email_service import email_service
 from domain.services import email_templates
+from core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ def send_registration_approved_notification(
 
     try:
         event_date = event.event_date_start.strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
-        event_url = f"https://ennova-events.com/event/{event.event_id}"
+        event_url = f"{settings.FRONTEND_URL}/event/{event.event_id}"
 
         custom_template = event.email_template_approved if hasattr(event, 'email_template_approved') else None
 
@@ -162,7 +163,7 @@ def send_payment_confirmed_notification(
 
     try:
         event_date = event.event_date_start.strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
-        event_url = f"https://ennova-events.com/event/{event.event_id}"
+        event_url = f"{settings.FRONTEND_URL}/event/{event.event_id}"
 
         custom_template = event.email_template_payment if hasattr(event, 'email_template_payment') else None
 
@@ -204,3 +205,28 @@ def send_payment_confirmed_notification(
         )
     except Exception as e:
         logger.error(f"Failed to send payment confirmation email to {user.email}: {str(e)}")
+
+
+def send_team_invite_email(to_email: str, team_name: str, event: models.Event, invite_token: str):
+    """Send a team invitation email to a prospective teammate."""
+    try:
+        event_date = event.event_date_start.strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
+        invite_url = f"{settings.FRONTEND_URL}/event/{event.event_id}/claim-invite?token={invite_token}"
+
+        html_content, text_content = email_templates.render_team_invite_email(
+            team_name=team_name,
+            event_name=event.event_name,
+            event_date=event_date,
+            invite_url=invite_url,
+        )
+
+        email_service.send_email(
+            to_email=to_email,
+            to_name=to_email.split("@")[0],
+            subject=f"You're invited to join team '{team_name}' — {event.event_name}",
+            html_content=html_content,
+            text_content=text_content,
+        )
+    except Exception as e:
+        logger.error(f"Failed to send team invite email to {to_email}: {str(e)}")
+

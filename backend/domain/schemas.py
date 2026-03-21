@@ -47,6 +47,7 @@ class Registration(BaseModel):
     discount_amount_euros: Decimal | None = None
     final_amount_euros: Decimal | None = None
     member_discount_applied: bool | None = None
+    paid_by_team_leader: bool = False
     ticket_type_id: int | None = None
     ticket_type: Optional["TicketTypeResponse"] = None
     referral_link_id: int | None = None
@@ -304,6 +305,9 @@ class TicketTypeBase(BaseModel):
     show_availability: bool = Field(default=True, description="Whether to show ticket availability to users")
     requires_team: bool = Field(default=False, description="Whether users must join/create a team for this ticket type")
     team_max_members: int | None = Field(None, gt=0, description="Default max team size for this ticket type")
+    group_payment_mode: str | None = Field(None, description="'leader' = team lead pays group_price_euros for all; 'individual' = each member pays price_euros")
+    group_size: int | None = Field(None, gt=1, description="Number of people in the group for group pricing")
+    group_price_euros: Decimal | None = Field(None, ge=0, description="Total price charged to team lead (only when group_payment_mode='leader')")
 
 
 class TicketTypeCreate(TicketTypeBase):
@@ -324,6 +328,9 @@ class TicketTypeUpdate(BaseModel):
     show_availability: bool | None = None
     requires_team: bool | None = None
     team_max_members: int | None = Field(None, gt=0)
+    group_payment_mode: str | None = None
+    group_size: int | None = Field(None, gt=1)
+    group_price_euros: Decimal | None = Field(None, ge=0)
 
 
 class TicketTypeResponse(TicketTypeBase):
@@ -355,6 +362,9 @@ class TicketTypeResponse(TicketTypeBase):
             "is_free_for_members": ticket_type.is_free_for_members,
             "requires_team": ticket_type.requires_team,
             "team_max_members": ticket_type.team_max_members,
+            "group_payment_mode": ticket_type.group_payment_mode,
+            "group_size": ticket_type.group_size,
+            "group_price_euros": ticket_type.group_price_euros,
             "created_at": ticket_type.created_at,
             "updated_at": ticket_type.updated_at,
         }
@@ -884,6 +894,7 @@ class TeamSelectionRequest(BaseModel):
     action: Literal['join', 'create', 'skip'] = Field(..., description="Whether to join existing team, create new one, or skip team selection (admin will assign later)")
     team_id: int | None = Field(None, description="Required when action='join'")
     team_name: str | None = Field(None, min_length=1, max_length=255, description="Required when action='create'")
+    teammate_emails: list[EmailStr] | None = Field(None, description="Emails to invite when action='create' and ticket has group_payment_mode='leader'")
 
     @field_validator('team_id')
     def validate_team_id_for_join(cls, v, info):
@@ -898,6 +909,15 @@ class TeamSelectionRequest(BaseModel):
         if info.data.get('action') == 'create' and not v:
             raise ValueError('team_name is required when action is "create"')
         return v
+
+
+class TeamInviteResponse(BaseModel):
+    invite_id: int
+    invited_email: str
+    claimed: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DocumentVectorizeResponse(BaseModel):

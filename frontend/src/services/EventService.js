@@ -29,6 +29,18 @@ export const EventService = {
     return ApiClient.patch(`/events/${eventId}/registration/form-responses`, { form_responses: formResponses });
   },
 
+  getMyTeam(eventId) {
+    return ApiClient.get(`/events/${eventId}/my-team`);
+  },
+
+  getTeamInvitePreview(eventId, token) {
+    return ApiClient.get(`/events/${eventId}/invite-preview`, { params: { token } });
+  },
+
+  claimTeamInvite(eventId, token) {
+    return ApiClient.post(`/events/${eventId}/claim-invite`, null, { params: { token } });
+  },
+
   getEventRegistrations(eventId) {
     return ApiClient.get(`/events/${eventId}/registrations`);
   },

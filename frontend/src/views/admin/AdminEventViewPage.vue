@@ -172,6 +172,28 @@
                   <v-chip v-else size="small" variant="tonal">No</v-chip>
                 </template>
 
+                <template v-slot:item.paid_by_team_leader="{ item }">
+                  <v-chip
+                    v-if="item.paid_by_team_leader"
+                    color="deep-orange"
+                    size="small"
+                    variant="tonal"
+                  >
+                    <v-icon start size="13">mdi-account-cash</v-icon>
+                    Paid by leader
+                  </v-chip>
+                  <v-chip
+                    v-else-if="item.member_discount_applied"
+                    color="info"
+                    size="small"
+                    variant="tonal"
+                  >
+                    <v-icon start size="13">mdi-star</v-icon>
+                    Member
+                  </v-chip>
+                  <span v-else class="text-caption text-grey">—</span>
+                </template>
+
                 <template v-slot:item.checked_in="{ item }">
                   <v-chip
                     :color="item.checked_in ? 'success' : 'default'"
@@ -1001,6 +1023,7 @@ const attendeeHeaders = ref([
   { title: 'Email', key: 'user.email' },
   { title: 'Ennova Member', key: 'user.is_ennova_member' },
   { title: 'Ticket Type', key: 'ticket_type.name' },
+  { title: 'Payment', key: 'paid_by_team_leader', sortable: false },
   { title: 'Check-in', key: 'checked_in', sortable: true },
   { title: 'Checked in at', key: 'checked_in_at', sortable: true },
   { title: 'Registration Date', key: 'registration_date' },

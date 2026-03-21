@@ -25,6 +25,11 @@ const routes = [
     component: () => import('../views/EventRegistrationConfirmationPage.vue')
   },
   {
+    path: '/event/:id/claim-invite',
+    name: 'claim-team-invite',
+    component: () => import('../views/ClaimTeamInvitePage.vue')
+  },
+  {
     path: '/login',
     name: 'login',
     component: () => import('../views/LoginPage.vue')

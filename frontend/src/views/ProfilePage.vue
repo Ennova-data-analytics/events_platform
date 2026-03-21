@@ -104,6 +104,76 @@
             </v-list>
           </v-card>
 
+          <!-- My Teams -->
+          <v-card v-if="myTeams.length" class="mb-4">
+            <v-card-title>
+              <v-icon start color="deep-orange">mdi-account-group</v-icon>
+              My Teams
+            </v-card-title>
+            <v-divider></v-divider>
+
+            <div v-for="team in myTeams" :key="team.team_id">
+              <v-card-text class="pb-0">
+                <div class="d-flex align-center justify-space-between mb-1">
+                  <span class="font-weight-bold text-body-1">{{ team.team_name }}</span>
+                  <v-chip size="small" color="deep-orange" variant="tonal">
+                    {{ team.members.length }}/{{ team.group_size }} joined
+                  </v-chip>
+                </div>
+
+                <v-progress-linear
+                  :model-value="(team.members.length / team.group_size) * 100"
+                  color="deep-orange"
+                  bg-color="grey-lighten-3"
+                  rounded
+                  height="6"
+                  class="mb-4"
+                ></v-progress-linear>
+
+                <!-- Members who joined -->
+                <v-list density="compact" class="pa-0">
+                  <v-list-item
+                    v-for="member in team.members"
+                    :key="member.registration_id"
+                    class="px-0"
+                  >
+                    <template v-slot:prepend>
+                      <v-icon :color="member.status === 'Paid' ? 'success' : 'warning'" size="18">
+                        {{ member.status === 'Paid' ? 'mdi-check-circle' : 'mdi-clock-outline' }}
+                      </v-icon>
+                    </template>
+                    <v-list-item-title class="text-body-2">
+                      {{ member.full_name }}
+                      <v-chip v-if="member.is_leader" size="x-small" color="deep-orange" class="ml-1">Leader</v-chip>
+                    </v-list-item-title>
+                    <v-list-item-subtitle class="text-caption">{{ member.email }}</v-list-item-subtitle>
+                    <template v-slot:append>
+                      <v-chip size="x-small" :color="member.status === 'Paid' ? 'success' : 'warning'" variant="tonal">
+                        {{ member.status }}
+                      </v-chip>
+                    </template>
+                  </v-list-item>
+
+                  <!-- Pending invites -->
+                  <v-list-item
+                    v-for="invite in team.invites.filter(i => !i.claimed)"
+                    :key="invite.invite_id"
+                    class="px-0"
+                  >
+                    <template v-slot:prepend>
+                      <v-icon color="grey" size="18">mdi-email-outline</v-icon>
+                    </template>
+                    <v-list-item-title class="text-body-2 text-grey">{{ invite.invited_email }}</v-list-item-title>
+                    <template v-slot:append>
+                      <v-chip size="x-small" color="grey" variant="tonal">Invite pending</v-chip>
+                    </template>
+                  </v-list-item>
+                </v-list>
+              </v-card-text>
+              <v-divider class="mt-3"></v-divider>
+            </div>
+          </v-card>
+
           <v-card>
             <v-card-title>Past Events Attended</v-card-title>
             <v-divider></v-divider>
@@ -139,9 +209,11 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { useAuthStore } from '@/stores/auth.store.js';
+import { EventService } from '@/services/EventService.js';
 
 const authStore = useAuthStore();
 const isLoading = ref(true);
+const myTeams = ref([]);
 
 
 const applicationEvents = computed(() => {
@@ -175,6 +247,20 @@ const getStatusColor = (status) => {
 
 onMounted(async () => {
   await authStore.fetchCurrentUser();
+  await loadMyTeams();
   isLoading.value = false;
 });
+
+async function loadMyTeams() {
+  if (!authStore.user?.registrations) return;
+  const teamRegistrations = authStore.user.registrations.filter(
+    reg => ['Paid', 'Approved'].includes(reg.status) && reg.ticket_type?.group_payment_mode === 'leader'
+  );
+  const results = await Promise.allSettled(
+    teamRegistrations.map(reg => EventService.getMyTeam(reg.event.event_id))
+  );
+  myTeams.value = results
+    .filter(r => r.status === 'fulfilled')
+    .map(r => r.value.data);
+}
 </script>

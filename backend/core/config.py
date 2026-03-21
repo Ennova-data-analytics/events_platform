@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: str 
     STRIPE_PUBLISHABLE_KEY: str 
     STRIPE_WEBHOOK_SECRET: str
-    FRONTEND_URL: str = "https://ennova-events.com"
+    FRONTEND_URL: str = "http://localhost:5173"
 
     OPENAI_API_KEY: str
 

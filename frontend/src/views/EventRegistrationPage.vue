@@ -132,6 +132,8 @@
               :ticket-type-id="selectedTicketType?.ticket_type_id ?? null"
               :ticket-type-max-members="selectedTicketType?.team_max_members ?? null"
               :event-max-members="!hasTicketTypes && event.teams_enabled ? event.team_max_members : null"
+              :group-payment-mode="selectedTicketType?.group_payment_mode ?? null"
+              :group-size="selectedTicketType?.group_size ?? null"
               @update:teamSelection="handleTeamSelection"
               class="mb-6"
             />
@@ -240,7 +242,11 @@ const errorMessage = ref('');
 const hasTicketTypes = computed(() => event.value?.ticket_types?.length > 0);
 
 const shouldShowDiscountInput = computed(() => {
-  if (selectedTicketType.value && parseFloat(selectedTicketType.value.price_euros) > 0) return true;
+  if (selectedTicketType.value) {
+    // Leader-pays group tickets: no individual discount (fixed group price)
+    if (selectedTicketType.value.group_payment_mode === 'leader') return false;
+    if (parseFloat(selectedTicketType.value.price_euros) > 0) return true;
+  }
   if (!hasTicketTypes.value && event.value?.price_euros > 0) return true;
   return false;
 });

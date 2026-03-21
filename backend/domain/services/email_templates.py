@@ -697,4 +697,50 @@ This analysis was generated using AI (GPT-4o-mini) by Ennova Events Platform.
 Powered by LangChain
     """.strip()
 
+
+def render_team_invite_email(
+    team_name: str,
+    event_name: str,
+    event_date: str,
+    invite_url: str,
+) -> tuple[str, str]:
+    """Render a team invitation email sent to teammates by the team lead."""
+    content = f"""
+        <h2>You've been invited to join a team!</h2>
+        <p>You have been invited to join team <strong>{team_name}</strong> for <strong>{event_name}</strong>.</p>
+
+        <div class="event-details">
+            <h3>Event Details</h3>
+            <p><strong>Event:</strong> {event_name}</p>
+            <p><strong>Date:</strong> {event_date}</p>
+        </div>
+
+        <p>Your team lead has already covered the cost for your spot — it's completely free for you.</p>
+        <p>Click the button below to claim your spot. If you don't have an account yet, you'll be able to create one.</p>
+
+        <a href="{invite_url}" class="button">Claim Your Spot</a>
+
+        <p style="color: #666; font-size: 13px;">This invite link is personal to you. Please do not share it.</p>
+    """
+
+    base = Template(get_base_template())
+    html_content = base.render(
+        header_title="Team Invitation",
+        content=content
+    )
+
+    text_content = f"""
+Team Invitation
+
+You've been invited to join team '{team_name}' for {event_name} on {event_date}.
+
+Your team lead has already paid for your spot — it's free for you.
+
+Claim your spot here: {invite_url}
+
+This invite link is personal to you. Please do not share it.
+""".strip()
+
+    return html_content, text_content
+
     return subject, html_content, text_content

@@ -14,6 +14,74 @@
                 View Event Details
               </v-btn>
             </div>
+
+            <!-- Team progress (leader-pays group tickets) -->
+            <template v-if="myTeam">
+              <v-divider class="my-6"></v-divider>
+              <div class="d-flex align-center justify-space-between mb-1">
+                <span class="font-weight-bold">Team: {{ myTeam.team_name }}</span>
+                <v-chip size="small" color="deep-orange" variant="tonal">
+                  {{ myTeam.members.length }}/{{ myTeam.group_size }} joined
+                </v-chip>
+              </div>
+
+              <v-progress-linear
+                :model-value="(myTeam.members.length / myTeam.group_size) * 100"
+                color="deep-orange"
+                bg-color="grey-lighten-3"
+                rounded
+                height="6"
+                class="mb-4"
+              ></v-progress-linear>
+
+              <v-list density="compact" class="pa-0">
+                <v-list-item
+                  v-for="member in myTeam.members"
+                  :key="member.registration_id"
+                  class="px-0"
+                >
+                  <template v-slot:prepend>
+                    <v-icon :color="member.status === 'Paid' ? 'success' : 'warning'" size="18">
+                      {{ member.status === 'Paid' ? 'mdi-check-circle' : 'mdi-clock-outline' }}
+                    </v-icon>
+                  </template>
+                  <v-list-item-title class="text-body-2">
+                    {{ member.full_name }}
+                    <v-chip v-if="member.is_leader" size="x-small" color="deep-orange" class="ml-1">Leader</v-chip>
+                  </v-list-item-title>
+                  <template v-slot:append>
+                    <v-chip size="x-small" :color="member.status === 'Paid' ? 'success' : 'warning'" variant="tonal">
+                      {{ member.status }}
+                    </v-chip>
+                  </template>
+                </v-list-item>
+
+                <v-list-item
+                  v-for="invite in myTeam.invites.filter(i => !i.claimed)"
+                  :key="invite.invite_id"
+                  class="px-0"
+                >
+                  <template v-slot:prepend>
+                    <v-icon color="grey" size="18">mdi-email-outline</v-icon>
+                  </template>
+                  <v-list-item-title class="text-body-2 text-grey">{{ invite.invited_email }}</v-list-item-title>
+                  <template v-slot:append>
+                    <v-chip size="x-small" color="grey" variant="tonal">Invite pending</v-chip>
+                  </template>
+                </v-list-item>
+              </v-list>
+
+              <v-alert
+                v-if="myTeam.members.length < myTeam.group_size"
+                type="info"
+                variant="tonal"
+                density="compact"
+                class="mt-4"
+              >
+                <v-icon start size="small">mdi-email-fast</v-icon>
+                Invites have been sent. This panel updates as teammates claim their spots.
+              </v-alert>
+            </template>
           </v-card>
         </v-col>
       </v-row>
@@ -22,16 +90,24 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth.store.js';
+import { EventService } from '@/services/EventService.js';
 
 const route = useRoute();
 const authStore = useAuthStore();
+const myTeam = ref(null);
 
 onMounted(async () => {
   if (authStore.isAuthenticated) {
     await authStore.fetchCurrentUser();
+    try {
+      const response = await EventService.getMyTeam(route.params.id);
+      myTeam.value = response.data;
+    } catch {
+      // Not a team registration — ignore
+    }
   }
 });
 

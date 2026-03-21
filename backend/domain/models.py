@@ -6,7 +6,7 @@ from sqlalchemy import (
     Text, DECIMAL, ARRAY, JSON, Enum, CheckConstraint, Float
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy.orm import relationship, declarative_base, backref as orm_backref
 from sqlalchemy.ext.hybrid import hybrid_property
 
 Base = declarative_base()
@@ -252,6 +252,13 @@ class TicketType(Base):
     requires_team = Column(Boolean, default=False, nullable=False)
     team_max_members = Column(Integer, nullable=True)
 
+    # Group pricing fields
+    # group_payment_mode: 'leader' = team lead pays full group_price_euros,
+    #                     'individual' = each member pays price_euros (no group discount, but team is still enforced)
+    group_payment_mode = Column(String(20), nullable=True)  # 'leader' | 'individual' | None
+    group_size = Column(Integer, nullable=True)          # required group size for group pricing
+    group_price_euros = Column(DECIMAL(10, 2), nullable=True)  # total price charged to leader
+
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -272,6 +279,9 @@ class TicketType(Base):
         CheckConstraint("tickets_sold >= 0", name='check_tickets_sold_non_negative'),
         CheckConstraint("display_order >= 0", name='check_display_order_non_negative'),
         CheckConstraint("team_max_members IS NULL OR team_max_members > 0", name='check_ticket_team_max_members_positive'),
+        CheckConstraint("group_size IS NULL OR group_size > 1", name='check_group_size_gt_one'),
+        CheckConstraint("group_price_euros IS NULL OR group_price_euros >= 0", name='check_group_price_non_negative'),
+        CheckConstraint("group_payment_mode IS NULL OR group_payment_mode IN ('leader', 'individual')", name='check_group_payment_mode_valid'),
     )
 
 
@@ -291,6 +301,7 @@ class Registration(Base):
     final_amount_euros = Column(DECIMAL(10, 2), nullable=True)
     registration_date = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     member_discount_applied = Column(Boolean, default=False, nullable=False)
+    paid_by_team_leader = Column(Boolean, default=False, nullable=False)
     referral_link_id = Column(Integer, ForeignKey('referral_links.link_id', ondelete='SET NULL'), nullable=True, index=True)
     ticket_token = Column(String(64), unique=True, nullable=True, index=True)
     checked_in = Column(Boolean, default=False, nullable=False)
@@ -522,6 +533,7 @@ class EventTeam(Base):
     event = relationship("Event", back_populates="teams")
     created_by = relationship("User", foreign_keys=[created_by_user_id])
     members = relationship("TeamMember", back_populates="team", cascade="all, delete-orphan")
+    invites = relationship("TeamInvite", back_populates="team", cascade="all, delete-orphan")
 
     @hybrid_property
     def member_count(self):
@@ -556,10 +568,36 @@ class TeamMember(Base):
     joined_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
 
     team = relationship("EventTeam", back_populates="members")
-    registration = relationship("Registration", backref="team_membership", uselist=False)
+    registration = relationship("Registration", backref=orm_backref("team_membership", uselist=False), uselist=False)
 
     def __repr__(self):
         return f"<TeamMember(member_id={self.member_id}, team_id={self.team_id}, registration_id={self.registration_id})>"
+
+
+class TeamInvite(Base):
+    """
+    Represents an email invitation sent to a teammate when a team lead creates a group-priced team.
+    The invited person clicks the link to register for free and join the team.
+    """
+    __tablename__ = "team_invites"
+
+    invite_id = Column(Integer, primary_key=True, index=True)
+    team_id = Column(Integer, ForeignKey('event_teams.team_id', ondelete="CASCADE"), nullable=False, index=True)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
+    ticket_type_id = Column(Integer, ForeignKey('ticket_types.ticket_type_id', ondelete="CASCADE"), nullable=False)
+    invited_email = Column(String(255), nullable=False)
+    token = Column(String(128), unique=True, nullable=False, index=True)
+    claimed = Column(Boolean, default=False, nullable=False)
+    claimed_by_user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="SET NULL"), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+
+    team = relationship("EventTeam", back_populates="invites")
+    event = relationship("Event")
+    ticket_type = relationship("TicketType")
+    claimed_by = relationship("User", foreign_keys=[claimed_by_user_id])
+
+    def __repr__(self):
+        return f"<TeamInvite(invite_id={self.invite_id}, team_id={self.team_id}, email='{self.invited_email}', claimed={self.claimed})>"
 
 
 class GuestTicket(Base):
