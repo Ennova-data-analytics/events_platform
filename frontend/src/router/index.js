@@ -180,6 +180,12 @@ const routes = [
         path: 'ai-documents',
         name: 'admin-ai-documents',
         component: () => import('../views/admin/AdminAIDocumentsPage.vue')
+      },
+      {
+        path: 'user-roles',
+        name: 'admin-user-roles',
+        component: () => import('../views/admin/AdminUserRolesPage.vue'),
+        meta: { requiresSuperAdmin: true }
       }
     ]
   }
@@ -190,12 +196,14 @@ const router = createRouter({
   routes: routes
 });
 
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore();
   const requiresAuth = to.meta.requiresAuth;
 
   if (requiresAuth && !authStore.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } });
+  } else if (to.meta.requiresSuperAdmin && !authStore.isSuperAdmin) {
+    next({ name: 'admin-dashboard' });
   } else {
     next();
   }

@@ -792,7 +792,24 @@ class EnnovaMemberListResponse(BaseModel):
 
 class UserSearchResponse(BaseModel):
     users: list[EnnovaMemberResponse]
-    total_count: int 
+    total_count: int
+
+class UserWithRoles(BaseModel):
+    user_id: uuid.UUID
+    email: str
+    full_name: str | None
+    is_active: bool
+    roles: list[Role] = []
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class UserWithRolesListResponse(BaseModel):
+    users: list[UserWithRoles]
+    total_count: int
+
+class RoleGrantRequest(BaseModel):
+    user_id: uuid.UUID
 
 class ExcelImportResponse(BaseModel):
     success: bool

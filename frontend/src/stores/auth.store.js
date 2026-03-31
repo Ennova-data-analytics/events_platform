@@ -16,6 +16,10 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value?.roles?.some(role => role.role_name === 'organiser' || role.role_name === 'super_admin');
   });
 
+  const isSuperAdmin = computed(() => {
+    return user.value?.roles?.some(role => role.role_name === 'super_admin');
+  });
+
   async function register(userData, cvFile = null) {
     error.value = null;
     try {
@@ -75,5 +79,5 @@ export const useAuthStore = defineStore('auth', () => {
     router.push('/login');
   }
 
-  return { token, user, error, isAuthenticated, isOrganiser, register, login, logout, fetchCurrentUser, setAuthFromResponse };
+  return { token, user, error, isAuthenticated, isOrganiser, isSuperAdmin, register, login, logout, fetchCurrentUser, setAuthFromResponse };
 });

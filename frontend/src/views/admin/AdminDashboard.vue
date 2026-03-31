@@ -21,6 +21,8 @@
         <v-list-item prepend-icon="mdi-comment-text-multiple" title="Feedback Templates" to="/admin/feedback-templates" @click="closeDrawerOnMobile"></v-list-item>
         <v-list-item prepend-icon="mdi-robot-happy" title="AI Documents" to="/admin/ai-documents" @click="closeDrawerOnMobile"></v-list-item>
         <v-list-item prepend-icon="mdi-play-circle" title="Tutorials" to="/admin/tutorials" @click="closeDrawerOnMobile"></v-list-item>
+        <v-divider v-if="authStore.isSuperAdmin" class="my-2"></v-divider>
+        <v-list-item v-if="authStore.isSuperAdmin" prepend-icon="mdi-shield-account" title="User Roles" to="/admin/user-roles" @click="closeDrawerOnMobile"></v-list-item>
       </v-list>
     </v-navigation-drawer>
 

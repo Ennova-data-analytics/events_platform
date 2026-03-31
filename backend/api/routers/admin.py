@@ -605,3 +605,81 @@ async def import_ennova_members_from_excel(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing file: {str(e)}"
         )
+
+
+# ── Role Management (super_admin only) ──────────────────────────────────────
+
+@router.get("/users", response_model=schemas.UserWithRolesListResponse)
+def list_users(
+    q: str | None = None,
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(deps.get_db),
+    current_admin: models.User = Depends(deps.get_current_active_admin)
+):
+    """List all users with their roles. Filterable by name/email."""
+    query = db.query(models.User)
+    if q:
+        search_filter = f"%{q}%"
+        query = query.filter(
+            (models.User.email.ilike(search_filter)) |
+            (models.User.full_name.ilike(search_filter))
+        )
+    total_count = query.count()
+    users = query.order_by(models.User.email).offset(skip).limit(limit).all()
+    return schemas.UserWithRolesListResponse(
+        users=[schemas.UserWithRoles.model_validate(u) for u in users],
+        total_count=total_count
+    )
+
+
+@router.post("/users/{user_id}/grant-organiser", response_model=schemas.UserWithRoles)
+def grant_organiser_role(
+    user_id: str,
+    db: Session = Depends(deps.get_db),
+    current_admin: models.User = Depends(deps.get_current_active_admin)
+):
+    """Grant the organiser role to a user."""
+    import uuid as _uuid
+    user = db.query(models.User).filter(models.User.user_id == _uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    organiser_role = db.query(models.Role).filter(models.Role.role_name == "organiser").first()
+    if not organiser_role:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Organiser role not found")
+
+    if organiser_role in user.roles:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already has the organiser role")
+
+    user.roles.append(organiser_role)
+    db.commit()
+    db.refresh(user)
+    logger.info(f"Organiser role granted to {user.email} by super_admin {current_admin.email}")
+    return schemas.UserWithRoles.model_validate(user)
+
+
+@router.post("/users/{user_id}/revoke-organiser", response_model=schemas.UserWithRoles)
+def revoke_organiser_role(
+    user_id: str,
+    db: Session = Depends(deps.get_db),
+    current_admin: models.User = Depends(deps.get_current_active_admin)
+):
+    """Revoke the organiser role from a user."""
+    import uuid as _uuid
+    user = db.query(models.User).filter(models.User.user_id == _uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if str(user.user_id) == str(current_admin.user_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot modify your own roles")
+
+    organiser_role = db.query(models.Role).filter(models.Role.role_name == "organiser").first()
+    if not organiser_role or organiser_role not in user.roles:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User does not have the organiser role")
+
+    user.roles.remove(organiser_role)
+    db.commit()
+    db.refresh(user)
+    logger.info(f"Organiser role revoked from {user.email} by super_admin {current_admin.email}")
+    return schemas.UserWithRoles.model_validate(user)
