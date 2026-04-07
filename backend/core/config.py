@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str
     FRONTEND_URL: str = "http://localhost:5173"
 
+    APP_TIMEZONE: str = "Europe/Madrid"
+
     OPENAI_API_KEY: str
 
     QDRANT_URL: str

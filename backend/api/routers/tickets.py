@@ -51,11 +51,13 @@ def _build_ticket_pdf(event: models.Event, attendee_name: str, token: str, ticke
     def detail(label, value):
         return [Paragraph(label.upper(), label_style), Paragraph(str(value), value_style)]
 
-    start_local = event.event_date_start.astimezone()
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo(settings.APP_TIMEZONE)
+    start_local = event.event_date_start.astimezone(tz)
     event_date = start_local.strftime('%A, %d %B %Y')
     event_time = start_local.strftime('%H:%M')
     if event.event_date_end:
-        event_time += f" – {event.event_date_end.astimezone().strftime('%H:%M')}"
+        event_time += f" – {event.event_date_end.astimezone(tz).strftime('%H:%M')}"
 
     qr_buf = generate_ticket_qr_png(token, settings.FRONTEND_URL, box_size=8)
     pil_img = PILImage.open(qr_buf)
