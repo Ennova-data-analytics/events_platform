@@ -382,7 +382,9 @@ const isEditMode = computed(() => props.initialData && props.initialData.event_i
 watch(() => props.initialData, (newData) => {
   const dataToEdit = { ...newData };
   if (dataToEdit.event_date_start) {
-    dataToEdit.event_date_start = new Date(dataToEdit.event_date_start).toISOString().slice(0, 19);
+    const d = new Date(dataToEdit.event_date_start)
+    const pad = n => String(n).padStart(2, '0')
+    dataToEdit.event_date_start = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
   }
   if (dataToEdit.requires_approval === undefined) {
     dataToEdit.requires_approval = true;

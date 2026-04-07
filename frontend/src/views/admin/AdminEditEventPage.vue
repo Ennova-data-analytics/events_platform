@@ -380,11 +380,13 @@ function statusColor(status) {
   return map[status] || 'default'
 }
 
-// Convert ISO datetime to datetime-local format for input
+// Convert ISO datetime to datetime-local format for input (preserve local time)
 function toDatetimeLocal(isoString) {
   if (!isoString) return ''
   try {
-    return new Date(isoString).toISOString().slice(0, 16)
+    const d = new Date(isoString)
+    const pad = n => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
   } catch { return '' }
 }
 
