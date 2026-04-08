@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from zoneinfo import ZoneInfo
 from domain import models
 from domain.use_cases import db_notifications
 from domain.services.email_service import email_service
@@ -20,7 +21,8 @@ def send_registration_approved_notification(
     db_notifications.notify_registration_approved(db=db, registration=registration)
 
     try:
-        event_date = event.event_date_start.strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
+        tz = ZoneInfo(settings.APP_TIMEZONE)
+        event_date = event.event_date_start.astimezone(tz).strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
         event_url = f"{settings.FRONTEND_URL}/event/{event.event_id}"
 
         custom_template = event.email_template_approved if hasattr(event, 'email_template_approved') else None
@@ -118,7 +120,8 @@ def send_registration_created_notification(
     db_notifications.notify_registration_created(db=db, registration=registration)
 
     try:
-        event_date = event.event_date_start.strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
+        tz = ZoneInfo(settings.APP_TIMEZONE)
+        event_date = event.event_date_start.astimezone(tz).strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
 
         custom_template = event.email_template_received if hasattr(event, 'email_template_received') else None
 
@@ -162,7 +165,8 @@ def send_payment_confirmed_notification(
     db_notifications.notify_payment_confirmed(db=db, registration=registration)
 
     try:
-        event_date = event.event_date_start.strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
+        tz = ZoneInfo(settings.APP_TIMEZONE)
+        event_date = event.event_date_start.astimezone(tz).strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
         event_url = f"{settings.FRONTEND_URL}/event/{event.event_id}"
 
         custom_template = event.email_template_payment if hasattr(event, 'email_template_payment') else None
@@ -210,7 +214,8 @@ def send_payment_confirmed_notification(
 def send_team_invite_email(to_email: str, team_name: str, event: models.Event, invite_token: str):
     """Send a team invitation email to a prospective teammate."""
     try:
-        event_date = event.event_date_start.strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
+        tz = ZoneInfo(settings.APP_TIMEZONE)
+        event_date = event.event_date_start.astimezone(tz).strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
         invite_url = f"{settings.FRONTEND_URL}/event/{event.event_id}/claim-invite?token={invite_token}"
 
         html_content, text_content = email_templates.render_team_invite_email(

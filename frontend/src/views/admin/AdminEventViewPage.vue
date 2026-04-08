@@ -26,6 +26,16 @@
           <span class="d-sm-none">Bulk Email</span>
         </v-btn>
         <v-btn
+          color="warning"
+          variant="tonal"
+          @click="openTimeChangeDialog"
+          prepend-icon="mdi-clock-alert"
+          :size="$vuetify.display.mobile ? 'small' : 'default'"
+        >
+          <span class="d-none d-sm-inline">Time Change Email</span>
+          <span class="d-sm-none">Time Change</span>
+        </v-btn>
+        <v-btn
           :color="signupsEnabled ? 'success' : 'error'"
           variant="tonal"
           @click="toggleSignups"
@@ -768,6 +778,58 @@
     </v-dialog>
 
     <!-- Bulk Email Dialog -->
+    <v-dialog v-model="timeChangeDialog.show" :max-width="$vuetify.display.mobile ? '95vw' : '600px'" scrollable>
+      <v-card>
+        <v-card-title class="text-h5">
+          Send Time Change Email
+        </v-card-title>
+        <v-card-text>
+          <v-alert type="warning" variant="tonal" class="mb-4">
+            This will notify attendees that the event date/time has changed. The new date and time will be pulled directly from the event.
+          </v-alert>
+
+          <v-select
+            v-model="timeChangeDialog.recipientStatuses"
+            label="Recipient Status(es)"
+            :items="statusOptions"
+            multiple
+            chips
+            closable-chips
+            required
+            density="comfortable"
+            class="mb-4"
+            :hint="`${getTimeChangeRecipientCount()} recipient(s) selected`"
+            persistent-hint
+          ></v-select>
+
+          <v-alert v-if="timeChangeDialog.result" :type="timeChangeDialog.result.success ? 'success' : 'error'" class="mt-4">
+            <div v-if="timeChangeDialog.result.success">
+              Successfully sent {{ timeChangeDialog.result.emails_sent }} of {{ timeChangeDialog.result.total_recipients }} emails.
+            </div>
+            <div v-if="timeChangeDialog.result.failed_emails && timeChangeDialog.result.failed_emails.length > 0">
+              <div class="font-weight-bold">Failed to send to:</div>
+              <ul>
+                <li v-for="email in timeChangeDialog.result.failed_emails" :key="email">{{ email }}</li>
+              </ul>
+            </div>
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="timeChangeDialog.show = false">Cancel</v-btn>
+          <v-btn
+            color="warning"
+            variant="flat"
+            @click="sendTimeChangeEmail"
+            :loading="timeChangeDialog.sending"
+            :disabled="timeChangeDialog.recipientStatuses.length === 0 || timeChangeDialog.sending"
+          >
+            Send Email
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="bulkEmailDialog.show" :max-width="$vuetify.display.mobile ? '95vw' : '700px'" scrollable>
       <v-card>
         <v-card-title class="text-h5">
@@ -945,6 +1007,13 @@ const bulkEmailDialog = ref({
 });
 
 const statusOptions = ['Pending Approval', 'Approved', 'Paid', 'Rejected'];
+
+const timeChangeDialog = ref({
+  show: false,
+  recipientStatuses: ['Approved', 'Paid'],
+  sending: false,
+  result: null
+});
 
 // Email history data
 const emailLogs = ref([]);
@@ -1424,6 +1493,48 @@ function openBulkEmailDialog() {
 
 function closeBulkEmailDialog() {
   bulkEmailDialog.value.show = false;
+}
+
+function openTimeChangeDialog() {
+  timeChangeDialog.value = {
+    show: true,
+    recipientStatuses: ['Approved', 'Paid'],
+    sending: false,
+    result: null
+  };
+}
+
+function getTimeChangeRecipientCount() {
+  if (!timeChangeDialog.value.recipientStatuses || timeChangeDialog.value.recipientStatuses.length === 0) return 0;
+  return allAttendees.value.filter(a => timeChangeDialog.value.recipientStatuses.includes(a.status)).length;
+}
+
+async function sendTimeChangeEmail() {
+  timeChangeDialog.value.sending = true;
+  timeChangeDialog.value.result = null;
+  try {
+    const response = await AdminService.sendTimeChangeEmail(route.params.id, {
+      recipient_statuses: timeChangeDialog.value.recipientStatuses
+    });
+    timeChangeDialog.value.result = response.data;
+    snackbar.value = {
+      show: true,
+      text: response.data.success
+        ? `Successfully sent ${response.data.emails_sent} time change email(s).`
+        : 'Some emails failed to send. Check the details above.',
+      color: response.data.success ? 'success' : 'warning'
+    };
+  } catch (error) {
+    console.error('Failed to send time change email:', error);
+    snackbar.value = {
+      show: true,
+      text: error.response?.data?.detail || 'Failed to send time change email.',
+      color: 'error'
+    };
+    timeChangeDialog.value.result = { success: false, emails_sent: 0, total_recipients: 0, failed_emails: [] };
+  } finally {
+    timeChangeDialog.value.sending = false;
+  }
 }
 
 function getRecipientCount() {

@@ -576,7 +576,11 @@ class BulkEmailRequest(BaseModel):
     event_id: int
     recipient_statuses: list[str]
     subject: str
-    body: str  
+    body: str
+
+
+class TimeChangeEmailRequest(BaseModel):
+    recipient_statuses: list[str]
 
 
 class BulkEmailResponse(BaseModel):

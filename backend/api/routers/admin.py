@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
+from zoneinfo import ZoneInfo
 import pandas as pd
 from io import BytesIO
 import logging
@@ -8,6 +9,7 @@ import secrets
 
 from domain import schemas, models
 from domain.services import notification_service, email_service, email_templates
+from core.config import settings
 from domain.use_cases.db_ticket_types import TicketTypeUseCases
 from api import deps
 
@@ -247,6 +249,92 @@ def send_bulk_email_to_attendees(
     )
     db.add(log)
     db.commit()
+
+    return schemas.BulkEmailResponse(
+        success=emails_sent > 0,
+        emails_sent=emails_sent,
+        total_recipients=len(registrations),
+        failed_emails=failed_emails
+    )
+
+
+@router.post("/events/{event_id}/send-time-change-email", response_model=schemas.BulkEmailResponse)
+def send_time_change_email(
+    event_id: int,
+    email_data: schemas.TimeChangeEmailRequest,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """Send a time change notification email to attendees with specific registration statuses."""
+    event = db.query(models.Event).filter(models.Event.event_id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    valid_statuses = ['Pending Approval', 'Approved', 'Paid', 'Rejected']
+    for status_value in email_data.recipient_statuses:
+        if status_value not in valid_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status: {status_value}. Must be one of {valid_statuses}"
+            )
+
+    registrations = db.query(models.Registration).filter(
+        models.Registration.event_id == event_id,
+        models.Registration.status.in_(email_data.recipient_statuses)
+    ).all()
+
+    if not registrations:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No registrations found with status(es): {', '.join(email_data.recipient_statuses)}"
+        )
+
+    tz = ZoneInfo(settings.APP_TIMEZONE)
+    event_date = event.event_date_start.astimezone(tz).strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
+    event_location = event.location or "TBD"
+    subject = f"Event Time Change: {event.event_name}"
+
+    emails_sent = 0
+    failed_emails = []
+    successful_emails = []
+
+    for idx, reg in enumerate(registrations):
+        try:
+            user = db.query(models.User).filter(models.User.user_id == reg.user_id).first()
+            if not user or not user.email:
+                failed_emails.append(f"Registration ID {reg.registration_id} (no email)")
+                continue
+
+            html_content, text_content = email_templates.render_time_change_email(
+                user_name=user.full_name or user.email.split("@")[0],
+                event_name=event.event_name,
+                event_date=event_date,
+                event_location=event_location,
+            )
+
+            success = email_service.email_service.send_email(
+                to_email=user.email,
+                to_name=user.full_name or user.email,
+                subject=subject,
+                html_content=html_content,
+                text_content=text_content
+            )
+
+            if success:
+                emails_sent += 1
+                successful_emails.append(user.email)
+            else:
+                failed_emails.append(user.email)
+
+            if idx < len(registrations) - 1:
+                time.sleep(0.6)
+
+        except Exception as e:
+            logger.error(f"Failed to send time change email for registration {reg.registration_id}: {str(e)}")
+            if user and user.email:
+                failed_emails.append(user.email)
+            else:
+                failed_emails.append(f"Registration ID {reg.registration_id}")
 
     return schemas.BulkEmailResponse(
         success=emails_sent > 0,

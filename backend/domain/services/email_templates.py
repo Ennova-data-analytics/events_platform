@@ -452,6 +452,55 @@ We look forward to seeing you there!
     return html_content, text_content
 
 
+def render_time_change_email(
+    user_name: str,
+    event_name: str,
+    event_date: str,
+    event_location: str,
+) -> tuple[str, str]:
+    """Render event time change notification email, styled like the registration approved email."""
+    content = f"""
+        <h2>Important Update: Event Time Change</h2>
+        <p>Dear {user_name},</p>
+        <p>We want to let you know that the date/time for <strong>{event_name}</strong> has been updated.</p>
+
+        <div class="event-details">
+            <h3>Updated Event Details</h3>
+            <p><strong>Event:</strong> {event_name}</p>
+            <p><strong>New Date &amp; Time:</strong> {event_date}</p>
+            <p><strong>Location:</strong> {event_location}</p>
+        </div>
+
+        <p>We apologise for any inconvenience this may cause. Please update your calendar accordingly.</p>
+        <p>If you have any questions, please don't hesitate to contact us.</p>
+    """
+
+    base = Template(get_base_template())
+    html_content = base.render(
+        header_title="Event Time Change",
+        content=content
+    )
+
+    text_content = f"""
+Event Time Change
+
+Dear {user_name},
+
+We want to let you know that the date/time for {event_name} has been updated.
+
+Updated Event Details:
+- Event: {event_name}
+- New Date & Time: {event_date}
+- Location: {event_location}
+
+We apologise for any inconvenience this may cause. Please update your calendar accordingly.
+
+If you have any questions, please don't hesitate to contact us.
+"""
+
+    return html_content, text_content
+
+
 def render_bulk_email(
     user_name: str,
     event_name: str,
@@ -697,6 +746,8 @@ This analysis was generated using AI (GPT-4o-mini) by Ennova Events Platform.
 Powered by LangChain
     """.strip()
 
+    return subject, html_content, text_content
+
 
 def render_team_invite_email(
     team_name: str,
@@ -742,5 +793,3 @@ This invite link is personal to you. Please do not share it.
 """.strip()
 
     return html_content, text_content
-
-    return subject, html_content, text_content
