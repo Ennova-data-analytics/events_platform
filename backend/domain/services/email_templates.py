@@ -455,45 +455,40 @@ We look forward to seeing you there!
 def render_time_change_email(
     user_name: str,
     event_name: str,
-    event_date: str,
-    event_location: str,
 ) -> tuple[str, str]:
-    """Render event time change notification email, styled like the registration approved email."""
+    """Render event time clarification email."""
     content = f"""
-        <h2>Important Update: Event Time Change</h2>
+        <h2>Important Information Regarding {event_name}</h2>
         <p>Dear {user_name},</p>
-        <p>We want to let you know that the date/time for <strong>{event_name}</strong> has been updated.</p>
+        <p>In your registration confirmation email, you may have received a wrong time of <strong>17:00</strong>. The event starts at <strong>19:00</strong>, as indicated in your PDF ticket. We are very sorry for the inconvenience.</p>
 
         <div class="event-details">
-            <h3>Updated Event Details</h3>
-            <p><strong>Event:</strong> {event_name}</p>
-            <p><strong>New Date &amp; Time:</strong> {event_date}</p>
-            <p><strong>Location:</strong> {event_location}</p>
+            <p><strong>Event start time:</strong> 19:00</p>
+            <p>We kindly ask you to arrive by <strong>18:45</strong> to ensure a smooth and timely start for everyone.</p>
         </div>
 
-        <p>We apologise for any inconvenience this may cause. Please update your calendar accordingly.</p>
+        <p>Thank you for your understanding, and we look forward to seeing you there!</p>
         <p>If you have any questions, please don't hesitate to contact us.</p>
     """
 
     base = Template(get_base_template())
     html_content = base.render(
-        header_title="Event Time Change",
+        header_title="Important Information",
         content=content
     )
 
     text_content = f"""
-Event Time Change
+Important Information Regarding {event_name}
 
 Dear {user_name},
 
-We want to let you know that the date/time for {event_name} has been updated.
+In your registration confirmation email, you may have received a wrong time of 17:00. The event starts at 19:00, as indicated in your PDF ticket. We are very sorry for the inconvenience.
 
-Updated Event Details:
-- Event: {event_name}
-- New Date & Time: {event_date}
-- Location: {event_location}
+Event start time: 19:00
 
-We apologise for any inconvenience this may cause. Please update your calendar accordingly.
+We kindly ask you to arrive by 18:45 to ensure a smooth and timely start for everyone.
+
+Thank you for your understanding, and we look forward to seeing you there!
 
 If you have any questions, please don't hesitate to contact us.
 """

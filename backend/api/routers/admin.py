@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
-from zoneinfo import ZoneInfo
 import pandas as pd
 from io import BytesIO
 import logging
@@ -289,10 +288,7 @@ def send_time_change_email(
             detail=f"No registrations found with status(es): {', '.join(email_data.recipient_statuses)}"
         )
 
-    tz = ZoneInfo(settings.APP_TIMEZONE)
-    event_date = event.event_date_start.astimezone(tz).strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
-    event_location = event.location or "TBD"
-    subject = f"Event Time Change: {event.event_name}"
+    subject = f"Important Information: {event.event_name}"
 
     emails_sent = 0
     failed_emails = []
@@ -308,8 +304,6 @@ def send_time_change_email(
             html_content, text_content = email_templates.render_time_change_email(
                 user_name=user.full_name or user.email.split("@")[0],
                 event_name=event.event_name,
-                event_date=event_date,
-                event_location=event_location,
             )
 
             success = email_service.email_service.send_email(
