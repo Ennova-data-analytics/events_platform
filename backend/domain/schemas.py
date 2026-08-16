@@ -1014,3 +1014,175 @@ class AttendanceRecordResponse(BaseModel):
     checked_in_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Recruitment module (Phase 1: departments, cohorts, recruiter scoping)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ScoringCriterion(BaseModel):
+    id: str
+    label: str
+    weight: int = 0
+
+
+class CustomQuestion(BaseModel):
+    id: str
+    label: str
+    type: Literal['text', 'textarea', 'select'] = 'text'
+    options: list[str] | None = None
+    required: bool = False
+    recommended: bool = False
+
+
+class DepartmentBase(BaseModel):
+    name: str
+    description: str | None = None
+    skills_sought: list[str] | None = None
+    is_active: bool = True
+    has_case_stage: bool = False
+    calendly_link: str | None = None
+    scoring_criteria: list[ScoringCriterion] | None = None
+    custom_questions: list[CustomQuestion] | None = None
+
+
+class DepartmentCreate(DepartmentBase):
+    pass
+
+
+class DepartmentUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    skills_sought: list[str] | None = None
+    is_active: bool | None = None
+    has_case_stage: bool | None = None
+    calendly_link: str | None = None
+    scoring_criteria: list[ScoringCriterion] | None = None
+    custom_questions: list[CustomQuestion] | None = None
+
+
+class Department(DepartmentBase):
+    department_id: int
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Single-field update endpoints used by the admin config pages.
+class DepartmentCalendlyUpdate(BaseModel):
+    calendly_link: str = ""
+
+
+class DepartmentCriteriaUpdate(BaseModel):
+    scoring_criteria: list[ScoringCriterion]
+
+
+class DepartmentQuestionsUpdate(BaseModel):
+    custom_questions: list[CustomQuestion]
+
+
+class CycleDepartmentIn(BaseModel):
+    department_id: int
+    is_open: bool = True
+
+
+class CycleDepartmentOut(BaseModel):
+    department_id: int
+    is_open: bool
+    department: Department | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RecruitmentCycleBase(BaseModel):
+    name: str
+    opens_at: datetime | None = None
+    closes_at: datetime | None = None
+
+
+class RecruitmentCycleCreate(RecruitmentCycleBase):
+    # Departments recruiting in this cohort (super-admin sets these up).
+    departments: list[CycleDepartmentIn] = Field(default_factory=list)
+
+
+class RecruitmentCycleUpdate(BaseModel):
+    name: str | None = None
+    opens_at: datetime | None = None
+    closes_at: datetime | None = None
+    is_active: bool | None = None
+    departments: list[CycleDepartmentIn] | None = None
+
+
+class RecruitmentCycle(RecruitmentCycleBase):
+    cycle_id: int
+    is_active: bool
+    cycle_departments: list[CycleDepartmentOut] = Field(default_factory=list)
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RecruiterDepartmentsUpdate(BaseModel):
+    """Assign a recruiter to the set of departments they can review."""
+    department_ids: list[int]
+
+
+# ── Phase 2: public candidate application flow ──────────────────────────────
+class ApplicationMaterialIn(BaseModel):
+    s3_key: str
+    filename: str | None = None
+    note: str | None = None
+
+
+class ApplicationSubmit(BaseModel):
+    full_name: str
+    email: EmailStr
+    phone: str | None = None
+    degree: str | None = None
+    year: str | None = None
+    links: dict[str, Any] | None = None            # {linkedin, youtube, github, ...}
+    department_applied_id: int
+    department_ranking: list[int] = Field(default_factory=list)
+    answers: dict[str, Any] = Field(default_factory=dict)  # custom_answers, other_associations, ...
+    source: str | None = None
+    cv_s3_key: str | None = None
+    cover_letter_s3_key: str | None = None
+    materials: list[ApplicationMaterialIn] = Field(default_factory=list)
+    gdpr_consent: bool = False
+    talent_pool_consent: bool = False
+
+
+class ApplicationSubmitResult(BaseModel):
+    already_applied: bool
+    application_id: int | None = None
+    status_token: str
+
+
+class MatchPreviewIn(BaseModel):
+    department_applied_id: int
+    degree: str | None = None
+    answers: dict[str, Any] | None = None
+
+
+class UploadResult(BaseModel):
+    s3_key: str
+    filename: str
+
+
+# ── Phase 3: HR panel action bodies ─────────────────────────────────────────
+class StatusChangeIn(BaseModel):
+    status: str
+
+
+class FinalDepartmentIn(BaseModel):
+    department_id: int
+
+
+class NoteIn(BaseModel):
+    text: str
+
+
+class InterviewInviteIn(BaseModel):
+    calendly_link: str | None = None
+
+
+class CaseSendIn(BaseModel):
+    brief_url: str
+    hours: int = 48
+
+    model_config = ConfigDict(from_attributes=True)

@@ -70,6 +70,37 @@ def get_current_active_admin(current_user: models.User = Depends(get_current_use
         )
     return current_user
 
+
+def get_current_active_recruiter(current_user: models.User = Depends(get_current_user)) -> models.User:
+    """Checks if the user can access the recruitment panel (recruiter or super_admin)."""
+    role_names = {role.role_name for role in current_user.roles}
+    if not role_names & {'recruiter', 'super_admin'}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The user does not have the required permissions"
+        )
+    return current_user
+
+
+def is_super_admin(user: models.User) -> bool:
+    return any(role.role_name == 'super_admin' for role in user.roles)
+
+
+def recruiter_department_ids(db: Session, user: models.User) -> list[int] | None:
+    """
+    The department ids a recruiter is scoped to. Returns None for super_admins
+    (meaning 'all departments, no restriction'); otherwise the assigned ids
+    (possibly an empty list, meaning the recruiter can see nothing yet).
+    """
+    if is_super_admin(user):
+        return None
+    rows = (
+        db.query(models.RecruiterDepartment.department_id)
+        .filter(models.RecruiterDepartment.user_id == user.user_id)
+        .all()
+    )
+    return [r[0] for r in rows]
+
 def get_current_user_optional(
     db: Session = Depends(get_db),
     token: str = Depends(oauth2_scheme)

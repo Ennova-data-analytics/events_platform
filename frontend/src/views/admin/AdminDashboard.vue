@@ -1,5 +1,5 @@
 <template>
-  <v-layout>
+  <v-layout class="admin-layout">
     <v-app-bar v-if="$vuetify.display.mobile" elevation="1">
       <v-app-bar-nav-icon @click="drawer = !drawer"></v-app-bar-nav-icon>
       <v-app-bar-title>Admin Panel</v-app-bar-title>
@@ -15,6 +15,7 @@
       <v-list density="compact" nav>
         <v-list-item prepend-icon="mdi-view-dashboard" title="Dashboard" to="/admin" @click="closeDrawerOnMobile"></v-list-item>
         <v-list-item prepend-icon="mdi-calendar-multiple" title="Manage Events" to="/admin/events" @click="closeDrawerOnMobile"></v-list-item>
+        <v-list-item prepend-icon="mdi-account-tie" title="Recruitment" to="/admin/recruitment" @click="closeDrawerOnMobile"></v-list-item>
         <v-list-item prepend-icon="mdi-account-group" title="Ennova Members" to="/admin/ennova-members" @click="closeDrawerOnMobile"></v-list-item>
         <v-list-item prepend-icon="mdi-form-select" title="Form Templates" to="/admin/forms" @click="closeDrawerOnMobile"></v-list-item>
         <v-list-item prepend-icon="mdi-email-edit" title="Email Templates" to="/admin/email-templates" @click="closeDrawerOnMobile"></v-list-item>
@@ -26,7 +27,7 @@
       </v-list>
     </v-navigation-drawer>
 
-    <v-main style="min-height: 300px;">
+    <v-main>
       <v-container>
         <router-view />
       </v-container>
@@ -61,3 +62,16 @@
     if (mobile.value) drawer.value = false;
   }
 </script>
+
+<style scoped>
+/*
+ * This dashboard renders a nested v-layout inside the app's outer layout. A
+ * nested v-layout has no intrinsic height, so it collapses to the content
+ * height — which made the sidebar track the page content and cut off nav items.
+ * Anchor it to the viewport (minus the 80px global app bar) so the drawer always
+ * fills the screen regardless of how tall the current page's content is.
+ */
+.admin-layout {
+  min-height: calc(100vh - 80px);
+}
+</style>

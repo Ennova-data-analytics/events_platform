@@ -58,6 +58,26 @@ def upload_file_to_s3_from_bytes(file_bytes: io.BytesIO, object_name: str, conte
     public_url = f"{settings.R2_PUBLIC_DOMAIN}/{object_name}"
     return public_url
 
+def get_object_bytes(object_name: str) -> bytes | None:
+    """Download an S3 object's bytes (used for server-side CV parsing)."""
+    try:
+        response = s3_client.get_object(Bucket=settings.S3_BUCKET_NAME, Key=object_name)
+        return response["Body"].read()
+    except Exception as e:
+        print(f"Error downloading object {object_name}: {e}")
+        return None
+
+
+def delete_object(object_name: str) -> bool:
+    """Delete an S3 object (used by the GDPR retention job)."""
+    try:
+        s3_client.delete_object(Bucket=settings.S3_BUCKET_NAME, Key=object_name)
+        return True
+    except Exception as e:
+        print(f"Error deleting object {object_name}: {e}")
+        return False
+
+
 def generate_predesigned_url(object_name: str) -> str:
     """Generates a predesigned URL to share a private S3 object"""
     try:

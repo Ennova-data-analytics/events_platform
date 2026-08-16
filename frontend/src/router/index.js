@@ -69,6 +69,24 @@ const routes = [
     component: () => import('../views/PublicFeedbackFormPage.vue')
   },
   {
+    // Recruitment — candidate-facing application form (public, no account needed)
+    path: '/join/apply',
+    name: 'recruitment-apply',
+    component: () => import('../views/RecruitmentApplyPage.vue')
+  },
+  {
+    // Recruitment — candidate status page (magic-link token)
+    path: '/join/status/:token',
+    name: 'recruitment-status',
+    component: () => import('../views/RecruitmentStatusPage.vue')
+  },
+  {
+    // Recruitment — candidate interview slot booking (magic-link token)
+    path: '/join/book/:token',
+    name: 'recruitment-book',
+    component: () => import('../views/RecruitmentBookingPage.vue')
+  },
+  {
     // Public ticket view — works for both guest tokens and registered-user shared links
     path: '/ticket/:token',
     name: 'ticket-view',
@@ -180,6 +198,37 @@ const routes = [
         path: 'ai-documents',
         name: 'admin-ai-documents',
         component: () => import('../views/admin/AdminAIDocumentsPage.vue')
+      },
+      {
+        path: 'recruitment',
+        name: 'admin-recruitment',
+        component: () => import('../views/admin/AdminRecruitmentKanbanPage.vue')
+      },
+      {
+        path: 'recruitment/candidate/:id',
+        name: 'admin-recruitment-candidate',
+        component: () => import('../views/admin/AdminRecruitmentCandidatePage.vue')
+      },
+      {
+        path: 'recruitment/scheduling',
+        name: 'admin-recruitment-scheduling',
+        component: () => import('../views/admin/AdminRecruitmentSchedulingPage.vue')
+      },
+      {
+        path: 'recruitment/criteria',
+        name: 'admin-recruitment-criteria',
+        component: () => import('../views/admin/AdminRecruitmentCriteriaPage.vue')
+      },
+      {
+        path: 'recruitment/cohorts',
+        name: 'admin-recruitment-cohorts',
+        component: () => import('../views/admin/AdminRecruitmentCohortsPage.vue'),
+        meta: { requiresSuperAdmin: true }
+      },
+      {
+        path: 'recruitment/analytics',
+        name: 'admin-recruitment-analytics',
+        component: () => import('../views/admin/AdminRecruitmentAnalyticsPage.vue')
       },
       {
         path: 'user-roles',
