@@ -2,9 +2,10 @@
   <v-container fluid>
     <v-row>
       <v-col cols="12">
-        <h1 :class="$vuetify.display.mobile ? 'text-h5 mb-2' : 'text-h4 mb-2'">Organiser Role Management</h1>
+        <h1 :class="$vuetify.display.mobile ? 'text-h5 mb-2' : 'text-h4 mb-2'">User Role Management</h1>
         <p class="text-subtitle-1 mb-6">
-          Grant or revoke the organiser role for users. Organisers can create events, manage registrations, and access the admin panel.
+          Grant or revoke roles. <strong>Organisers</strong> manage events; <strong>recruiters</strong> access the
+          recruitment panel, scoped to the departments you assign them.
         </p>
       </v-col>
     </v-row>
@@ -25,7 +26,8 @@
       <v-col cols="12" md="6" class="d-flex align-center">
         <v-chip-group v-model="roleFilter" mandatory>
           <v-chip value="all" filter>All Users</v-chip>
-          <v-chip value="organisers" filter color="primary">Organisers Only</v-chip>
+          <v-chip value="organisers" filter color="primary">Organisers</v-chip>
+          <v-chip value="recruiters" filter color="teal">Recruiters</v-chip>
         </v-chip-group>
       </v-col>
     </v-row>
@@ -98,6 +100,44 @@
                 </v-chip>
               </template>
 
+              <template v-slot:item.recruiter="{ item }">
+                <template v-if="isSuperAdmin(item)">
+                  <v-chip color="warning" size="small" variant="tonal" prepend-icon="mdi-all-inclusive">All departments</v-chip>
+                </template>
+                <template v-else-if="hasRecruiterRole(item)">
+                  <v-btn
+                    size="small"
+                    color="teal"
+                    variant="tonal"
+                    prepend-icon="mdi-tune-variant"
+                    class="mr-1"
+                    @click="openScope(item)"
+                  >
+                    Departments
+                  </v-btn>
+                  <v-btn
+                    size="small"
+                    color="error"
+                    variant="text"
+                    icon="mdi-account-off-outline"
+                    :loading="actionLoading === item.user_id"
+                    @click="revokeRecruiter(item)"
+                  ></v-btn>
+                </template>
+                <template v-else>
+                  <v-btn
+                    size="small"
+                    color="teal"
+                    variant="outlined"
+                    prepend-icon="mdi-account-tie"
+                    :loading="actionLoading === item.user_id"
+                    @click="grantRecruiter(item)"
+                  >
+                    Grant Recruiter
+                  </v-btn>
+                </template>
+              </template>
+
               <template v-slot:no-data>
                 <v-alert type="info" variant="tonal" class="ma-4">
                   No users found.
@@ -143,6 +183,41 @@
       </v-card>
     </v-dialog>
 
+    <!-- Recruiter department scope dialog -->
+    <v-dialog v-model="scopeDialog" :max-width="$vuetify.display.mobile ? '92vw' : '520px'">
+      <v-card>
+        <v-card-title class="text-h6">Department access</v-card-title>
+        <v-card-text>
+          <p class="text-body-2 text-medium-emphasis mb-4">
+            Choose which departments <strong>{{ scopeUser?.full_name || scopeUser?.email }}</strong> can review.
+            They'll only see applicants in these teams.
+          </p>
+          <v-progress-linear v-if="scopeLoading" indeterminate color="teal" class="mb-3" />
+          <v-select
+            v-model="scopeSelection"
+            :items="departments"
+            item-title="name"
+            item-value="id"
+            label="Departments"
+            variant="outlined"
+            multiple
+            chips
+            closable-chips
+            :disabled="scopeLoading"
+            prepend-inner-icon="mdi-account-tie-outline"
+          ></v-select>
+          <v-alert v-if="!departments.length" type="info" variant="tonal" density="compact">
+            No departments exist yet. Create them in Recruitment → Cohorts first.
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="scopeDialog = false">Cancel</v-btn>
+          <v-btn color="teal" variant="flat" :loading="scopeSaving" @click="saveScope">Save access</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="snackbar" :color="snackbarColor" :timeout="3000">
       {{ snackbarMessage }}
     </v-snackbar>
@@ -172,13 +247,21 @@ export default {
       snackbarMessage: '',
       snackbarColor: 'success',
 
+      // Recruiter scoping
+      departments: [],
+      scopeDialog: false,
+      scopeUser: null,
+      scopeSelection: [],
+      scopeLoading: false,
+      scopeSaving: false,
+
       headers: [
         { title: 'Email', key: 'email', sortable: true },
         { title: 'Full Name', key: 'full_name', sortable: true },
         { title: 'Roles', key: 'roles', sortable: false },
-        { title: 'Active', key: 'is_active', sortable: false, align: 'center' },
-        { title: 'Joined', key: 'created_at', sortable: true },
-        { title: 'Actions', key: 'actions', sortable: false, align: 'end' }
+        { title: 'Organiser', key: 'actions', sortable: false, align: 'start' },
+        { title: 'Recruiter', key: 'recruiter', sortable: false, align: 'start' },
+        { title: 'Joined', key: 'created_at', sortable: true }
       ]
     };
   },
@@ -187,11 +270,15 @@ export default {
       if (this.roleFilter === 'organisers') {
         return this.users.filter(u => this.hasOrganiserRole(u) || this.isSuperAdmin(u));
       }
+      if (this.roleFilter === 'recruiters') {
+        return this.users.filter(u => this.hasRecruiterRole(u) || this.isSuperAdmin(u));
+      }
       return this.users;
     }
   },
   mounted() {
     this.loadUsers();
+    this.loadDepartments();
   },
   methods: {
     async loadUsers() {
@@ -224,6 +311,7 @@ export default {
     roleColor(roleName) {
       if (roleName === 'super_admin') return 'warning';
       if (roleName === 'organiser') return 'primary';
+      if (roleName === 'recruiter') return 'teal';
       return 'default';
     },
 
@@ -272,6 +360,80 @@ export default {
       } finally {
         this.actionLoading = null;
         this.targetUser = null;
+      }
+    },
+
+    hasRecruiterRole(user) {
+      return user.roles.some(r => r.role_name === 'recruiter');
+    },
+
+    async loadDepartments() {
+      try {
+        const response = await UserRoleService.listDepartments();
+        // Normalise backend department_id -> id for the picker.
+        this.departments = response.data.map(d => ({ id: d.department_id ?? d.id, name: d.name }));
+      } catch (error) {
+        // Non-critical: departments may not exist yet.
+        console.error('Error loading departments:', error);
+      }
+    },
+
+    async grantRecruiter(user) {
+      this.actionLoading = user.user_id;
+      try {
+        const response = await UserRoleService.grantRecruiter(user.user_id);
+        const idx = this.users.findIndex(u => u.user_id === user.user_id);
+        if (idx !== -1) this.users[idx] = response.data;
+        this.showSnackbar(`Recruiter role granted to ${user.full_name || user.email}`, 'success');
+        // Immediately prompt for department scope.
+        this.openScope(this.users[idx] || user);
+      } catch (error) {
+        this.showSnackbar(error.response?.data?.detail || 'Failed to grant recruiter role', 'error');
+      } finally {
+        this.actionLoading = null;
+      }
+    },
+
+    async revokeRecruiter(user) {
+      this.actionLoading = user.user_id;
+      try {
+        const response = await UserRoleService.revokeRecruiter(user.user_id);
+        const idx = this.users.findIndex(u => u.user_id === user.user_id);
+        if (idx !== -1) this.users[idx] = response.data;
+        this.showSnackbar(`Recruiter role revoked from ${user.full_name || user.email}`, 'success');
+      } catch (error) {
+        this.showSnackbar(error.response?.data?.detail || 'Failed to revoke recruiter role', 'error');
+      } finally {
+        this.actionLoading = null;
+      }
+    },
+
+    async openScope(user) {
+      this.scopeUser = user;
+      this.scopeSelection = [];
+      this.scopeDialog = true;
+      this.scopeLoading = true;
+      try {
+        const response = await UserRoleService.getRecruiterDepartments(user.user_id);
+        this.scopeSelection = response.data;
+      } catch {
+        this.showSnackbar('Failed to load department access', 'error');
+      } finally {
+        this.scopeLoading = false;
+      }
+    },
+
+    async saveScope() {
+      if (!this.scopeUser) return;
+      this.scopeSaving = true;
+      try {
+        await UserRoleService.setRecruiterDepartments(this.scopeUser.user_id, this.scopeSelection);
+        this.showSnackbar(`Department access updated for ${this.scopeUser.full_name || this.scopeUser.email}`, 'success');
+        this.scopeDialog = false;
+      } catch (error) {
+        this.showSnackbar(error.response?.data?.detail || 'Failed to save department access', 'error');
+      } finally {
+        this.scopeSaving = false;
       }
     },
 

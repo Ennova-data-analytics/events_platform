@@ -33,7 +33,13 @@ class Settings(BaseSettings):
     QDRANT_URL: str
     QDRANT_API_KEY: str
     QDRANT_COLLECTION_NAME: str = "ennova_documents"
-    QDRANT_PORT: int 
+    QDRANT_PORT: int
+
+    # Recruitment module. Token secret falls back to SECRET_KEY if unset.
+    RECRUITMENT_TOKEN_SECRET: str = ""
+    RETENTION_MONTHS: int = 6
+    CALENDLY_WEBHOOK_SECRET: str = ""          # optional; verifies Calendly signatures
+    RECRUITMENT_SCHEDULER_ENABLED: bool = True  # reminder/nudge/retention jobs
 
     model_config = SettingsConfigDict(env_file=".env")
 
