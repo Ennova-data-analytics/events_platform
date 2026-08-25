@@ -460,7 +460,7 @@ const showScore = ref(false);
 
 const degrees = ESADE_DEGREES;
 const years = ESADE_YEARS;
-const sources = ['Class announcement', 'Instagram', 'Referral', 'Careers fair', 'Poster', 'Other'];
+const sources = ['Class announcement', 'Instagram', 'TikTok', 'A friend/colleague', 'Association fair', 'Careers fair', 'Poster', 'Other'];
 
 const form = ref({
   full_name: '',

@@ -26,15 +26,26 @@ export const statusMeta = (value) =>
 export const HIGH_STAKES_STATUSES = ['accepted', 'rejected'];
 
 // Esade academic context (used in the application form selects).
+// Current Esade programmes (verified against esade.edu, 2026 intake).
 export const ESADE_DEGREES = [
+  // Bachelors
   'BBA - Business Administration',
-  'BGLM - Global Leadership & Management',
-  'GLE - Global Governance, Economics & Law',
-  'Double Degree BBA + Law',
-  'Bachelor in Business & Data Science',
-  'MSc in Management (MiM)',
+  'Business and Artificial Intelligence (BBAI)',
+  'Global Governance, Economics & Legal Order (GLE)',
+  'Transformational Leadership & Social Impact',
+  'Law',
+  'Double Degree: Business Administration + Law',
+  'Double Degree: Business Administration + GLE',
+  'Double Degree: Business Administration + Business & AI',
+  'Double Degree: Law + GLE',
+  // Masters (MSc)
+  'MSc in Business Analytics',
   'MSc in Finance',
   'MSc in International Management',
+  'MSc in Marketing Management',
+  'MSc in Innovation & Entrepreneurship',
+  'MSc in Sustainability Management',
+  'MBA',
   'Other',
 ];
 export const ESADE_YEARS = ['1st year', '2nd year', '3rd year', '4th year', 'Master', 'Exchange'];
@@ -216,7 +227,7 @@ export const mockApplications = [
     id: 2,
     status: 'in_review',
     cycle_id: 1,
-    source: 'Referral',
+    source: 'A friend/colleague',
     created_at: '2026-09-19T14:03:00Z',
     candidate: {
       full_name: 'David Okafor',
@@ -326,7 +337,7 @@ export const mockApplications = [
     id: 5,
     status: 'decision',
     cycle_id: 1,
-    source: 'Referral',
+    source: 'A friend/colleague',
     created_at: '2026-09-14T08:30:00Z',
     candidate: {
       full_name: 'Amara Nwosu',
@@ -478,7 +489,7 @@ export const mockApplications = [
     id: 9,
     status: 'case_submitted',
     cycle_id: 1,
-    source: 'Referral',
+    source: 'A friend/colleague',
     created_at: '2026-09-15T12:00:00Z',
     candidate: {
       full_name: 'Marc Dubois',
@@ -601,7 +612,7 @@ export const mockFunnel = {
     sources: [
       { source: 'Class announcement', count: 18 },
       { source: 'Instagram', count: 15 },
-      { source: 'Referral', count: 12 },
+      { source: 'A friend/colleague', count: 12 },
       { source: 'Careers fair', count: 8 },
       { source: 'Other', count: 5 },
     ],

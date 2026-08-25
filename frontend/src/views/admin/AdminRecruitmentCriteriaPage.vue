@@ -29,8 +29,27 @@
                   </v-chip>
                 </v-card-title>
                 <v-card-text>
+                  <!-- Skills sought — fed to the AI matcher alongside the rubric -->
+                  <div class="text-caption text-medium-emphasis mb-1">
+                    <v-icon size="x-small">mdi-robot-outline</v-icon>
+                    Skills sought (used for AI matching)
+                  </div>
+                  <v-combobox
+                    v-model="dep.skills_sought"
+                    label="Skills"
+                    variant="outlined"
+                    density="compact"
+                    multiple
+                    chips
+                    closable-chips
+                    hide-details
+                    class="mb-4"
+                    placeholder="e.g. SQL, Python, Storytelling"
+                    hint="Press enter after each skill"
+                  />
+
                   <p class="text-caption text-medium-emphasis mb-3">
-                    The rubric reviewers score against. Weights ideally sum to 100%.
+                    The rubric reviewers score against — also fed to the AI matcher. Weights ideally sum to 100%.
                   </p>
                   <div v-for="(c, idx) in dep.scoring_criteria" :key="idx" class="d-flex align-center ga-2 mb-2">
                     <v-text-field
@@ -67,7 +86,7 @@
                   </div>
 
                   <v-btn color="primary" variant="flat" size="small" class="mt-3" :loading="saving === `crit-${dep.id}`" @click="saveCriteria(dep)">
-                    Save criteria
+                    Save rubric
                   </v-btn>
                 </v-card-text>
               </v-card>
@@ -183,8 +202,12 @@ function addQuestion(dep) {
 async function saveCriteria(dep) {
   saving.value = `crit-${dep.id}`;
   try {
-    await RecruitmentService.updateDepartmentCriteria(dep.id, dep.scoring_criteria);
-    notify(`${dep.name} criteria saved`);
+    // Persist the rubric + skills together (both feed the AI matcher).
+    await RecruitmentService.updateDepartment(dep.id, {
+      scoring_criteria: dep.scoring_criteria,
+      skills_sought: dep.skills_sought || [],
+    });
+    notify(`${dep.name} rubric saved`);
   } finally {
     saving.value = null;
   }
@@ -201,11 +224,14 @@ async function saveQuestions(dep) {
 
 onMounted(async () => {
   try {
-    departments.value = await RecruitmentService.getOpenPositions();
+    // HR endpoint returns the full config (criteria/skills), unlike the public
+    // /positions endpoint which strips the rubric.
+    departments.value = await RecruitmentService.getHrDepartments();
     // Ensure editable arrays exist.
     departments.value.forEach((d) => {
       d.scoring_criteria = d.scoring_criteria || [];
       d.custom_questions = d.custom_questions || [];
+      d.skills_sought = d.skills_sought || [];
     });
     tab.value = departments.value[0]?.id ?? null;
   } finally {

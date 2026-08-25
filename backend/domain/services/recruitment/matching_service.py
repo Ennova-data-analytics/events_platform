@@ -41,9 +41,10 @@ class RecruitmentMatchingService:
             ("system",
              "You are a recruitment matching assistant for a student consulting "
              "association. Given a candidate's application and the open departments, "
-             "estimate how well the candidate fits EACH department. Base your judgement "
-             "on the department descriptions and the skills they seek. Be encouraging "
-             "but honest. Return ONLY the structured JSON.\n{format_instructions}"),
+             "estimate how well the candidate fits EACH department. Judge each fit "
+             "against that department's description, the skills it seeks, and its "
+             "scoring criteria — weight higher-weighted criteria more heavily. Be "
+             "encouraging but honest. Return ONLY the structured JSON.\n{format_instructions}"),
             ("human",
              "DEPARTMENTS:\n{departments}\n\n"
              "CANDIDATE APPLICATION:\n"
@@ -60,8 +61,18 @@ class RecruitmentMatchingService:
     def _departments_blurb(self, departments) -> str:
         lines = []
         for d in departments:
+            parts = [f"- id={d.department_id} | {d.name}: {d.description or ''}"]
             skills = ", ".join(d.skills_sought or [])
-            lines.append(f"- id={d.department_id} | {d.name}: {d.description or ''} (skills: {skills})")
+            if skills:
+                parts.append(f" Skills sought: {skills}.")
+            criteria = d.scoring_criteria or []
+            crit = ", ".join(
+                f"{c.get('label')} ({c.get('weight')}%)"
+                for c in criteria if c.get("label")
+            )
+            if crit:
+                parts.append(f" Scored on: {crit}.")
+            lines.append("".join(parts))
         return "\n".join(lines)
 
     def match(self, *, applied_department_id, degree, year, answers, cv_text, departments) -> dict:
