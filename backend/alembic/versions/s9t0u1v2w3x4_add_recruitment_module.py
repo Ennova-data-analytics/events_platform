@@ -172,10 +172,20 @@ def upgrade() -> None:
     op.create_index('ix_recruitment_tokens_token', 'recruitment_tokens', ['token'])
 
     # --- seed the recruiter role (idempotent) ---
+    # Existing roles were seeded with explicit ids, so the id sequence is behind
+    # the data. Compute an explicit id (max+1) to avoid a pkey collision, and gate
+    # the whole row on NOT EXISTS so re-runs are safe.
     op.execute("""
-        INSERT INTO roles (role_name)
-        SELECT 'recruiter'
+        INSERT INTO roles (role_id, role_name)
+        SELECT (SELECT COALESCE(MAX(role_id), 0) + 1 FROM roles), 'recruiter'
         WHERE NOT EXISTS (SELECT 1 FROM roles WHERE role_name = 'recruiter')
+    """)
+    # Keep the id sequence ahead of the data so future inserts don't collide.
+    op.execute("""
+        SELECT setval(
+            pg_get_serial_sequence('roles', 'role_id'),
+            (SELECT MAX(role_id) FROM roles)
+        )
     """)
 
 
