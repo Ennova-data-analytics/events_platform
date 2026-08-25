@@ -3,7 +3,7 @@ import secrets
 from datetime import datetime
 from sqlalchemy import (
     Boolean, Column, ForeignKey, Integer, String, TIMESTAMP, Table,
-    Text, DECIMAL, ARRAY, JSON, Enum, CheckConstraint, Float
+    Text, DECIMAL, ARRAY, JSON, Enum, CheckConstraint, Float, UniqueConstraint
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, declarative_base, backref as orm_backref
@@ -642,3 +642,196 @@ class AttendanceRecord(Base):
     checked_in_at = Column(TIMESTAMP(timezone=True), nullable=True)
 
     session = relationship("AttendanceSession", back_populates="records")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Recruitment module
+#
+# Candidates never become platform users — all post-submission actions are
+# gated by signed magic-link tokens (see RecruitmentToken). Departments are a
+# stable catalog; each cohort (RecruitmentCycle) selects and opens a subset of
+# them via CycleDepartment. Recruiters are scoped to departments via
+# RecruiterDepartment.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Allowed application statuses (kept as a String column, matching the project's
+# convention of not using DB enums — see Registration.status / Event.status).
+APPLICATION_STATUSES = (
+    'applied', 'in_review', 'case_sent', 'case_submitted',
+    'interview', 'decision', 'accepted', 'rejected', 'withdrawn',
+)
+
+
+class Department(Base):
+    __tablename__ = "departments"
+    department_id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False, unique=True)
+    description = Column(Text)
+    skills_sought = Column(JSONB)          # list[str]
+    is_active = Column(Boolean, default=True, nullable=False)
+    has_case_stage = Column(Boolean, default=False, nullable=False)
+    calendly_link = Column(Text)
+    scoring_criteria = Column(JSONB)       # [{id, label, weight}]
+    custom_questions = Column(JSONB)       # [{id, label, type, options, required}]
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class RecruitmentCycle(Base):
+    __tablename__ = "recruitment_cycles"
+    cycle_id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False)
+    opens_at = Column(TIMESTAMP(timezone=True))
+    closes_at = Column(TIMESTAMP(timezone=True))
+    is_active = Column(Boolean, default=False, nullable=False, index=True)
+    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="SET NULL"))
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    cycle_departments = relationship("CycleDepartment", back_populates="cycle", cascade="all, delete-orphan")
+
+
+class CycleDepartment(Base):
+    """Which departments recruit in a given cohort (association object)."""
+    __tablename__ = "cycle_departments"
+    cycle_id = Column(Integer, ForeignKey('recruitment_cycles.cycle_id', ondelete="CASCADE"), primary_key=True)
+    department_id = Column(Integer, ForeignKey('departments.department_id', ondelete="CASCADE"), primary_key=True)
+    is_open = Column(Boolean, default=True, nullable=False)
+
+    cycle = relationship("RecruitmentCycle", back_populates="cycle_departments")
+    department = relationship("Department")
+
+
+class RecruiterDepartment(Base):
+    """Scopes a recruiter (platform user) to the departments they can review."""
+    __tablename__ = "recruiter_departments"
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="CASCADE"), primary_key=True)
+    department_id = Column(Integer, ForeignKey('departments.department_id', ondelete="CASCADE"), primary_key=True)
+
+    user = relationship("User")
+    department = relationship("Department")
+
+
+class Candidate(Base):
+    __tablename__ = "candidates"
+    candidate_id = Column(Integer, primary_key=True)
+    full_name = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=False, unique=True, index=True)
+    phone = Column(String(50))
+    degree = Column(String(255))
+    study_year = Column(String(50))
+    links = Column(JSONB)                  # {linkedin, youtube, github, ...}
+    cv_s3_key = Column(Text)
+    cover_letter_s3_key = Column(Text)
+    gdpr_consent = Column(Boolean, default=False, nullable=False)
+    gdpr_consent_at = Column(TIMESTAMP(timezone=True))
+    talent_pool_consent = Column(Boolean, default=False, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    applications = relationship("Application", back_populates="candidate", cascade="all, delete-orphan")
+
+
+class Application(Base):
+    __tablename__ = "applications"
+    application_id = Column(Integer, primary_key=True)
+    candidate_id = Column(Integer, ForeignKey('candidates.candidate_id', ondelete="CASCADE"), nullable=False, index=True)
+    cycle_id = Column(Integer, ForeignKey('recruitment_cycles.cycle_id', ondelete="CASCADE"), nullable=False, index=True)
+
+    department_applied_id = Column(Integer, ForeignKey('departments.department_id', ondelete="SET NULL"))
+    department_ranking = Column(JSONB)     # [department_id, ...] candidate's preference order
+    answers = Column(JSONB)                # {custom_answers, other_associations, availability, ...}
+    source = Column(String(100))
+
+    status = Column(String(50), nullable=False, default='applied', index=True)
+
+    # AI matching (see matching_service). Failure-tolerant: match_status tracks it.
+    suggested_department_id = Column(Integer, ForeignKey('departments.department_id', ondelete="SET NULL"))
+    match_confidence = Column(Float)
+    match_rationale = Column(Text)
+    match_ranking = Column(JSONB)          # full ranked list
+    match_status = Column(String(20), default='pending')  # pending | done | failed
+    match_flags = Column(JSONB)            # e.g. ["cv_unreadable"]
+
+    final_department_id = Column(Integer, ForeignKey('departments.department_id', ondelete="SET NULL"))
+    interview_invite_sent = Column(Boolean, default=False, nullable=False)
+
+    # Marketing-only case study (nullable for everyone else).
+    case_brief_url = Column(Text)
+    case_sent_at = Column(TIMESTAMP(timezone=True))
+    case_deadline_at = Column(TIMESTAMP(timezone=True))
+    case_submitted_at = Column(TIMESTAMP(timezone=True))
+    case_submission_url = Column(Text)
+
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, index=True)
+    updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('candidate_id', 'cycle_id', name='uq_application_candidate_cycle'),
+    )
+
+    candidate = relationship("Candidate", back_populates="applications")
+    cycle = relationship("RecruitmentCycle")
+    applied_department = relationship("Department", foreign_keys=[department_applied_id])
+    suggested_department = relationship("Department", foreign_keys=[suggested_department_id])
+    final_department = relationship("Department", foreign_keys=[final_department_id])
+    materials = relationship("ApplicationMaterial", back_populates="application", cascade="all, delete-orphan")
+    events = relationship("ApplicationEvent", back_populates="application", cascade="all, delete-orphan", order_by="ApplicationEvent.created_at")
+    interviews = relationship("Interview", back_populates="application", cascade="all, delete-orphan")
+    tokens = relationship("RecruitmentToken", back_populates="application", cascade="all, delete-orphan")
+
+
+class ApplicationMaterial(Base):
+    __tablename__ = "application_materials"
+    material_id = Column(Integer, primary_key=True)
+    application_id = Column(Integer, ForeignKey('applications.application_id', ondelete="CASCADE"), nullable=False, index=True)
+    s3_key = Column(Text, nullable=False)
+    filename = Column(String(255))
+    note = Column(Text)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+
+    application = relationship("Application", back_populates="materials")
+
+
+class Interview(Base):
+    __tablename__ = "interviews"
+    interview_id = Column(Integer, primary_key=True)
+    application_id = Column(Integer, ForeignKey('applications.application_id', ondelete="CASCADE"), nullable=False, index=True)
+    interviewer_user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="SET NULL"))
+    scheduled_at = Column(TIMESTAMP(timezone=True))
+    ends_at = Column(TIMESTAMP(timezone=True))
+    meeting_link = Column(Text)
+    outcome = Column(String(50))
+    scorecard = Column(JSONB)              # {criteria_id: {score, comment}, overall}
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    application = relationship("Application", back_populates="interviews")
+    interviewer = relationship("User")
+
+
+class ApplicationEvent(Base):
+    """Append-only timeline: status_change / email_sent / note / ai_match / override."""
+    __tablename__ = "application_events"
+    event_id = Column(Integer, primary_key=True)
+    application_id = Column(Integer, ForeignKey('applications.application_id', ondelete="CASCADE"), nullable=False, index=True)
+    type = Column(String(50), nullable=False)
+    payload = Column(JSONB)
+    actor = Column(String(255))            # 'system', 'ai', or a user's name/email
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, index=True)
+
+    application = relationship("Application", back_populates="events")
+
+
+class RecruitmentToken(Base):
+    """Revocable magic-link token scoping a candidate to one application."""
+    __tablename__ = "recruitment_tokens"
+    token_id = Column(Integer, primary_key=True)
+    application_id = Column(Integer, ForeignKey('applications.application_id', ondelete="CASCADE"), nullable=False, index=True)
+    token = Column(String(255), unique=True, nullable=False, index=True)
+    purpose = Column(String(30), nullable=False, default='status')  # status | booking
+    expires_at = Column(TIMESTAMP(timezone=True))
+    revoked_at = Column(TIMESTAMP(timezone=True))
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+
+    application = relationship("Application", back_populates="tokens")

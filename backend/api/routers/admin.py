@@ -765,3 +765,57 @@ def revoke_organiser_role(
     db.refresh(user)
     logger.info(f"Organiser role revoked from {user.email} by super_admin {current_admin.email}")
     return schemas.UserWithRoles.model_validate(user)
+
+
+@router.post("/users/{user_id}/grant-recruiter", response_model=schemas.UserWithRoles)
+def grant_recruiter_role(
+    user_id: str,
+    db: Session = Depends(deps.get_db),
+    current_admin: models.User = Depends(deps.get_current_active_admin)
+):
+    """Grant the recruiter role to a user (recruitment panel access)."""
+    import uuid as _uuid
+    user = db.query(models.User).filter(models.User.user_id == _uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    recruiter_role = db.query(models.Role).filter(models.Role.role_name == "recruiter").first()
+    if not recruiter_role:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Recruiter role not found")
+
+    if recruiter_role in user.roles:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already has the recruiter role")
+
+    user.roles.append(recruiter_role)
+    db.commit()
+    db.refresh(user)
+    logger.info(f"Recruiter role granted to {user.email} by super_admin {current_admin.email}")
+    return schemas.UserWithRoles.model_validate(user)
+
+
+@router.post("/users/{user_id}/revoke-recruiter", response_model=schemas.UserWithRoles)
+def revoke_recruiter_role(
+    user_id: str,
+    db: Session = Depends(deps.get_db),
+    current_admin: models.User = Depends(deps.get_current_active_admin)
+):
+    """Revoke the recruiter role from a user (also clears their department scoping)."""
+    import uuid as _uuid
+    user = db.query(models.User).filter(models.User.user_id == _uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if str(user.user_id) == str(current_admin.user_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot modify your own roles")
+
+    recruiter_role = db.query(models.Role).filter(models.Role.role_name == "recruiter").first()
+    if not recruiter_role or recruiter_role not in user.roles:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User does not have the recruiter role")
+
+    user.roles.remove(recruiter_role)
+    # Clear department scoping so a re-grant starts clean.
+    db.query(models.RecruiterDepartment).filter(models.RecruiterDepartment.user_id == user.user_id).delete()
+    db.commit()
+    db.refresh(user)
+    logger.info(f"Recruiter role revoked from {user.email} by super_admin {current_admin.email}")
+    return schemas.UserWithRoles.model_validate(user)

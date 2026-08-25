@@ -46,21 +46,21 @@
 
               <v-row>
                 <v-col cols="12" sm="6">
-                  <v-text-field
+                  <DateTimeField
                     v-model="editableEvent.event_date_start"
                     label="Start Date & Time *"
-                    type="datetime-local"
-                    variant="outlined"
+                    prepend-inner-icon="mdi-calendar-start"
                     class="mb-4"
                   />
                 </v-col>
                 <v-col cols="12" sm="6">
-                  <v-text-field
+                  <DateTimeField
                     v-model="editableEvent.event_date_end"
                     label="End Date & Time (optional)"
-                    type="datetime-local"
-                    variant="outlined"
+                    prepend-inner-icon="mdi-calendar-end"
                     class="mb-4"
+                    :min-date="editableEvent.event_date_start || null"
+                    :start-date="editableEvent.event_date_start || null"
                   />
                 </v-col>
               </v-row>
@@ -337,6 +337,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import DateTimeField from '@/components/common/DateTimeField.vue'
 import TicketTypeManagement from '@/components/admin/TicketTypeManagement.vue'
 import SponsorLogoUpload from '@/components/admin/SponsorLogoUpload.vue'
 import EventPhotosUpload from '@/components/admin/EventPhotosUpload.vue'

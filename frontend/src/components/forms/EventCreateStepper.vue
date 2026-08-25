@@ -38,22 +38,23 @@
 
             <v-row>
               <v-col cols="12" sm="6">
-                <v-text-field
+                <DateTimeField
                   v-model="form.event_date_start"
                   label="Start Date & Time *"
-                  type="datetime-local"
-                  variant="outlined"
+                  prepend-inner-icon="mdi-calendar-start"
                   class="mb-4"
                   :rules="[v => !!v || 'Start date is required']"
                 />
               </v-col>
               <v-col cols="12" sm="6">
-                <v-text-field
+                <DateTimeField
                   v-model="form.event_date_end"
                   label="End Date & Time (optional)"
-                  type="datetime-local"
-                  variant="outlined"
+                  prepend-inner-icon="mdi-calendar-end"
                   class="mb-4"
+                  :min-date="form.event_date_start || null"
+                  :start-date="form.event_date_start || null"
+                  :rules="[v => !v || !form.event_date_start || new Date(v) >= new Date(form.event_date_start) || 'End must be after the start']"
                 />
               </v-col>
             </v-row>
@@ -608,6 +609,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import DateTimeField from '@/components/common/DateTimeField.vue'
 import { FormTemplateService } from '@/services/FormTemplateService.js'
 import { EmailTemplateService } from '@/services/EmailTemplateService.js'
 

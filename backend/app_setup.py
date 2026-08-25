@@ -1,10 +1,29 @@
+import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from api.routers import users, auth, events, admin, form_templates, uploads, notifications, payments, email_templates, feedback_templates, feedback, ai_summaries, discount_codes, chat, ticket_types, teams, referral_links, tickets
+from api.routers import users, auth, events, admin, form_templates, uploads, notifications, payments, email_templates, feedback_templates, feedback, ai_summaries, discount_codes, chat, ticket_types, teams, referral_links, tickets, hr_recruitment, recruitment
 from middleware import setup_middleware
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start recruitment background jobs (reminders / nudges / GDPR retention).
+    try:
+        from domain.services.recruitment.scheduler import start_scheduler, shutdown_scheduler
+        start_scheduler()
+    except Exception as e:  # never block app startup on the scheduler
+        logger.exception(f"Recruitment scheduler failed to start: {e}")
+        shutdown_scheduler = None
+    yield
+    if shutdown_scheduler:
+        shutdown_scheduler()
+
 
 def create_app() -> FastAPI:
     """Application factory"""
-    app = FastAPI(title="Events Management Platform API")
+    app = FastAPI(title="Events Management Platform API", lifespan=lifespan)
     app = setup_middleware(app)
     app.include_router(users.router, prefix="/users", tags=["Users"])
     app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
@@ -24,6 +43,8 @@ def create_app() -> FastAPI:
     app.include_router(referral_links.router, tags=["Referral Links"])
     app.include_router(chat.router, prefix="/chat", tags=["Chat"])
     app.include_router(tickets.router, tags=["Tickets"])
+    app.include_router(hr_recruitment.router, prefix="/hr/recruitment", tags=["Recruitment (HR)"])
+    app.include_router(recruitment.router, prefix="/recruitment", tags=["Recruitment (Public)"])
 
 
     @app.get("/")

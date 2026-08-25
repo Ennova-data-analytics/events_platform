@@ -146,14 +146,16 @@
               class="mb-2"
             ></v-text-field>
 
-            <v-text-field
+            <DateTimeField
               v-model="formData.expires_at"
               label="Expiration Date (optional)"
-              type="datetime-local"
-              variant="outlined"
+              prepend-inner-icon="mdi-calendar-clock"
               density="comfortable"
               class="mb-2"
-            ></v-text-field>
+              :min-date="new Date()"
+              :default-time="{ hours: 23, minutes: 59 }"
+              :presets="['tomorrow', 'inAWeek', 'inAMonth']"
+            />
 
             <v-switch
               v-model="formData.is_active"
@@ -329,6 +331,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import DateTimeField from '@/components/common/DateTimeField.vue'
 import {
   getEventDiscountCodes,
   createDiscountCode,
@@ -488,6 +491,16 @@ const submitForm = async () => {
   }
 }
 
+// The picker works in local time, so format locally — toISOString() would shift
+// the stored expiry by the UTC offset every time a code was reopened.
+const toLocalInput = (value) => {
+  if (!value) return null
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return null
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 const editCode = (code) => {
   editingCode.value = code
   formData.value = {
@@ -495,7 +508,7 @@ const editCode = (code) => {
     discount_type: code.discount_type,
     discount_value: code.discount_value,
     max_uses: code.max_uses,
-    expires_at: code.expires_at ? new Date(code.expires_at).toISOString().slice(0, 16) : null,
+    expires_at: toLocalInput(code.expires_at),
     is_active: code.is_active
   }
   showCreateForm.value = true
