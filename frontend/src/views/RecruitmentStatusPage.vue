@@ -19,11 +19,11 @@
 
           <!-- Header hero -->
           <v-card class="mb-4 status-hero" :style="heroStyle">
-            <v-card-text class="pa-6">
+            <v-card-text class="pa-4 pa-sm-6">
               <div class="d-flex align-center justify-space-between flex-wrap ga-3">
                 <div>
                   <div class="text-overline text-medium-emphasis">Your application</div>
-                  <h1 class="text-h5 font-weight-bold">{{ application.candidate.full_name }}</h1>
+                  <h1 class="text-h6 text-sm-h5 font-weight-bold">{{ application.candidate.full_name }}</h1>
                   <div class="text-body-2 text-medium-emphasis d-flex align-center flex-wrap ga-1">
                     <v-icon size="x-small">mdi-account-tie-outline</v-icon>
                     {{ appliedDepartment?.name || 'Team to be confirmed' }}
@@ -44,7 +44,7 @@
 
           <!-- Current status narrative -->
           <v-card class="mb-4" :color="narrative.tone" variant="tonal">
-            <v-card-text class="pa-5 d-flex ga-4">
+            <v-card-text class="pa-4 pa-sm-5 d-flex ga-3 ga-sm-4">
               <v-icon :icon="narrative.icon" size="32" class="mt-1" />
               <div>
                 <div class="text-subtitle-1 font-weight-bold mb-1">{{ narrative.title }}</div>
@@ -58,7 +58,7 @@
 
           <!-- Marketing case: brief + deadline -->
           <v-card v-if="application.case && !application.case.submitted_at" class="mb-4" variant="outlined">
-            <v-card-text class="pa-5">
+            <v-card-text class="pa-4 pa-sm-5">
               <div class="d-flex align-center justify-space-between flex-wrap ga-2 mb-2">
                 <div class="d-flex align-center">
                   <v-icon color="deep-purple" class="mr-2">mdi-briefcase-clock-outline</v-icon>
@@ -83,7 +83,7 @@
 
           <!-- Interview booked -->
           <v-card v-if="application.interview" class="mb-4" variant="outlined">
-            <v-card-text class="pa-5">
+            <v-card-text class="pa-4 pa-sm-5">
               <div class="d-flex align-center mb-2">
                 <v-icon color="success" class="mr-2">mdi-calendar-check</v-icon>
                 <span class="text-subtitle-2 font-weight-bold">Interview booked</span>
@@ -99,7 +99,7 @@
 
           <!-- Interview invite (book via Calendly) -->
           <v-card v-else-if="application.status === 'interview'" class="mb-4" variant="outlined">
-            <v-card-text class="pa-5">
+            <v-card-text class="pa-4 pa-sm-5">
               <div class="d-flex align-center mb-2">
                 <v-icon color="purple" class="mr-2">mdi-calendar-clock</v-icon>
                 <span class="text-subtitle-2 font-weight-bold">Book your interview</span>
@@ -115,7 +115,7 @@
 
           <!-- Accepted -->
           <v-card v-if="application.status === 'accepted'" class="mb-4" color="success" variant="tonal">
-            <v-card-text class="pa-5">
+            <v-card-text class="pa-4 pa-sm-5">
               <div class="d-flex align-center mb-2">
                 <v-icon class="mr-2">mdi-party-popper</v-icon>
                 <span class="text-subtitle-1 font-weight-bold">Welcome to {{ appliedDepartment?.name }}!</span>
@@ -128,7 +128,7 @@
 
           <!-- Rejected -->
           <v-card v-if="application.status === 'rejected'" class="mb-4" variant="outlined">
-            <v-card-text class="pa-5">
+            <v-card-text class="pa-4 pa-sm-5">
               <div class="text-subtitle-2 font-weight-bold mb-1">A note on your application</div>
               <p class="text-body-2 text-medium-emphasis mb-2">
                 After careful consideration we won't be moving forward this time. It was a genuinely close call -
@@ -143,7 +143,7 @@
           <!-- ── Progress timeline ─────────────────────────────────────── -->
           <v-card class="mb-4">
             <v-card-title class="text-subtitle-1 font-weight-bold px-6 pt-5">Progress</v-card-title>
-            <v-card-text class="px-6 pb-6">
+            <v-card-text class="px-4 px-sm-6 pb-6">
               <v-timeline side="end" density="comfortable" truncate-line="both" align="start">
                 <v-timeline-item
                   v-for="stage in stages"
@@ -167,7 +167,7 @@
           <!-- ── What you submitted ────────────────────────────────────── -->
           <v-card class="mb-4">
             <v-card-title class="text-subtitle-1 font-weight-bold px-6 pt-5">What you submitted</v-card-title>
-            <v-card-text class="px-6 pb-6">
+            <v-card-text class="px-4 px-sm-6 pb-6">
               <v-row dense class="mb-2">
                 <v-col cols="6" sm="4">
                   <div class="text-caption text-medium-emphasis">Department</div>

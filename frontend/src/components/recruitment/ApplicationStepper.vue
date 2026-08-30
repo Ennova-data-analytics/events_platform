@@ -1,6 +1,6 @@
 <template>
   <div>
-    <v-stepper v-model="step" alt-labels flat>
+    <v-stepper v-model="step" alt-labels flat :mobile="$vuetify.display.smAndDown">
       <v-stepper-header>
         <v-stepper-item :value="1" title="Basic info" :complete="step > 1" :editable="step > 1" />
         <v-divider />
@@ -81,13 +81,12 @@
               <v-col cols="12" sm="7">
                 <v-text-field
                   v-model="form.links.linkedin"
-                  label="LinkedIn *"
+                  label="LinkedIn (recommended)"
                   variant="outlined"
                   prepend-inner-icon="mdi-linkedin"
                   placeholder="linkedin.com/in/…"
-                  hint="Recommended - it really helps us get to know you"
+                  hint="Optional, but it really helps us get to know you"
                   persistent-hint
-                  :rules="[v => !!v || 'Please add your LinkedIn - it helps us get to know you']"
                 />
               </v-col>
               <v-col cols="12" sm="5">
@@ -560,8 +559,7 @@ const stepValid = computed(() => {
     case 1:
       return !!form.value.full_name?.trim()
         && ESADE_EMAIL.test(form.value.email || '')
-        && !!form.value.degree && !!form.value.year
-        && !!form.value.links.linkedin?.trim();
+        && !!form.value.degree && !!form.value.year;
     case 2:
       return !!form.value.department_applied_id;
     case 3:

@@ -1,5 +1,5 @@
 <template>
-  <v-container class="py-8">
+  <v-container class="py-6 py-sm-8">
     <v-row justify="center">
       <v-col cols="12" md="10" lg="8">
 
@@ -9,7 +9,7 @@
         </v-card>
 
         <!-- Success -->
-        <v-card v-else-if="submission && !submission.already_applied" class="pa-8 text-center">
+        <v-card v-else-if="submission && !submission.already_applied" class="pa-6 pa-sm-8 text-center">
           <v-icon icon="mdi-check-circle" color="success" size="64" class="mb-4" />
           <h2 class="text-h5 mb-3">Application received!</h2>
           <p class="text-body-1 mb-2">
@@ -24,7 +24,7 @@
         </v-card>
 
         <!-- Already applied -->
-        <v-card v-else-if="submission && submission.already_applied" class="pa-8 text-center">
+        <v-card v-else-if="submission && submission.already_applied" class="pa-6 pa-sm-8 text-center">
           <v-icon icon="mdi-information" color="info" size="64" class="mb-4" />
           <h2 class="text-h5 mb-3">You've already applied</h2>
           <p class="text-body-1 mb-6">
@@ -37,9 +37,9 @@
 
         <!-- Form -->
         <template v-else>
-          <div class="text-center mb-6">
-            <h1 class="text-h4 font-weight-bold mb-2">Join Ennova</h1>
-            <p class="text-body-1 text-medium-emphasis">
+          <div class="text-center mb-5 mb-sm-6">
+            <h1 class="text-h5 text-sm-h4 font-weight-bold mb-2">Join Ennova</h1>
+            <p class="text-body-2 text-sm-body-1 text-medium-emphasis">
               <span v-if="cycle">{{ cycle.name }} · applications close {{ formatDate(cycle.closes_at) }}</span>
             </p>
           </div>
