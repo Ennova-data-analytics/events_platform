@@ -68,8 +68,18 @@
             </p>
             <div v-for="d in departments" :key="d.id" class="d-flex align-center ga-2 mb-2">
               <v-icon size="small" :color="d.is_active ? 'primary' : 'grey'">mdi-circle-medium</v-icon>
-              <span class="text-body-2 flex-grow-1">{{ d.name }}</span>
+              <div class="flex-grow-1" style="min-width: 0">
+                <div class="text-body-2">{{ d.name }}</div>
+                <div v-if="d.description" class="text-caption text-medium-emphasis text-truncate">{{ d.description }}</div>
+              </div>
               <v-chip v-if="d.has_case_stage" size="x-small" color="deep-purple" variant="tonal">Case study</v-chip>
+              <v-btn
+                icon="mdi-pencil-outline"
+                size="x-small"
+                variant="text"
+                :title="`Edit ${d.name}`"
+                @click="openDeptEdit(d)"
+              />
               <v-switch
                 :model-value="d.is_active"
                 color="primary"
@@ -78,7 +88,7 @@
                 @update:model-value="toggleDepartmentActive(d, $event)"
               />
             </div>
-            <v-btn size="small" variant="text" color="primary" prepend-icon="mdi-plus" @click="deptDialog = true">Add department</v-btn>
+            <v-btn size="small" variant="text" color="primary" prepend-icon="mdi-plus" @click="openDeptCreate">Add department</v-btn>
           </v-expansion-panel-text>
         </v-expansion-panel>
       </v-expansion-panels>
@@ -144,10 +154,10 @@
       </v-card>
     </v-dialog>
 
-    <!-- New department dialog -->
+    <!-- Create / edit department dialog -->
     <v-dialog v-model="deptDialog" :max-width="$vuetify.display.mobile ? '92vw' : '480px'">
       <v-card>
-        <v-card-title class="text-h6 pt-4">New department</v-card-title>
+        <v-card-title class="text-h6 pt-4">{{ editingDept ? 'Edit department' : 'New department' }}</v-card-title>
         <v-card-text>
           <v-text-field v-model="deptDraft.name" label="Name *" variant="outlined" density="comfortable" class="mb-3" />
           <v-textarea v-model="deptDraft.description" label="Description" variant="outlined" density="comfortable" rows="2" class="mb-2" hint="Used as context for AI matching" persistent-hint />
@@ -156,7 +166,9 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="deptDialog = false">Cancel</v-btn>
-          <v-btn color="primary" variant="flat" :disabled="!deptDraft.name.trim()" :loading="savingDept" @click="saveDepartment">Add</v-btn>
+          <v-btn color="primary" variant="flat" :disabled="!deptDraft.name.trim()" :loading="savingDept" @click="saveDepartment">
+            {{ editingDept ? 'Save' : 'Add' }}
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -194,6 +206,7 @@ const departments = ref([]);
 const dialog = ref(false);
 const editing = ref(null);
 const deptDialog = ref(false);
+const editingDept = ref(null);
 const deleteDialog = ref(false);
 const toDelete = ref(null);
 
@@ -299,14 +312,41 @@ async function confirmDelete() {
   notify('Cohort deleted', 'warning');
 }
 
+function openDeptCreate() {
+  editingDept.value = null;
+  Object.assign(deptDraft, { name: '', description: '', has_case_stage: false });
+  deptDialog.value = true;
+}
+
+function openDeptEdit(dep) {
+  editingDept.value = dep;
+  Object.assign(deptDraft, {
+    name: dep.name || '',
+    description: dep.description || '',
+    has_case_stage: !!dep.has_case_stage,
+  });
+  deptDialog.value = true;
+}
+
 async function saveDepartment() {
   savingDept.value = true;
   try {
-    const dep = await RecruitmentService.createDepartment({ ...deptDraft });
-    departments.value.push(dep);
-    Object.assign(deptDraft, { name: '', description: '', has_case_stage: false });
+    const payload = {
+      name: deptDraft.name.trim(),
+      description: deptDraft.description?.trim() || '',
+      has_case_stage: deptDraft.has_case_stage,
+    };
+    if (editingDept.value) {
+      const updated = await RecruitmentService.updateDepartment(editingDept.value.id, payload);
+      const i = departments.value.findIndex((d) => d.id === editingDept.value.id);
+      if (i >= 0) departments.value[i] = updated ?? { ...departments.value[i], ...payload };
+      notify('Department updated');
+    } else {
+      const dep = await RecruitmentService.createDepartment(payload);
+      departments.value.push(dep);
+      notify('Department added');
+    }
     deptDialog.value = false;
-    notify('Department added');
   } finally {
     savingDept.value = false;
   }
