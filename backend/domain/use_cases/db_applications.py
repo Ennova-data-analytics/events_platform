@@ -48,7 +48,10 @@ def serialize_application(db: Session, app: models.Application) -> dict:
 
     answers = dict(app.answers or {})
     answers["department_applied_id"] = app.department_applied_id
-    answers["materials"] = [{"filename": m.filename, "note": m.note, "s3_key": m.s3_key} for m in app.materials]
+    answers["materials"] = [
+        {"material_id": m.material_id, "filename": m.filename, "note": m.note, "s3_key": m.s3_key}
+        for m in app.materials
+    ]
     answers.setdefault("links", (answers.get("links") or []))
 
     done = app.match_status == "done"
@@ -246,7 +249,10 @@ class ApplicationUseCases:
         others = [r for r in ranked if r["id"] != app.department_applied_id]
 
         answers = dict(app.answers or {})
-        answers["materials"] = [{"filename": m.filename, "note": m.note} for m in app.materials]
+        answers["materials"] = [
+            {"material_id": m.material_id, "filename": m.filename, "note": m.note}
+            for m in app.materials
+        ]
         answers.setdefault("links", (cand.links or {}))
 
         out = {
@@ -563,6 +569,22 @@ class HrApplicationUseCases:
         if not app.candidate or not app.candidate.cv_s3_key:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No CV on file")
         return {"url": s3_service.generate_predesigned_url(app.candidate.cv_s3_key)}
+
+    @staticmethod
+    def material_url(db: Session, scoped_ids, application_id: int, material_id: int) -> dict:
+        """
+        Presigned URL for one of the application's additional materials.
+
+        Looked up by id against this application rather than trusting an s3 key
+        from the caller, so a recruiter can only reach files on applications
+        within their department scope.
+        """
+        from core import s3_service
+        app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
+        material = next((m for m in app.materials if m.material_id == material_id), None)
+        if not material:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material not found")
+        return {"url": s3_service.generate_predesigned_url(material.s3_key)}
 
 
 def _find_interview_application(db: Session, email: str) -> models.Application | None:

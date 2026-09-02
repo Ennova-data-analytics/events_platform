@@ -68,8 +68,8 @@
             size="x-small"
             variant="outlined"
             prepend-icon="mdi-file-pdf-box"
-            href="#mock-cv"
-            target="_blank"
+            :loading="openingDoc === `cv-${app.id}`"
+            @click="openCv(app)"
           >
             CV
           </v-btn>
@@ -81,8 +81,8 @@
             size="x-small"
             variant="outlined"
             prepend-icon="mdi-paperclip"
-            href="#mock-material"
-            target="_blank"
+            :loading="openingDoc === m.material_id"
+            @click="openMaterial(app, m)"
           >
             {{ shortName(m.filename) }}
           </v-btn>
@@ -134,11 +134,28 @@
 
 <script setup>
 import { statusMeta } from '@/data/recruitmentMock.js';
+import { RecruitmentService } from '@/services/RecruitmentService.js';
+import { useDocumentOpener } from '@/composables/useDocumentOpener.js';
 
 defineProps({
   applications: { type: Array, default: () => [] },
 });
-defineEmits(['open']);
+const emit = defineEmits(['open', 'error']);
+
+// CVs and materials are private S3 objects; the composable fetches a presigned
+// URL on click. Errors surface through the parent's snackbar.
+const { openingDoc, openDocument } = useDocumentOpener((msg) => emit('error', msg));
+
+function openCv(app) {
+  return openDocument(`cv-${app.id}`, () => RecruitmentService.getCvPreviewUrl(app.id));
+}
+
+function openMaterial(app, material) {
+  return openDocument(
+    material.material_id,
+    () => RecruitmentService.getMaterialUrl(app.id, material.material_id),
+  );
+}
 
 function initials(name) {
   return name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();

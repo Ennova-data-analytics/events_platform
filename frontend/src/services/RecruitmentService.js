@@ -320,6 +320,11 @@ export const RecruitmentService = {
     return ApiClient.get(`/hr/recruitment/applications/${id}/cv`).then((r) => r.data.url);
   },
 
+  getMaterialUrl(id, materialId) {
+    if (USE_MOCK) return delay(150).then(() => '#mock-material');
+    return ApiClient.get(`/hr/recruitment/applications/${id}/materials/${materialId}/url`).then((r) => r.data.url);
+  },
+
   // Availability slots (spec §3.5).
   getSlots() {
     if (USE_MOCK) return delay().then(() => clone(mockSlots));

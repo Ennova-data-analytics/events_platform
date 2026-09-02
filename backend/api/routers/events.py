@@ -7,7 +7,7 @@ import logging
 import os
 
 from domain import schemas, models
-from domain.use_cases import db_events, db_registrations, db_event_photos, db_event_attachments, users_uc
+from domain.use_cases import db_events, db_event_duplication, db_registrations, db_event_photos, db_event_attachments, users_uc
 from domain.use_cases.calendar_export import GenerateEventCalendarUseCase
 from domain.exceptions import EventNotFoundException, RegistrationNotFoundException, UnauthorizedCalendarAccessException
 from api import deps
@@ -18,22 +18,55 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+def _is_organiser(user: models.User | None) -> bool:
+    """Organisers and super admins may see events that aren't published yet."""
+    if user is None:
+        return False
+    return bool({role.role_name for role in user.roles} & {'organiser', 'super_admin'})
+
+
 @router.get("", response_model=list[schemas.Event])
-def read_events(skip: int = 0, limit: int = 100, db: Session = Depends(deps.get_db)):
-    """Retrieve a list of all events"""
-    events = db.query(models.Event).options(
-        joinedload(models.Event.ticket_types)
-    ).offset(skip).limit(limit).all()
-    return events 
+def read_events(
+    skip: int = 0,
+    limit: int = 100,
+    include_unpublished: bool = False,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User | None = Depends(deps.get_optional_current_user),
+):
+    """
+    Retrieve a list of events.
+
+    Public callers only ever see published events. The admin table passes
+    include_unpublished=True to also list drafts; the flag is ignored for
+    anyone who isn't an organiser.
+    """
+    return db_events.get_events(
+        db,
+        skip=skip,
+        limit=limit,
+        include_unpublished=include_unpublished and _is_organiser(current_user),
+    )
 
 @router.get("/{event_id}", response_model=schemas.Event)
-def read_event(event_id: int, db: Session = Depends(deps.get_db)):
+def read_event(
+    event_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User | None = Depends(deps.get_optional_current_user),
+):
     """Retrieve the details of a single event by its id"""
     db_event = db.query(models.Event).options(
         joinedload(models.Event.ticket_types)
     ).filter(models.Event.event_id == event_id).first()
 
     if db_event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found"
+        )
+
+    # Hide unpublished events behind the same 404, so a draft's URL doesn't leak
+    # its existence before the organiser is ready.
+    if db_event.status != db_events.PUBLIC_STATUS and not _is_organiser(current_user):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Event not found"
@@ -359,6 +392,52 @@ def toggle_event_signups(event_id: int, db: Session = Depends(deps.get_db), curr
     db.refresh(db_event)
 
     return db_event
+
+@router.patch("/{event_id}/status", response_model=schemas.Event, tags=["Admin"])
+def set_event_status(
+    event_id: int,
+    payload: schemas.EventStatusUpdate,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser),
+):
+    """Publish, unpublish, cancel or archive an event (Organiser only)"""
+    db_event = db_events.get_event(db, event_id=event_id)
+    if not db_event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    db_event.status = payload.status
+    db.commit()
+    db.refresh(db_event)
+
+    return db_event
+
+@router.post("/{event_id}/duplicate", response_model=schemas.Event, status_code=status.HTTP_201_CREATED, tags=["Admin"])
+def duplicate_existing_event(
+    event_id: int,
+    payload: schemas.EventDuplicateRequest | None = None,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser),
+):
+    """
+    Copy an event so it can be re-run (Organiser only).
+
+    Carries over the event's setup - details, media, ticket types, template
+    links and contacts - but none of the previous run's participants. The copy
+    is created as an unpublished Draft with signups off.
+    """
+    source = db_events.get_event(db, event_id=event_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    options = payload or schemas.EventDuplicateRequest()
+    return db_event_duplication.duplicate_event(
+        db,
+        source=source,
+        user_id=current_organiser.user_id,
+        event_name=options.event_name,
+        event_date_start=options.event_date_start,
+        event_date_end=options.event_date_end,
+    )
 
 @router.post("/{event_id}/sponsor-logos", response_model=schemas.Event, tags=["Admin"])
 def upload_sponsor_logos(

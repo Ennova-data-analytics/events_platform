@@ -199,6 +199,10 @@ class Event(Base):
             "team_max_members IS NULL OR team_max_members > 0",
             name='check_event_team_max_members_positive'
         ),
+        CheckConstraint(
+            "status IN ('Draft', 'Published', 'Cancelled', 'Archived')",
+            name='check_event_status_valid'
+        ),
     )
 
     creator = relationship("User", back_populates="created_events")

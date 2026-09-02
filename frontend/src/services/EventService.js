@@ -1,12 +1,24 @@
 import ApiClient from './ApiClient';
 
 export const EventService = {
-  getAllEvents() {
-    return ApiClient.get('/events');
+  // includeUnpublished is honoured for organisers only; the API ignores it for
+  // everyone else, so the public list never sees drafts.
+  getAllEvents({ includeUnpublished = false } = {}) {
+    return ApiClient.get('/events', {
+      params: includeUnpublished ? { include_unpublished: true } : {},
+    });
   },
 
   getEventById(id) {
     return ApiClient.get(`/events/${id}`);
+  },
+
+  duplicateEvent(id, payload = {}) {
+    return ApiClient.post(`/events/${id}/duplicate`, payload);
+  },
+
+  updateEventStatus(id, status) {
+    return ApiClient.patch(`/events/${id}/status`, { status });
   },
 
   createEvent(eventData) {
@@ -161,6 +173,8 @@ export const EventService = {
 export const {
   getAllEvents,
   getEventById,
+  duplicateEvent,
+  updateEventStatus,
   createEvent,
   updateEvent,
   deleteEvent,

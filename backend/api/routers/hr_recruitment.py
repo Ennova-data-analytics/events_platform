@@ -237,6 +237,17 @@ def get_cv_url(
     return HrApplicationUseCases.cv_url(db, scoped, application_id)
 
 
+@router.get("/applications/{application_id}/materials/{material_id}/url")
+def get_material_url(
+    application_id: int,
+    material_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User = Depends(deps.get_current_active_recruiter),
+):
+    scoped = deps.recruiter_department_ids(db, current_user)
+    return HrApplicationUseCases.material_url(db, scoped, application_id, material_id)
+
+
 @router.post("/applications/{application_id}/send-interview-invite")
 def send_interview_invite(
     application_id: int,

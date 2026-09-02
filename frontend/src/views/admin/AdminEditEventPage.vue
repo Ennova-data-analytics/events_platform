@@ -201,6 +201,30 @@
                 <v-card-text class="py-3">
                   <div class="d-flex align-center justify-space-between">
                     <div>
+                      <div class="text-subtitle-2 font-weight-medium">Published</div>
+                      <div class="text-caption text-medium-emphasis">
+                        {{ isPublished(event.status)
+                          ? 'Visible on the public events list.'
+                          : 'Hidden from the public events list until published.' }}
+                      </div>
+                    </div>
+                    <v-switch
+                      :model-value="isPublished(event.status)"
+                      :loading="publishing"
+                      :disabled="publishing"
+                      color="success"
+                      hide-details
+                      class="ml-4 flex-shrink-0"
+                      @update:model-value="togglePublished"
+                    />
+                  </div>
+                </v-card-text>
+              </v-card>
+
+              <v-card variant="outlined">
+                <v-card-text class="py-3">
+                  <div class="d-flex align-center justify-space-between">
+                    <div>
                       <div class="text-subtitle-2 font-weight-medium">Require Admin Approval</div>
                       <div class="text-caption text-medium-emphasis">Registrations must be manually approved before attendees can pay.</div>
                     </div>
@@ -343,6 +367,7 @@ import SponsorLogoUpload from '@/components/admin/SponsorLogoUpload.vue'
 import EventPhotosUpload from '@/components/admin/EventPhotosUpload.vue'
 import EventAttachmentsUpload from '@/components/admin/EventAttachmentsUpload.vue'
 import { useEventStore } from '@/stores/events.store.js'
+import { statusColor, isPublished } from '@/utils/eventStatus.js'
 import { EventService } from '@/services/EventService.js'
 import { FormTemplateService } from '@/services/FormTemplateService.js'
 import { EmailTemplateService } from '@/services/EmailTemplateService.js'
@@ -376,9 +401,20 @@ function notify(text, color = 'success') {
   snackbar.value = true
 }
 
-function statusColor(status) {
-  const map = { Draft: 'default', Published: 'success', Cancelled: 'error', Archived: 'secondary' }
-  return map[status] || 'default'
+const publishing = ref(false)
+
+async function togglePublished() {
+  publishing.value = true
+  const next = isPublished(event.value.status) ? 'Draft' : 'Published'
+  try {
+    const updated = await eventStore.setEventStatus(event.value.event_id, next)
+    event.value = { ...event.value, status: updated.status }
+    notify(next === 'Published' ? 'Event published' : 'Event unpublished')
+  } catch {
+    notify(eventStore.error || 'Could not update the event status', 'error')
+  } finally {
+    publishing.value = false
+  }
 }
 
 // Convert ISO datetime to datetime-local format for input (preserve local time)

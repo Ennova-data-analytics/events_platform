@@ -28,12 +28,25 @@
             </v-chip>
           </template>
 
+          <template v-slot:item.status="{ item }">
+            <v-chip :color="statusColor(item.status)" variant="tonal" size="small" label>
+              {{ item.status }}
+            </v-chip>
+          </template>
+
           <template v-slot:item.actions="{ item }">
             <v-btn
               icon="mdi-pencil"
               variant="text"
               size="small"
               :to="{ name: 'admin-edit-event', params: { id: item.event_id } }"
+            ></v-btn>
+            <v-btn
+              icon="mdi-content-copy"
+              variant="text"
+              size="small"
+              title="Duplicate for a re-run"
+              @click="openDuplicateDialog(item)"
             ></v-btn>
             <v-btn
               icon="mdi-account-group"
@@ -57,6 +70,48 @@
         </v-data-table>
       </v-card-text>
     </v-card>
+    <v-dialog v-model="duplicateDialog" :max-width="$vuetify.display.mobile ? '92vw' : '520px'" persistent>
+      <v-card>
+        <v-card-title class="text-h6 pt-4">Duplicate event</v-card-title>
+        <v-card-text>
+          <p class="text-body-2 text-medium-emphasis mb-4">
+            Creates an unpublished copy of "{{ eventToDuplicate?.event_name }}" with its details,
+            media and ticket types. Registrations, feedback and attendance are not carried over.
+          </p>
+          <v-text-field
+            v-model="duplicateDraft.event_name"
+            label="Name *"
+            variant="outlined"
+            density="comfortable"
+            class="mb-2"
+          />
+          <DateTimeField
+            v-model="duplicateDraft.event_date_start"
+            label="Starts"
+            density="comfortable"
+            prepend-inner-icon="mdi-calendar-start"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn variant="text" :disabled="duplicating" @click="closeDuplicateDialog">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            :disabled="!duplicateDraft.event_name.trim()"
+            :loading="duplicating"
+            @click="confirmDuplicate"
+          >
+            Duplicate
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="top">
+      {{ snackbar.text }}
+    </v-snackbar>
+
     <v-dialog v-model="deleteDialog" :max-width="$vuetify.display.mobile ? '90vw' : '500px'">
       <v-card>
         <v-card-title class="text-h5">Are you sure?</v-card-title>
@@ -74,20 +129,26 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import { useDisplay } from 'vuetify';
+import { useRouter } from 'vue-router';
 import { useEventStore } from '@/stores/events.store.js';
+import { statusColor } from '@/utils/eventStatus.js';
+import DateTimeField from '@/components/common/DateTimeField.vue';
 
 const eventStore = useEventStore();
+const router = useRouter();
 
 const { mobile } = useDisplay();
 const headers = computed(() => mobile.value ? [
   { title: 'Event Name', key: 'event_name', sortable: true },
   { title: 'Date', key: 'event_date_start', sortable: true },
+  { title: 'Status', key: 'status', sortable: true },
   { title: 'Actions', key: 'actions', sortable: false, align: 'end' },
 ] : [
   { title: 'Event Name', key: 'event_name', sortable: true },
   { title: 'Date', key: 'event_date_start', sortable: true },
+  { title: 'Status', key: 'status', sortable: true },
   { title: 'Location', key: 'location', sortable: false },
   { title: 'Price (€)', key: 'price_euros', sortable: true },
   { title: 'Capacity', key: 'capacity', sortable: true },
@@ -114,7 +175,70 @@ async function confirmDelete() {
   }
 }
 
+// ── Duplicate ─────────────────────────────────────────────────────────────
+const duplicateDialog = ref(false);
+const duplicating = ref(false);
+const eventToDuplicate = ref(null);
+const duplicateDraft = reactive({ event_name: '', event_date_start: '' });
+const snackbar = reactive({ show: false, text: '', color: 'success' });
+
+// "Summer Gala 2026" → "Summer Gala 2027". Falls back to a "(Copy)" suffix when
+// the name carries no year to bump.
+function nextYearName(name) {
+  const match = name?.match(/(.*)(\b(?:19|20)\d{2}\b)(.*)/);
+  if (!match) return `${name} (Copy)`;
+  return `${match[1]}${Number(match[2]) + 1}${match[3]}`;
+}
+
+// DateTimeField expects a "YYYY-MM-DDTHH:mm" local string.
+function toLocalInput(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function nextYearDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  d.setFullYear(d.getFullYear() + 1);
+  return toLocalInput(d.toISOString());
+}
+
+function openDuplicateDialog(event) {
+  eventToDuplicate.value = event;
+  duplicateDraft.event_name = nextYearName(event.event_name);
+  duplicateDraft.event_date_start = nextYearDate(event.event_date_start);
+  duplicateDialog.value = true;
+}
+
+function closeDuplicateDialog() {
+  eventToDuplicate.value = null;
+  duplicateDialog.value = false;
+}
+
+async function confirmDuplicate() {
+  duplicating.value = true;
+  try {
+    const created = await eventStore.duplicateEvent(eventToDuplicate.value.event_id, {
+      event_name: duplicateDraft.event_name.trim(),
+      event_date_start: duplicateDraft.event_date_start
+        ? new Date(duplicateDraft.event_date_start).toISOString()
+        : null,
+    });
+    duplicateDialog.value = false;
+    router.push({ name: 'admin-edit-event', params: { id: created.event_id } });
+  } catch {
+    snackbar.text = eventStore.error || 'Could not duplicate the event';
+    snackbar.color = 'error';
+    snackbar.show = true;
+  } finally {
+    duplicating.value = false;
+  }
+}
+
 onMounted(() => {
-  eventStore.fetchAllEvents();
+  // Admins see drafts too, which the public event list never returns.
+  eventStore.fetchAllEvents({ includeUnpublished: true });
 });
 </script>

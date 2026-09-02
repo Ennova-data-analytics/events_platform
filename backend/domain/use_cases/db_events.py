@@ -1,14 +1,26 @@
-from sqlalchemy.orm import Session
-from domain import models, schemas 
+from sqlalchemy.orm import Session, joinedload
+from domain import models, schemas
 import uuid
+
+# Only events in this state are visible to the public; drafts, cancelled and
+# archived events are organiser-only.
+PUBLIC_STATUS = 'Published'
 
 def get_event(db: Session, event_id: int):
     """Fetches a single event by it's id"""
     return db.query(models.Event).filter(models.Event.event_id == event_id).first()
 
-def get_events(db: Session, skip: int = 0, limit: int = 100):
-    """Fetches a list of events from the database"""
-    return db.query(models.Event).offset(skip).limit(limit).all()
+def get_events(db: Session, skip: int = 0, limit: int = 100, include_unpublished: bool = False):
+    """
+    Fetches a list of events from the database.
+
+    By default only published events are returned. Organisers pass
+    include_unpublished=True to also see drafts in the admin table.
+    """
+    query = db.query(models.Event).options(joinedload(models.Event.ticket_types))
+    if not include_unpublished:
+        query = query.filter(models.Event.status == PUBLIC_STATUS)
+    return query.offset(skip).limit(limit).all()
 
 
 def create_event(db: Session, event: schemas.EventCreate, user_id: uuid.UUID):

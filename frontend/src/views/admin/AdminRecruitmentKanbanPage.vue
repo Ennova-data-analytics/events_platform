@@ -90,7 +90,12 @@
     <v-progress-linear v-if="isLoading" indeterminate color="primary" class="mb-2" />
 
     <!-- Filtered → rich list with inline documents -->
-    <ApplicantList v-if="listForced" :applications="filtered" @open="openCandidate" />
+    <ApplicantList
+      v-if="listForced"
+      :applications="filtered"
+      @open="openCandidate"
+      @error="notify($event, 'error')"
+    />
 
     <!-- Kanban -->
     <KanbanBoard

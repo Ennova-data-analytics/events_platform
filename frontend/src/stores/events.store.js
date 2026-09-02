@@ -10,12 +10,14 @@ export const useEventStore = defineStore('events', () => {
     const isLoading = ref(false);
     const error = ref(null);
 
-    async function fetchAllEvents() {
+    // Admin screens pass { includeUnpublished: true } to list drafts alongside
+    // published events; the public pages call this bare.
+    async function fetchAllEvents(options = {}) {
         isLoading.value = true;
         error.value = null;
 
         try {
-            const response = await EventService.getAllEvents();
+            const response = await EventService.getAllEvents(options);
             events.value = response.data;
         } catch(err) {
             console.error('Failed to fetch events:', err);
@@ -65,6 +67,41 @@ export const useEventStore = defineStore('events', () => {
             error.value = err.response?.data?.detail || 'Could not update an event';
         } finally {
             isLoading.value = false;
+        }
+    }
+
+    async function duplicateEvent(eventId, payload = {}) {
+        isLoading.value = true;
+        error.value = null;
+        try {
+            const response = await EventService.duplicateEvent(eventId, payload);
+            events.value.unshift(response.data);
+            return response.data;
+        } catch (err) {
+            console.error('Failed to duplicate an event: ', err);
+            error.value = err.response?.data?.detail || 'Could not duplicate the event';
+            throw err;
+        } finally {
+            isLoading.value = false;
+        }
+    }
+
+    async function setEventStatus(eventId, status) {
+        error.value = null;
+        try {
+            const response = await EventService.updateEventStatus(eventId, status);
+            const index = events.value.findIndex(e => e.event_id === eventId);
+            if (index !== -1) {
+                events.value[index] = response.data;
+            }
+            if (currentEvent.value?.event_id === eventId) {
+                currentEvent.value = response.data;
+            }
+            return response.data;
+        } catch (err) {
+            console.error(`Failed to update status for event ${eventId}:`, err);
+            error.value = err.response?.data?.detail || 'Could not update the event status';
+            throw err;
         }
     }
 
@@ -159,5 +196,5 @@ export const useEventStore = defineStore('events', () => {
         }
     }
 
-    return { events, currentEvent, isLoading, error, fetchAllEvents, fetchEventById, createEvent, updateEvent, registerForEvent, uploadEventImage, deleteEvent, uploadEventPhotos, deleteEventPhoto};
+    return { events, currentEvent, isLoading, error, fetchAllEvents, fetchEventById, createEvent, updateEvent, duplicateEvent, setEventStatus, registerForEvent, uploadEventImage, deleteEvent, uploadEventPhotos, deleteEventPhoto};
 });

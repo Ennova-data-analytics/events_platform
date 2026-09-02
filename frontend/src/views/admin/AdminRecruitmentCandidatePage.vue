@@ -247,7 +247,16 @@
                   <div class="text-body-2 font-weight-medium">{{ app.candidate.cv_s3_key ? app.candidate.cv_s3_key.split('/').pop() : 'No CV on file' }}</div>
                   <div class="text-caption text-medium-emphasis">{{ app.candidate.cv_s3_key ? 'Curriculum vitae' : 'Extraction failed or none uploaded' }}</div>
                 </div>
-                <v-btn v-if="app.candidate.cv_s3_key" size="small" variant="outlined" prepend-icon="mdi-open-in-new" href="#mock-cv" target="_blank">Open</v-btn>
+                <v-btn
+                  v-if="app.candidate.cv_s3_key"
+                  size="small"
+                  variant="outlined"
+                  prepend-icon="mdi-open-in-new"
+                  :loading="openingDoc === 'cv'"
+                  @click="openCv"
+                >
+                  Open
+                </v-btn>
               </div>
 
               <template v-if="app.answers.materials?.length">
@@ -259,7 +268,14 @@
                     <div class="text-body-2">{{ m.filename }}</div>
                     <div class="text-caption text-medium-emphasis">{{ m.note }}</div>
                   </div>
-                  <v-btn size="x-small" variant="text" href="#mock-material" target="_blank">Open</v-btn>
+                  <v-btn
+                    size="x-small"
+                    variant="text"
+                    :loading="openingDoc === m.material_id"
+                    @click="openMaterial(m)"
+                  >
+                    Open
+                  </v-btn>
                 </div>
               </template>
 
@@ -386,6 +402,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { RecruitmentService } from '@/services/RecruitmentService.js';
 import { APPLICATION_STATUSES, statusMeta } from '@/data/recruitmentMock.js';
 import { getCalendlyLink, setCalendlyLink } from '@/utils/recruitmentPrefs.js';
+import { useDocumentOpener } from '@/composables/useDocumentOpener.js';
 import YoutubeEmbed from '@/components/media/YoutubeEmbed.vue';
 import StatusChangeDialog from '@/components/recruitment/StatusChangeDialog.vue';
 
@@ -469,6 +486,20 @@ function notify(text, color = 'success') {
 }
 function formatDateTime(iso) {
   return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+// ── Documents ─────────────────────────────────────────────────────────────
+const { openingDoc, openDocument } = useDocumentOpener((msg) => notify(msg, 'error'));
+
+function openCv() {
+  return openDocument('cv', () => RecruitmentService.getCvPreviewUrl(app.value.id));
+}
+
+function openMaterial(material) {
+  return openDocument(
+    material.material_id,
+    () => RecruitmentService.getMaterialUrl(app.value.id, material.material_id),
+  );
 }
 
 const EVENT_STYLE = {

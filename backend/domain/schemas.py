@@ -148,6 +148,11 @@ class EventAttachment(EventAttachmentBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Lifecycle states for an event. Only 'Published' events are visible to the
+# public; everything else is organiser-only.
+EventStatus = Literal['Draft', 'Published', 'Cancelled', 'Archived']
+
+
 class EventBase(BaseModel):
     event_name: str
     description: str | None = None
@@ -200,6 +205,19 @@ class EventUpdate(BaseModel):
     is_free_for_members: bool | None = None
     teams_enabled: bool | None = None
     team_max_members: int | None = None
+    status: EventStatus | None = None
+
+class EventStatusUpdate(BaseModel):
+    status: EventStatus
+
+class EventDuplicateRequest(BaseModel):
+    """
+    Options for re-running an event. Everything is optional: omitted fields fall
+    back to the source event's value shifted forward by a year.
+    """
+    event_name: str | None = None
+    event_date_start: datetime | None = None
+    event_date_end: datetime | None = None
 
 class Event(EventBase):
     event_id: int
