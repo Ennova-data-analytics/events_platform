@@ -675,6 +675,10 @@ class Department(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     has_case_stage = Column(Boolean, default=False, nullable=False)
     calendly_link = Column(Text)
+    # Reusable case brief for this department; copied onto each application at
+    # send time so replacing it later doesn't change what was already emailed.
+    case_brief_s3_key = Column(Text)
+    case_brief_filename = Column(String(255))
     scoring_criteria = Column(JSONB)       # [{id, label, weight}]
     custom_questions = Column(JSONB)       # [{id, label, type, options, required}]
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
@@ -760,8 +764,12 @@ class Application(Base):
     final_department_id = Column(Integer, ForeignKey('departments.department_id', ondelete="SET NULL"))
     interview_invite_sent = Column(Boolean, default=False, nullable=False)
 
-    # Marketing-only case study (nullable for everyone else).
+    # Marketing-only case study (nullable for everyone else). The brief is
+    # either a link (case_brief_url) or an uploaded file (case_brief_s3_key),
+    # never both.
     case_brief_url = Column(Text)
+    case_brief_s3_key = Column(Text)
+    case_brief_filename = Column(String(255))
     case_sent_at = Column(TIMESTAMP(timezone=True))
     case_deadline_at = Column(TIMESTAMP(timezone=True))
     case_submitted_at = Column(TIMESTAMP(timezone=True))

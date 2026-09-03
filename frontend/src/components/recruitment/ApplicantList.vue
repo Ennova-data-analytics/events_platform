@@ -112,7 +112,18 @@
           </v-btn>
 
           <v-btn
-            v-if="app.case && !app.case.submitted_at"
+            v-if="app.case && !app.case.submitted_at && app.case.brief_s3_key"
+            size="x-small"
+            variant="text"
+            color="deep-purple"
+            prepend-icon="mdi-briefcase-clock-outline"
+            :loading="openingDoc === `brief-${app.id}`"
+            @click="openCaseBrief(app)"
+          >
+            Case due {{ caseCountdown(app) }}
+          </v-btn>
+          <v-btn
+            v-else-if="app.case && !app.case.submitted_at"
             size="x-small"
             variant="text"
             color="deep-purple"
@@ -155,6 +166,10 @@ function openMaterial(app, material) {
     material.material_id,
     () => RecruitmentService.getMaterialUrl(app.id, material.material_id),
   );
+}
+
+function openCaseBrief(app) {
+  return openDocument(`brief-${app.id}`, () => RecruitmentService.getCaseBriefUrl(app.id));
 }
 
 function initials(name) {

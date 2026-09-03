@@ -26,12 +26,47 @@
             <v-alert type="info" variant="tonal" density="compact" class="mb-3">
               Sends the Marketing case brief with a <strong>48-hour</strong> deadline.
             </v-alert>
+
+            <v-btn-toggle v-model="briefMode" mandatory density="compact" variant="outlined" class="mb-3">
+              <v-btn value="file" size="small" prepend-icon="mdi-file-pdf-box">File</v-btn>
+              <v-btn value="link" size="small" prepend-icon="mdi-link-variant">Link</v-btn>
+            </v-btn-toggle>
+
+            <template v-if="briefMode === 'file'">
+              <!-- The department's saved brief is used unless a different file
+                   is picked here, so the common case needs no interaction. -->
+              <div
+                v-if="departmentBriefName && !caseBriefFile"
+                class="d-flex align-center ga-2 mb-2 text-body-2"
+              >
+                <v-icon size="small" color="deep-purple">mdi-file-pdf-box</v-icon>
+                <span class="flex-grow-1">{{ departmentBriefName }}</span>
+                <v-chip size="x-small" variant="tonal">Department default</v-chip>
+              </div>
+              <v-file-input
+                v-model="caseBriefFile"
+                :label="departmentBriefName ? 'Use a different file for this candidate' : 'Case brief (PDF)'"
+                accept="application/pdf"
+                variant="outlined"
+                density="compact"
+                prepend-icon=""
+                prepend-inner-icon="mdi-paperclip"
+                hide-details
+                :loading="uploadingBrief"
+              />
+              <div v-if="!departmentBriefName && !caseBriefFile" class="text-caption text-medium-emphasis mt-1">
+                This department has no default brief saved — attach one, or set it on the Criteria page.
+              </div>
+            </template>
+
             <v-text-field
+              v-else
               v-model="caseBriefUrl"
               label="Case brief link"
               variant="outlined"
               density="compact"
               prepend-inner-icon="mdi-link-variant"
+              placeholder="https://…"
               hide-details
             />
           </template>
@@ -66,8 +101,13 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="close">Cancel</v-btn>
-          <v-btn :color="isHighStakes ? 'warning' : 'primary'" variant="flat" @click="onPrimary">
+          <v-btn variant="text" :disabled="uploadingBrief" @click="close">Cancel</v-btn>
+          <v-btn
+            :color="isHighStakes ? 'warning' : 'primary'"
+            variant="flat"
+            :loading="uploadingBrief"
+            @click="onPrimary"
+          >
             {{ isHighStakes ? 'Continue' : 'Confirm move' }}
           </v-btn>
         </v-card-actions>
@@ -113,21 +153,31 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { statusMeta, HIGH_STAKES_STATUSES } from '@/data/recruitmentMock.js';
+import { RecruitmentService } from '@/services/RecruitmentService.js';
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   application: { type: Object, default: null },
   targetStatus: { type: String, default: null },
   defaultCalendly: { type: String, default: '' },
-  defaultCaseBrief: { type: String, default: 'https://ennova.com/cases/marketing-autumn26.pdf' },
+  // The department this candidate would receive a case for. Supplies the
+  // default brief, which a per-send file or link can override.
+  department: { type: Object, default: null },
 });
-const emit = defineEmits(['update:modelValue', 'confirm']);
+const emit = defineEmits(['update:modelValue', 'confirm', 'error']);
 
 const level = ref(1);
 const acknowledged = ref(false);
 const sendInterviewInvite = ref(false);
 const calendlyLink = ref('');
 const caseBriefUrl = ref('');
+const briefMode = ref('file');
+const caseBriefFile = ref(null);
+const uploadingBrief = ref(false);
+
+const departmentBriefName = computed(
+  () => props.department?.case_brief_filename || (props.department?.case_brief_s3_key ? 'Saved brief' : '')
+);
 
 const fromMeta = computed(() => statusMeta(props.application?.status));
 const toMeta = computed(() => statusMeta(props.targetStatus));
@@ -142,7 +192,9 @@ watch(
       acknowledged.value = false;
       sendInterviewInvite.value = false;
       calendlyLink.value = props.defaultCalendly || '';
-      caseBriefUrl.value = props.defaultCaseBrief || '';
+      caseBriefUrl.value = '';
+      caseBriefFile.value = null;
+      briefMode.value = 'file';
     }
   }
 );
@@ -159,12 +211,39 @@ function onPrimary() {
   }
 }
 
-function onConfirm() {
+// Resolve the case brief into what the API expects. A picked file is uploaded
+// first; leaving both empty in file mode means "use the department default",
+// which the backend resolves.
+async function resolveBrief() {
+  if (props.targetStatus !== 'case_sent') return {};
+  if (briefMode.value === 'link') {
+    return { brief_url: caseBriefUrl.value.trim() || null };
+  }
+  if (caseBriefFile.value) {
+    const up = await RecruitmentService.uploadDocument(caseBriefFile.value);
+    return { brief_s3_key: up.s3_key, brief_filename: up.filename };
+  }
+  return {};
+}
+
+async function onConfirm() {
+  let brief;
+  uploadingBrief.value = true;
+  try {
+    brief = await resolveBrief();
+  } catch (err) {
+    console.error('Failed to upload case brief:', err);
+    emit('error', err.response?.data?.detail || 'Could not upload the case brief');
+    return;
+  } finally {
+    uploadingBrief.value = false;
+  }
+
   emit('confirm', {
     status: props.targetStatus,
     sendInterviewInvite: sendInterviewInvite.value,
     calendlyLink: calendlyLink.value,
-    caseBriefUrl: caseBriefUrl.value,
+    ...brief,
   });
   close();
 }

@@ -158,6 +158,64 @@
                 </v-card-text>
               </v-card>
             </v-col>
+
+            <!-- Case brief: only departments that run a case stage need one -->
+            <v-col v-if="dep.has_case_stage" cols="12">
+              <v-card>
+                <v-card-title class="text-subtitle-1 font-weight-bold">Case brief</v-card-title>
+                <v-card-text>
+                  <p class="text-caption text-medium-emphasis mb-3">
+                    The PDF sent to candidates when they move to Case Sent. Saved once here and
+                    reused for everyone; a recruiter can still attach a different file for an
+                    individual candidate.
+                  </p>
+
+                  <div v-if="dep.case_brief_s3_key" class="d-flex align-center ga-3 mb-3">
+                    <v-icon size="32" color="red-darken-1">mdi-file-pdf-box</v-icon>
+                    <div class="flex-grow-1">
+                      <div class="text-body-2 font-weight-medium">
+                        {{ dep.case_brief_filename || 'Case brief' }}
+                      </div>
+                      <div class="text-caption text-medium-emphasis">Currently sent to candidates</div>
+                    </div>
+                    <v-btn
+                      size="small"
+                      variant="text"
+                      color="error"
+                      :loading="saving === `brief-${dep.id}`"
+                      @click="removeCaseBrief(dep)"
+                    >
+                      Remove
+                    </v-btn>
+                  </div>
+                  <v-alert v-else type="warning" variant="tonal" density="compact" class="mb-3">
+                    No brief saved. Recruiters will have to attach one on every send.
+                  </v-alert>
+
+                  <v-file-input
+                    v-model="briefFiles[dep.id]"
+                    :label="dep.case_brief_s3_key ? 'Replace with a new PDF' : 'Upload the case brief (PDF)'"
+                    accept="application/pdf"
+                    variant="outlined"
+                    density="compact"
+                    prepend-icon=""
+                    prepend-inner-icon="mdi-paperclip"
+                    hide-details
+                  />
+                  <v-btn
+                    color="primary"
+                    variant="flat"
+                    size="small"
+                    class="mt-3"
+                    :disabled="!briefFiles[dep.id]"
+                    :loading="saving === `brief-${dep.id}`"
+                    @click="saveCaseBrief(dep)"
+                  >
+                    Save brief
+                  </v-btn>
+                </v-card-text>
+              </v-card>
+            </v-col>
           </v-row>
         </v-window-item>
       </v-window>
@@ -212,6 +270,49 @@ async function saveCriteria(dep) {
     saving.value = null;
   }
 }
+// Per-department pending file selections, keyed by department id.
+const briefFiles = reactive({});
+
+async function saveCaseBrief(dep) {
+  const file = briefFiles[dep.id];
+  if (!file) return;
+  saving.value = `brief-${dep.id}`;
+  try {
+    // Same upload path candidates use for their CVs.
+    const up = await RecruitmentService.uploadDocument(file);
+    await RecruitmentService.updateDepartment(dep.id, {
+      case_brief_s3_key: up.s3_key,
+      case_brief_filename: up.filename,
+    });
+    dep.case_brief_s3_key = up.s3_key;
+    dep.case_brief_filename = up.filename;
+    briefFiles[dep.id] = null;
+    notify(`${dep.name} case brief saved`);
+  } catch (err) {
+    console.error('Failed to save case brief:', err);
+    notify(err.response?.data?.detail || 'Could not save the case brief', 'error');
+  } finally {
+    saving.value = null;
+  }
+}
+
+async function removeCaseBrief(dep) {
+  saving.value = `brief-${dep.id}`;
+  try {
+    // Clears the default only. Candidates already sent this brief keep their
+    // own copy of the key, so their links go on working.
+    await RecruitmentService.updateDepartment(dep.id, {
+      case_brief_s3_key: null,
+      case_brief_filename: null,
+    });
+    dep.case_brief_s3_key = null;
+    dep.case_brief_filename = null;
+    notify(`${dep.name} case brief removed`, 'warning');
+  } finally {
+    saving.value = null;
+  }
+}
+
 async function saveQuestions(dep) {
   saving.value = `q-${dep.id}`;
   try {

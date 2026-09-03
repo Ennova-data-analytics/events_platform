@@ -1060,6 +1060,10 @@ class DepartmentBase(BaseModel):
     is_active: bool = True
     has_case_stage: bool = False
     calendly_link: str | None = None
+    # Only ever served from the recruiter-gated router; the public positions
+    # list goes through serialize_department instead.
+    case_brief_s3_key: str | None = None
+    case_brief_filename: str | None = None
     scoring_criteria: list[ScoringCriterion] | None = None
     custom_questions: list[CustomQuestion] | None = None
 
@@ -1075,6 +1079,8 @@ class DepartmentUpdate(BaseModel):
     is_active: bool | None = None
     has_case_stage: bool | None = None
     calendly_link: str | None = None
+    case_brief_s3_key: str | None = None
+    case_brief_filename: str | None = None
     scoring_criteria: list[ScoringCriterion] | None = None
     custom_questions: list[CustomQuestion] | None = None
 
@@ -1200,7 +1206,13 @@ class InterviewInviteIn(BaseModel):
 
 
 class CaseSendIn(BaseModel):
-    brief_url: str
+    """
+    The brief is either a link or an uploaded file. Leave all three fields unset
+    to use the department's default brief.
+    """
+    brief_url: str | None = None
+    brief_s3_key: str | None = None
+    brief_filename: str | None = None
     hours: int = 48
 
     model_config = ConfigDict(from_attributes=True)

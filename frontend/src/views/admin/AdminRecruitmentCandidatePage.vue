@@ -68,7 +68,18 @@
                 Sent {{ formatDateTime(app.case.sent_at) }} · deadline {{ formatDateTime(app.case.deadline_at) }} ({{ caseCountdown }})
               </div>
             </div>
-            <v-btn v-if="app.case.brief_url" size="small" variant="text" :href="app.case.brief_url" target="_blank" prepend-icon="mdi-file-document-outline">Brief</v-btn>
+            <!-- A file brief is presigned on click; a link brief is just a link. -->
+            <v-btn
+              v-if="app.case.brief_s3_key"
+              size="small"
+              variant="text"
+              prepend-icon="mdi-file-document-outline"
+              :loading="openingDoc === 'case-brief'"
+              @click="openCaseBrief"
+            >
+              Brief
+            </v-btn>
+            <v-btn v-else-if="app.case.brief_url" size="small" variant="text" :href="app.case.brief_url" target="_blank" prepend-icon="mdi-file-document-outline">Brief</v-btn>
             <v-btn v-if="app.case.submission_url" size="small" variant="flat" color="deep-purple" :href="app.case.submission_url" target="_blank" prepend-icon="mdi-briefcase-check-outline">Open submission</v-btn>
           </div>
         </v-card-text>
@@ -388,7 +399,9 @@
       :application="app"
       :target-status="pendingStatus"
       :default-calendly="calendlyLink"
+      :department="caseDepartment"
       @confirm="applyStatusChange"
+      @error="notify($event, 'error')"
     />
 
     <v-snackbar v-model="toast.show" :color="toast.color" :timeout="2800" location="top">{{ toast.text }}</v-snackbar>
@@ -467,6 +480,11 @@ const confidenceColor = computed(() => {
   return 'error';
 });
 
+// The department whose case brief applies. Taken from the application (which is
+// serialized with include_rubric, so it carries the brief) rather than the
+// public positions list, which deliberately omits it.
+const caseDepartment = computed(() => app.value?.final_department || app.value?.applied_department || null);
+
 const caseOverdue = computed(
   () => app.value?.case && !app.value.case.submitted_at && new Date(app.value.case.deadline_at) < new Date()
 );
@@ -502,6 +520,10 @@ function openMaterial(material) {
   );
 }
 
+function openCaseBrief() {
+  return openDocument('case-brief', () => RecruitmentService.getCaseBriefUrl(app.value.id));
+}
+
 const EVENT_STYLE = {
   status_change: { icon: 'mdi-swap-horizontal', color: 'primary' },
   email_sent: { icon: 'mdi-email-outline', color: 'teal' },
@@ -528,9 +550,9 @@ function requestStatus(status) {
   confirmDialog.value = true;
 }
 
-async function applyStatusChange({ status, sendInterviewInvite: doSend, calendlyLink: link, caseBriefUrl }) {
+async function applyStatusChange({ status, sendInterviewInvite: doSend, calendlyLink: link, brief_url, brief_s3_key, brief_filename }) {
   if (status === 'case_sent') {
-    const res = await RecruitmentService.sendMarketingCase(app.value.id, { brief_url: caseBriefUrl });
+    const res = await RecruitmentService.sendMarketingCase(app.value.id, { brief_url, brief_s3_key, brief_filename });
     app.value.status = 'case_sent';
     app.value.case = res.case;
     pushEvent('status_change', { to: 'case_sent' });

@@ -15,6 +15,19 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def case_brief_redirect_url(token: str) -> str:
+    """
+    Permanent link to a candidate's case brief, safe to put in an email.
+
+    Presigned S3 URLs expire after an hour but the brief is emailed against a
+    48-hour deadline, so the email points here instead and the endpoint mints a
+    fresh presigned URL on each click. nginx proxies /api/ to the backend in
+    production and Vite does the same in dev, so one form works in both.
+    """
+    from core.config import settings
+    return f"{settings.FRONTEND_URL.rstrip('/')}/api/recruitment/case-brief/{token}"
+
+
 def serialize_department(d: models.Department | None, include_rubric: bool = False) -> dict | None:
     if not d:
         return None
@@ -30,6 +43,10 @@ def serialize_department(d: models.Department | None, include_rubric: bool = Fal
     }
     if include_rubric:  # HR views need the scoring rubric; candidates never see it.
         out["scoring_criteria"] = d.scoring_criteria or []
+        # The default case brief is HR-only too - it must not reach the public
+        # positions list, which calls this without the flag.
+        out["case_brief_s3_key"] = d.case_brief_s3_key
+        out["case_brief_filename"] = d.case_brief_filename
     return out
 
 
@@ -94,6 +111,10 @@ def serialize_application(db: Session, app: models.Application) -> dict:
     if app.case_sent_at:
         out["case"] = {
             "brief_url": app.case_brief_url,
+            # Set when the brief is an uploaded file; the admin UI presigns it
+            # on click rather than following brief_url.
+            "brief_s3_key": app.case_brief_s3_key,
+            "brief_filename": app.case_brief_filename,
             "sent_at": app.case_sent_at.isoformat() if app.case_sent_at else None,
             "deadline_at": app.case_deadline_at.isoformat() if app.case_deadline_at else None,
             "submitted_at": app.case_submitted_at.isoformat() if app.case_submitted_at else None,
@@ -236,7 +257,7 @@ class ApplicationUseCases:
 
     # ── Candidate-facing status serialization ───────────────────────────────
     @staticmethod
-    def serialize_status(db: Session, app: models.Application) -> dict:
+    def serialize_status(db: Session, app: models.Application, token: str | None = None) -> dict:
         cand = app.candidate
         rank_ids = app.department_ranking or []
         dept_by_id = {}
@@ -283,7 +304,14 @@ class ApplicationUseCases:
         }
         if app.case_sent_at:
             out["case"] = {
-                "brief_url": app.case_brief_url,
+                # An uploaded brief is served through the token redirect, which
+                # presigns on each request. Presigned URLs last an hour, so they
+                # can never be handed to the candidate directly.
+                "brief_url": (
+                    case_brief_redirect_url(token)
+                    if app.case_brief_s3_key and token
+                    else app.case_brief_url
+                ),
                 "sent_at": app.case_sent_at.isoformat() if app.case_sent_at else None,
                 "deadline_at": app.case_deadline_at.isoformat() if app.case_deadline_at else None,
                 "submitted_at": app.case_submitted_at.isoformat() if app.case_submitted_at else None,
@@ -540,19 +568,57 @@ class HrApplicationUseCases:
         return {"id": application_id, "interview_invite_sent": True}
 
     @staticmethod
-    def send_marketing_case(db: Session, scoped_ids, application_id: int, brief_url: str, hours: int, actor: str) -> dict:
+    def send_marketing_case(
+        db: Session,
+        scoped_ids,
+        application_id: int,
+        brief_url: str | None,
+        hours: int,
+        actor: str,
+        brief_s3_key: str | None = None,
+        brief_filename: str | None = None,
+    ) -> dict:
         app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
         from domain.services.recruitment.emails import send_marketing_case as _send
         now = _now()
         deadline = now + timedelta(hours=hours or 48)
+
+        # Resolve the brief once, in a fixed order: an explicit per-send file,
+        # then an explicit per-send link, then the department's default file.
+        # The chosen brief is snapshotted onto the application so that replacing
+        # the department default later doesn't change what this candidate was
+        # sent. Exactly one of the two fields ends up set.
+        dept = app.final_department or app.applied_department
+        if brief_s3_key:
+            app.case_brief_s3_key = brief_s3_key
+            app.case_brief_filename = brief_filename
+            app.case_brief_url = None
+        elif brief_url:
+            app.case_brief_url = brief_url
+            app.case_brief_s3_key = None
+            app.case_brief_filename = None
+        elif dept and dept.case_brief_s3_key:
+            app.case_brief_s3_key = dept.case_brief_s3_key
+            app.case_brief_filename = dept.case_brief_filename
+            app.case_brief_url = None
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No case brief provided and this department has no default brief",
+            )
+
         app.status = "case_sent"
-        app.case_brief_url = brief_url
         app.case_sent_at = now
         app.case_deadline_at = deadline
         token = ApplicationUseCases._get_or_create_token(db, application_id, "status")
+        # A file brief is emailed as the redirect link, never as a presigned URL.
+        email_brief_url = (
+            case_brief_redirect_url(token.token) if app.case_brief_s3_key else app.case_brief_url
+        )
         sent = _send(
             to_email=app.candidate.email, to_name=app.candidate.full_name or "",
-            brief_url=brief_url, deadline_str=deadline.strftime("%a %d %b, %H:%M"), status_token=token.token,
+            brief_url=email_brief_url, deadline_str=deadline.strftime("%a %d %b, %H:%M"),
+            status_token=token.token,
         )
         ApplicationUseCases.add_event(db, application_id, "status_change", {"to": "case_sent"}, actor=actor)
         if sent:
@@ -569,6 +635,15 @@ class HrApplicationUseCases:
         if not app.candidate or not app.candidate.cv_s3_key:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No CV on file")
         return {"url": s3_service.generate_predesigned_url(app.candidate.cv_s3_key)}
+
+    @staticmethod
+    def case_brief_url(db: Session, scoped_ids, application_id: int) -> dict:
+        """Presigned URL for a file case brief, for recruiters viewing it in admin."""
+        from core import s3_service
+        app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
+        if not app.case_brief_s3_key:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No case brief file on this application")
+        return {"url": s3_service.generate_predesigned_url(app.case_brief_s3_key)}
 
     @staticmethod
     def material_url(db: Session, scoped_ids, application_id: int, material_id: int) -> dict:

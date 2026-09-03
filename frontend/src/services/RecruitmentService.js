@@ -299,7 +299,9 @@ export const RecruitmentService = {
 
   // Marketing detour: send the case brief with a 48h deadline instead of an
   // interview link. Moves the application into `case_sent`.
-  sendMarketingCase(id, { brief_url, hours = 48 } = {}) {
+  // The brief is either a link or an uploaded file; pass neither to fall back
+  // to the department's default brief.
+  sendMarketingCase(id, { brief_url = null, brief_s3_key = null, brief_filename = null, hours = 48 } = {}) {
     if (USE_MOCK) {
       return delay(300).then(() => {
         const app = mockApplications.find((a) => a.id === Number(id));
@@ -307,12 +309,22 @@ export const RecruitmentService = {
         const deadline = new Date(now.getTime() + hours * 3600 * 1000);
         if (app) {
           app.status = 'case_sent';
-          app.case = { brief_url, sent_at: now.toISOString(), deadline_at: deadline.toISOString(), submitted_at: null };
+          app.case = {
+            brief_url, brief_s3_key, brief_filename,
+            sent_at: now.toISOString(), deadline_at: deadline.toISOString(), submitted_at: null,
+          };
         }
         return { id: Number(id), status: 'case_sent', case: app?.case };
       });
     }
-    return ApiClient.post(`/hr/recruitment/applications/${id}/send-case`, { brief_url, hours }).then((r) => r.data);
+    return ApiClient.post(`/hr/recruitment/applications/${id}/send-case`, {
+      brief_url, brief_s3_key, brief_filename, hours,
+    }).then((r) => r.data);
+  },
+
+  getCaseBriefUrl(id) {
+    if (USE_MOCK) return delay(150).then(() => '#mock-case-brief');
+    return ApiClient.get(`/hr/recruitment/applications/${id}/case-brief/url`).then((r) => r.data.url);
   },
 
   getCvPreviewUrl(id) {

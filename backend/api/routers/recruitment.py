@@ -5,6 +5,7 @@ import logging
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, UploadFile, File, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from datetime import datetime
@@ -110,7 +111,24 @@ def get_status(token: str, db: Session = Depends(deps.get_db)):
     app = ApplicationUseCases.get_application_by_token(db, token, purpose="status")
     if not app:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
-    return ApplicationUseCases.serialize_status(db, app)
+    return ApplicationUseCases.serialize_status(db, app, token=token)
+
+
+@router.get("/case-brief/{token}")
+def get_case_brief(token: str, db: Session = Depends(deps.get_db)):
+    """
+    Redirect a candidate to their case brief.
+
+    This is the link that goes in the case email. It has to stay valid for the
+    whole deadline window, so it mints a fresh presigned URL on each request
+    rather than embedding one that would expire within the hour. Access is
+    scoped to the candidate's own application by their status token, and stays
+    open after the deadline so they can re-read the brief.
+    """
+    app = ApplicationUseCases.get_application_by_token(db, token, purpose="status")
+    if not app or not app.case_brief_s3_key:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case brief not found")
+    return RedirectResponse(url=s3_service.generate_predesigned_url(app.case_brief_s3_key))
 
 
 # ── Calendly webhook (interview booked / cancelled) ─────────────────────────

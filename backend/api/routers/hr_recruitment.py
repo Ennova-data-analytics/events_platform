@@ -267,7 +267,21 @@ def send_case(
     current_user: models.User = Depends(deps.get_current_active_recruiter),
 ):
     scoped = deps.recruiter_department_ids(db, current_user)
-    return HrApplicationUseCases.send_marketing_case(db, scoped, application_id, data.brief_url, data.hours, _actor(current_user))
+    return HrApplicationUseCases.send_marketing_case(
+        db, scoped, application_id, data.brief_url, data.hours, _actor(current_user),
+        brief_s3_key=data.brief_s3_key, brief_filename=data.brief_filename,
+    )
+
+
+@router.get("/applications/{application_id}/case-brief/url")
+def get_case_brief_url(
+    application_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User = Depends(deps.get_current_active_recruiter),
+):
+    """Presigned URL for a file case brief, so recruiters don't need the candidate's token."""
+    scoped = deps.recruiter_department_ids(db, current_user)
+    return HrApplicationUseCases.case_brief_url(db, scoped, application_id)
 
 
 @router.get("/analytics/funnel")

@@ -143,7 +143,9 @@
       :application="pendingApp"
       :target-status="pendingStatus"
       :default-calendly="pendingCalendly"
+      :department="pendingApp?.final_department || pendingApp?.applied_department || null"
       @confirm="applyStatusChange"
+      @error="notify($event, 'error')"
     />
 
     <v-snackbar v-model="toast.show" :color="toast.color" :timeout="3200" location="top">{{ toast.text }}</v-snackbar>
@@ -258,12 +260,12 @@ function requestStatusChange({ id, to }) {
   confirmDialog.value = true;
 }
 
-async function applyStatusChange({ status, sendInterviewInvite, calendlyLink, caseBriefUrl }) {
+async function applyStatusChange({ status, sendInterviewInvite, calendlyLink, brief_url, brief_s3_key, brief_filename }) {
   const app = pendingApp.value;
   if (!app) return;
 
   if (status === 'case_sent') {
-    await RecruitmentService.sendMarketingCase(app.id, { brief_url: caseBriefUrl });
+    await RecruitmentService.sendMarketingCase(app.id, { brief_url, brief_s3_key, brief_filename });
     app.status = 'case_sent';
     notify(`Case brief sent to ${app.candidate.full_name} · 48h to submit`);
   } else {
