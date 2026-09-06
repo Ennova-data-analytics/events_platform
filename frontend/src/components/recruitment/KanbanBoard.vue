@@ -95,18 +95,28 @@ import { computed } from 'vue';
 
 const props = defineProps({
   applications: { type: Array, default: () => [] },
-  // Show the Marketing-only case columns (case_sent / case_submitted).
-  showMarketingStages: { type: Boolean, default: false },
+  // Show the case columns (case_sent / case_submitted) because the department
+  // in view runs a case stage.
+  showCaseStages: { type: Boolean, default: false },
 });
 const emit = defineEmits(['open', 'status-change']);
 
-// Kanban columns exclude "withdrawn" (a terminal side-state, not a column).
-// Marketing-only columns appear only when relevant so the board stays compact.
-const columns = computed(() =>
-  APPLICATION_STATUSES.filter(
-    (s) => s.value !== 'withdrawn' && (!s.marketing_only || props.showMarketingStages)
-  )
+// A card whose status has no column would simply not render, so any case status
+// present in the current set forces its column open. Without this a candidate
+// mid-case vanished from the board whenever the case columns were hidden -
+// on the unfiltered board, or when filtered to another department they ranked.
+const hasApplicationInCaseStage = computed(() =>
+  props.applications.some((a) => a.status === 'case_sent' || a.status === 'case_submitted')
 );
+
+// Kanban columns exclude "withdrawn" (a terminal side-state, not a column).
+// Case columns stay hidden otherwise, so boards without a case stage stay compact.
+const columns = computed(() => {
+  const showCases = props.showCaseStages || hasApplicationInCaseStage.value;
+  return APPLICATION_STATUSES.filter(
+    (s) => s.value !== 'withdrawn' && (!s.marketing_only || showCases)
+  );
+});
 
 const dragging = ref(null);
 const dragOverCol = ref(null);

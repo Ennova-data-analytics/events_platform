@@ -80,7 +80,7 @@
         <div v-if="anyFilterActive" class="d-flex align-center mt-2">
           <v-chip size="x-small" variant="tonal" class="mr-2">{{ filtered.length }} shown</v-chip>
           <span v-if="listForced" class="text-caption text-medium-emphasis">Filtered - showing detailed list.</span>
-          <span v-else-if="showMarketingStages" class="text-caption text-medium-emphasis">Marketing pipeline - case stages shown.</span>
+          <span v-else-if="showCaseStages" class="text-caption text-medium-emphasis">Case stages shown for this department.</span>
           <v-spacer />
           <v-btn size="x-small" variant="text" @click="clearFilters">Clear filters</v-btn>
         </div>
@@ -101,7 +101,7 @@
     <KanbanBoard
       v-else-if="viewMode === 'kanban'"
       :applications="filtered"
-      :show-marketing-stages="showMarketingStages"
+      :show-case-stages="showCaseStages"
       @open="openCandidate"
       @status-change="requestStatusChange"
     />
@@ -195,10 +195,18 @@ const headers = [
   { title: 'Applied', key: 'created_at' },
 ];
 
+// A candidate can rank several departments, so every department they picked has
+// to find them here - matching the first choice alone hid them from the rest.
+function appliesToDepartment(app, departmentId) {
+  if (app.final_department_id === departmentId) return true;
+  if (app.answers?.department_applied_id === departmentId) return true;
+  return (app.ranked_departments || []).some((d) => d.id === departmentId);
+}
+
 // Client-side filtering keeps the mockup snappy and the list/kanban in sync.
 const filtered = computed(() =>
   applications.value.filter((a) => {
-    if (filters.department_id && a.final_department_id !== filters.department_id && a.answers.department_applied_id !== filters.department_id) return false;
+    if (filters.department_id && !appliesToDepartment(a, filters.department_id)) return false;
     if (filters.stage && a.status !== filters.stage) return false;
     if (filters.search) {
       const q = filters.search.toLowerCase();
@@ -214,11 +222,13 @@ const anyFilterActive = computed(() => !!(filters.department_id || filters.stage
 // kanban so its columns (including the Marketing case stages) stay visible.
 const listForced = computed(() => !!(filters.stage || filters.search));
 
-const marketingId = computed(() => departments.value.find((d) => d.name === 'Marketing')?.id);
-
-// The Marketing-only case columns appear ONLY when the board is filtered to
-// Marketing - the case study is particular to that department.
-const showMarketingStages = computed(() => !!filters.department_id && filters.department_id === marketingId.value);
+// Driven by the department's has_case_stage flag rather than its name: the case
+// stage is configurable per department, so matching on the literal "Marketing"
+// broke as soon as another department enabled one (or Marketing was renamed).
+const showCaseStages = computed(() => {
+  if (!filters.department_id) return false;
+  return !!departments.value.find((d) => d.id === filters.department_id)?.has_case_stage;
+});
 
 function notify(text, color = 'success') {
   toast.text = text;

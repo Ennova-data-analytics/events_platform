@@ -197,13 +197,17 @@
           <v-card class="mb-4">
             <v-card-title class="text-subtitle-1 font-weight-bold">Application answers</v-card-title>
             <v-card-text>
+              <!-- Applications submitted before these questions existed have no
+                   answer, so say so rather than rendering an empty gap. -->
               <div class="mb-4">
                 <div class="text-caption text-medium-emphasis mb-1">Background</div>
-                <div class="text-body-2">{{ app.answers.background }}</div>
+                <div v-if="app.answers.background" class="text-body-2" style="white-space: pre-wrap">{{ app.answers.background }}</div>
+                <div v-else class="text-body-2 text-medium-emphasis font-italic">Not answered</div>
               </div>
               <div class="mb-4">
                 <div class="text-caption text-medium-emphasis mb-1">Motivation</div>
-                <div class="text-body-2">{{ app.answers.motivation }}</div>
+                <div v-if="app.answers.motivation" class="text-body-2" style="white-space: pre-wrap">{{ app.answers.motivation }}</div>
+                <div v-else class="text-body-2 text-medium-emphasis font-italic">Not answered</div>
               </div>
               <!-- Candidate's ranked department preferences -->
               <div v-if="app.ranked_departments?.length" class="mb-4">
@@ -231,17 +235,16 @@
               </div>
 
               <v-row>
-                <v-col cols="12" sm="6">
+                <!-- No "Availability" here: the form never asked for it, so it
+                     only ever rendered as a permanent dash. Interview timing is
+                     handled by booking slots instead. -->
+                <v-col cols="12" sm="8">
                   <div class="text-caption text-medium-emphasis mb-1">Other associations</div>
                   <div class="text-body-2">{{ app.answers.other_associations || '-' }}</div>
                 </v-col>
-                <v-col cols="6" sm="3">
-                  <div class="text-caption text-medium-emphasis mb-1">Availability</div>
-                  <div class="text-body-2">{{ app.answers.availability || '-' }}</div>
-                </v-col>
-                <v-col cols="6" sm="3">
+                <v-col cols="12" sm="4">
                   <div class="text-caption text-medium-emphasis mb-1">Source</div>
-                  <div class="text-body-2">{{ app.source }}</div>
+                  <div class="text-body-2">{{ app.source || '-' }}</div>
                 </v-col>
               </v-row>
             </v-card-text>

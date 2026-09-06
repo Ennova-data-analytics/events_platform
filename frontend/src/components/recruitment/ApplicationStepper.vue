@@ -6,7 +6,7 @@
         <v-divider />
         <v-stepper-item :value="2" title="Department" :complete="step > 2" :editable="step > 2" />
         <v-divider />
-        <v-stepper-item :value="3" title="Documents" :complete="step > 3" :editable="step > 3" />
+        <v-stepper-item :value="3" title="About you" :complete="step > 3" :editable="step > 3" />
         <v-divider />
         <v-stepper-item :value="4" title="Match" :complete="step > 4" :editable="step > 4" />
         <v-divider />
@@ -142,9 +142,39 @@
           </div>
         </v-stepper-window-item>
 
-        <!-- ──────────────────────────────────────────────── Step 3: Documents -->
+        <!-- ─────────────────────────────────────────────── Step 3: About you -->
         <v-stepper-window-item :value="3">
           <div class="pa-2">
+            <!-- Background & motivation: the two free-text answers the AI matcher
+                 reads alongside the CV, and the first thing reviewers look at. -->
+            <div class="text-subtitle-2 font-weight-bold mb-3">Tell us about you</div>
+            <v-textarea
+              v-model="form.background"
+              label="Your background *"
+              variant="outlined"
+              rows="4"
+              class="mb-3"
+              counter="1500"
+              maxlength="1500"
+              hint="Studies, work, projects, societies - whatever shows what you've done."
+              persistent-hint
+              :rules="[v => !!(v || '').trim() || 'Please tell us a little about your background']"
+            />
+            <v-textarea
+              v-model="form.motivation"
+              label="Why this department? *"
+              variant="outlined"
+              rows="4"
+              class="mb-4"
+              counter="1500"
+              maxlength="1500"
+              hint="What draws you to the team you picked, and what you want to get out of it."
+              persistent-hint
+              :rules="[v => !!(v || '').trim() || 'Please tell us what motivates you']"
+            />
+
+            <v-divider class="my-4" />
+
             <div class="text-subtitle-2 font-weight-bold mb-3">CV & cover letter</div>
             <v-file-input
               v-model="cvFile"
@@ -473,6 +503,8 @@ const form = ref({
   source: null,
   links: { linkedin: '', youtube: '' },
   department_applied_id: null,
+  background: '',
+  motivation: '',
   custom_answers: {},
   cover_letter: null,
   materials: [],
@@ -566,14 +598,22 @@ const stepValid = computed(() => {
     case 2:
       return !!form.value.department_applied_id;
     case 3:
-      return !!cvFile.value && cvFile.value.size < 10 * 1024 * 1024;
+      // Background and motivation gate here too - they're required, and the AI
+      // preview on step 4 reads them.
+      return !!form.value.background?.trim()
+        && !!form.value.motivation?.trim()
+        && !!cvFile.value && cvFile.value.size < MAX_UPLOAD_MB * 1024 * 1024;
     default:
       return true;
   }
 });
 
 const canSubmit = computed(
-  () => !!cvFile.value && form.value.gdpr_consent && cvFile.value.size < 10 * 1024 * 1024
+  () => !!cvFile.value
+    && !!form.value.background?.trim()
+    && !!form.value.motivation?.trim()
+    && form.value.gdpr_consent
+    && cvFile.value.size < MAX_UPLOAD_MB * 1024 * 1024
 );
 
 async function runAiPreview() {
@@ -585,6 +625,13 @@ async function runAiPreview() {
     aiResult.value = await RecruitmentService.previewMatch({
       department_applied_id: form.value.department_applied_id,
       degree: form.value.degree,
+      // Both ends already accept answers; without them the preview scored on
+      // degree alone and skill matching never had any text to hit.
+      answers: {
+        background: form.value.background || '',
+        motivation: form.value.motivation || '',
+        custom_answers: form.value.custom_answers || {},
+      },
     });
   } finally {
     aiLoading.value = false;

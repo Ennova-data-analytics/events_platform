@@ -47,6 +47,38 @@ def case_brief_redirect_url(token: str) -> str:
     return f"{settings.FRONTEND_URL.rstrip('/')}/api/recruitment/case-brief/{token}"
 
 
+def department_match_clause(department_id: int):
+    """
+    SQL condition for "this application concerns `department_id`".
+
+    A candidate may rank several departments (department_ranking holds the full
+    preference order, department_applied_id only the first choice), so matching
+    on the first choice alone hid an applicant from every other department they
+    picked. Final placement still counts, since it can be set to a department
+    outside the candidate's ranking.
+    """
+    return (
+        (models.Application.final_department_id == department_id)
+        | (models.Application.department_applied_id == department_id)
+        | models.Application.department_ranking.contains([department_id])
+    )
+
+
+def department_match_any_clause(department_ids: list[int]):
+    """department_match_clause OR-ed over a set of departments (recruiter scope)."""
+    clause = department_match_clause(department_ids[0])
+    for dep_id in department_ids[1:]:
+        clause = clause | department_match_clause(dep_id)
+    return clause
+
+
+def application_departments(app: models.Application) -> set[int]:
+    """Every department an application concerns, mirroring department_match_clause."""
+    ids = {d for d in (app.department_applied_id, app.final_department_id) if d}
+    ids.update(d for d in (app.department_ranking or []) if isinstance(d, int))
+    return ids
+
+
 def serialize_department(d: models.Department | None, include_rubric: bool = False) -> dict | None:
     if not d:
         return None
@@ -381,10 +413,9 @@ def compute_funnel(db: Session, cycle_id: int, scoped_ids: list[int] | None) -> 
         if not scoped_ids:
             apps = []
         else:
-            q = q.filter(
-                models.Application.department_applied_id.in_(scoped_ids)
-                | models.Application.final_department_id.in_(scoped_ids)
-            )
+            # Same match rule as the board, so a candidate who ranked this
+            # department without picking it first is counted here too.
+            q = q.filter(department_match_any_clause(scoped_ids))
             apps = q.all()
     else:
         apps = q.all()
@@ -476,7 +507,7 @@ class HrApplicationUseCases:
     def _in_scope(app: models.Application, scoped_ids: list[int] | None) -> bool:
         if scoped_ids is None:  # super-admin
             return True
-        return app.department_applied_id in scoped_ids or app.final_department_id in scoped_ids
+        return bool(application_departments(app) & set(scoped_ids))
 
     @staticmethod
     def list_applications(db: Session, scoped_ids: list[int] | None, *, cycle_id=None,
@@ -487,18 +518,12 @@ class HrApplicationUseCases:
         if stage:
             q = q.filter(models.Application.status == stage)
         if department_id:
-            q = q.filter(
-                (models.Application.final_department_id == department_id)
-                | (models.Application.department_applied_id == department_id)
-            )
+            q = q.filter(department_match_clause(department_id))
         # Scope restriction (recruiters only see their departments).
         if scoped_ids is not None:
             if not scoped_ids:
                 return []
-            q = q.filter(
-                models.Application.department_applied_id.in_(scoped_ids)
-                | models.Application.final_department_id.in_(scoped_ids)
-            )
+            q = q.filter(department_match_any_clause(scoped_ids))
         apps = q.order_by(models.Application.created_at.desc()).all()
         if search:
             s = search.lower()

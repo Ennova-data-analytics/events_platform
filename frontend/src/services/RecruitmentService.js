@@ -68,11 +68,14 @@ export const RecruitmentService = {
   // (a lightweight preview of the same matching model HR sees on submit).
   // Returns the fit for the chosen department plus a ranked list; the UI only
   // surfaces a second recommendation when its score clears 60%.
-  previewMatch(answers) {
+  // Payload shape matches schemas.MatchPreviewIn: the free-text answers live
+  // under `answers`, not at the top level.
+  previewMatch(payload) {
     if (USE_MOCK) {
       return delay(1100).then(() => {
-        const chosen = mockDepartments.find((d) => d.id === answers.department_applied_id) || mockDepartments[0];
-        const text = `${answers.background || ''} ${answers.motivation || ''} ${answers.degree || ''}`.toLowerCase();
+        const answers = payload.answers || {};
+        const chosen = mockDepartments.find((d) => d.id === payload.department_applied_id) || mockDepartments[0];
+        const text = `${answers.background || ''} ${answers.motivation || ''} ${payload.degree || ''}`.toLowerCase();
         // Pseudo-random-but-stable per department so the demo shows variety.
         const scored = mockDepartments
           .filter((d) => d.is_active)
@@ -97,7 +100,7 @@ export const RecruitmentService = {
         };
       });
     }
-    return ApiClient.post('/recruitment/match/preview', answers).then((r) => r.data);
+    return ApiClient.post('/recruitment/match/preview', payload).then((r) => r.data);
   },
 
   // `form` is the stepper's form value plus `cv_file` (the File objects live on
@@ -134,6 +137,11 @@ export const RecruitmentService = {
       department_applied_id: form.department_applied_id,
       department_ranking: form.department_ranking?.length ? form.department_ranking : [form.department_applied_id],
       answers: {
+        // The admin panel and the AI matcher both read these two; they were
+        // missing from this payload, so every application arrived with empty
+        // background/motivation.
+        background: form.background || '',
+        motivation: form.motivation || '',
         custom_answers: form.custom_answers || {},
         other_associations: form.other_associations || '',
         other_departments: form.applying_other_departments ? (form.other_departments || []) : [],
@@ -188,8 +196,11 @@ export const RecruitmentService = {
         let items = clone(mockApplications);
         if (params.cycle_id) items = items.filter((a) => a.cycle_id === params.cycle_id);
         if (params.department_id) {
+          // Mirrors the backend: first choice, any ranked choice, or final placement.
           items = items.filter(
-            (a) => a.final_department_id === params.department_id || a.suggested_department_id === params.department_id
+            (a) => a.final_department_id === params.department_id
+              || a.answers?.department_applied_id === params.department_id
+              || (a.ranked_departments || []).some((d) => d.id === params.department_id)
           );
         }
         if (params.search) {
