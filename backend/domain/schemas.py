@@ -1205,6 +1205,13 @@ class InterviewInviteIn(BaseModel):
     calendly_link: str | None = None
 
 
+class CaseSubmissionIn(BaseModel):
+    """A candidate's case response: either a link or an uploaded file."""
+    submission_url: str | None = None
+    submission_s3_key: str | None = None
+    submission_filename: str | None = None
+
+
 class CaseSendIn(BaseModel):
     """
     The brief is either a link or an uploaded file. Leave all three fields unset

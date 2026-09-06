@@ -170,6 +170,8 @@ def serialize_application(db: Session, app: models.Application) -> dict:
             "deadline_at": app.case_deadline_at.isoformat() if app.case_deadline_at else None,
             "submitted_at": app.case_submitted_at.isoformat() if app.case_submitted_at else None,
             "submission_url": app.case_submission_url,
+            "submission_s3_key": app.case_submission_s3_key,
+            "submission_filename": app.case_submission_filename,
         }
     return out
 
@@ -306,6 +308,56 @@ class ApplicationUseCases:
             raise HTTPException(status_code=status.HTTP_410_GONE, detail="This link has expired")
         return db.query(models.Application).filter(models.Application.application_id == tok.application_id).first()
 
+    @staticmethod
+    def submit_case(db: Session, app: models.Application, data: schemas.CaseSubmissionIn) -> models.Application:
+        """
+        Record a candidate's case response and move them to case_submitted.
+
+        Late submissions are accepted deliberately: the deadline is advisory, and
+        rejecting work a candidate has already done would lose them for a
+        technicality. case_submitted_at is recorded so reviewers can compare it
+        against case_deadline_at and see for themselves.
+        """
+        if not app.case_sent_at:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No case study has been sent for this application",
+            )
+        if app.case_submitted_at:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A response has already been submitted for this case",
+            )
+
+        if data.submission_s3_key:
+            app.case_submission_s3_key = data.submission_s3_key
+            app.case_submission_filename = data.submission_filename
+            app.case_submission_url = None
+        elif data.submission_url:
+            app.case_submission_url = data.submission_url.strip()
+            app.case_submission_s3_key = None
+            app.case_submission_filename = None
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Attach a file or provide a link to your response",
+            )
+
+        now = _now()
+        app.case_submitted_at = now
+        app.status = "case_submitted"
+        late = bool(app.case_deadline_at and now > app.case_deadline_at)
+        ApplicationUseCases.add_event(
+            db, app.application_id, "status_change",
+            {"to": "case_submitted", "late": late}, actor="candidate",
+        )
+        db.commit()
+        db.refresh(app)
+        logger.info(
+            "Case response submitted for application %s (late=%s)", app.application_id, late,
+        )
+        return app
+
     # ── Candidate-facing status serialization ───────────────────────────────
     @staticmethod
     def serialize_status(db: Session, app: models.Application, token: str | None = None) -> dict:
@@ -367,6 +419,7 @@ class ApplicationUseCases:
                 "deadline_at": app.case_deadline_at.isoformat() if app.case_deadline_at else None,
                 "submitted_at": app.case_submitted_at.isoformat() if app.case_submitted_at else None,
                 "submission_url": app.case_submission_url,
+                "submission_filename": app.case_submission_filename,
             }
         interview = app.interviews[0] if app.interviews else None
         if interview and interview.scheduled_at:
@@ -721,6 +774,14 @@ class HrApplicationUseCases:
         if not app.case_brief_s3_key:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No case brief file on this application")
         return {"url": presign_or_502(app.case_brief_s3_key, "case brief")}
+
+    @staticmethod
+    def case_submission_url(db: Session, scoped_ids, application_id: int) -> dict:
+        """Presigned URL for a file case submission, for recruiters reviewing it."""
+        app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
+        if not app.case_submission_s3_key:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No case submission file on this application")
+        return {"url": presign_or_502(app.case_submission_s3_key, "case submission")}
 
     @staticmethod
     def material_url(db: Session, scoped_ids, application_id: int, material_id: int) -> dict:

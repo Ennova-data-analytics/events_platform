@@ -76,10 +76,84 @@
                 <v-btn :href="application.case.brief_url" target="_blank" color="deep-purple" variant="flat" size="small" prepend-icon="mdi-download">
                   Download brief
                 </v-btn>
-                <v-btn variant="outlined" size="small" prepend-icon="mdi-upload">Submit response</v-btn>
+                <v-btn variant="outlined" size="small" prepend-icon="mdi-upload" @click="submitDialog = true">
+                  Submit response
+                </v-btn>
               </div>
             </v-card-text>
           </v-card>
+
+          <!-- Confirmation once they've submitted -->
+          <v-card v-else-if="application.case?.submitted_at" class="mb-4" variant="outlined">
+            <v-card-text class="pa-4 pa-sm-5">
+              <div class="d-flex align-center mb-2">
+                <v-icon color="success" class="mr-2">mdi-briefcase-check-outline</v-icon>
+                <span class="text-subtitle-2 font-weight-bold">Case study submitted</span>
+              </div>
+              <p class="text-body-2 text-medium-emphasis mb-0">
+                Received {{ formatDateTime(application.case.submitted_at) }}<span
+                  v-if="application.case.submission_filename"
+                > · {{ application.case.submission_filename }}</span>. The team will review it and be in touch.
+              </p>
+            </v-card-text>
+          </v-card>
+
+          <!-- Submit response -->
+          <v-dialog v-model="submitDialog" :max-width="$vuetify.display.mobile ? '92vw' : '520px'" persistent>
+            <v-card>
+              <v-card-title class="text-h6 pt-4">Submit your case response</v-card-title>
+              <v-card-text>
+                <v-btn-toggle v-model="submitMode" mandatory density="compact" variant="outlined" class="mb-3">
+                  <v-btn value="file" size="small" prepend-icon="mdi-paperclip">Upload a file</v-btn>
+                  <v-btn value="link" size="small" prepend-icon="mdi-link-variant">Share a link</v-btn>
+                </v-btn-toggle>
+
+                <v-file-input
+                  v-if="submitMode === 'file'"
+                  v-model="submissionFile"
+                  :label="`Your response (${ACCEPTED_UPLOAD_LABEL})`"
+                  :accept="ACCEPTED_UPLOAD_MIME"
+                  variant="outlined"
+                  density="comfortable"
+                  prepend-icon=""
+                  prepend-inner-icon="mdi-paperclip"
+                  :hint="`Max ${MAX_UPLOAD_MB} MB`"
+                  persistent-hint
+                />
+                <v-text-field
+                  v-else
+                  v-model="submissionUrl"
+                  label="Link to your response"
+                  variant="outlined"
+                  density="comfortable"
+                  prepend-inner-icon="mdi-link-variant"
+                  placeholder="https://…"
+                  hint="Google Drive, Slides, Notion — make sure it's shared so we can open it."
+                  persistent-hint
+                />
+
+                <v-alert v-if="caseOverdue" type="warning" variant="tonal" density="compact" class="mt-3">
+                  The deadline has passed, but you can still submit — we'll see it came in late.
+                </v-alert>
+                <v-alert type="info" variant="tonal" density="compact" class="mt-3">
+                  You can only submit once, so check it's the right file before sending.
+                </v-alert>
+              </v-card-text>
+              <v-card-actions>
+                <v-spacer />
+                <v-btn variant="text" :disabled="submitting" @click="submitDialog = false">Cancel</v-btn>
+                <v-btn
+                  color="deep-purple"
+                  variant="flat"
+                  :disabled="!canSubmitResponse"
+                  :loading="submitting"
+                  @click="submitCaseResponse"
+                >
+                  Submit
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
 
           <!-- Interview booked -->
           <v-card v-if="application.interview" class="mb-4" variant="outlined">
@@ -245,18 +319,62 @@
 
       </v-col>
     </v-row>
+
+    <v-snackbar v-model="toast.show" :color="toast.color" :timeout="4000" location="top">{{ toast.text }}</v-snackbar>
   </v-container>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { RecruitmentService } from '@/services/RecruitmentService.js';
 import { statusMeta } from '@/data/recruitmentMock.js';
+import { ACCEPTED_UPLOAD_MIME, ACCEPTED_UPLOAD_LABEL, MAX_UPLOAD_MB } from '@/utils/uploadTypes.js';
 
 const route = useRoute();
 const isLoading = ref(true);
 const application = ref(null);
+const toast = reactive({ show: false, text: '', color: 'success' });
+
+function notify(text, color = 'success') {
+  toast.text = text;
+  toast.color = color;
+  toast.show = true;
+}
+
+// ── Case response submission ──────────────────────────────────────────────
+const submitDialog = ref(false);
+const submitMode = ref('file');
+const submissionFile = ref(null);
+const submissionUrl = ref('');
+const submitting = ref(false);
+
+const canSubmitResponse = computed(() =>
+  submitMode.value === 'file' ? !!submissionFile.value : !!submissionUrl.value.trim()
+);
+
+async function submitCaseResponse() {
+  submitting.value = true;
+  try {
+    let payload;
+    if (submitMode.value === 'file') {
+      const up = await RecruitmentService.uploadDocument(submissionFile.value);
+      payload = { submission_s3_key: up.s3_key, submission_filename: up.filename };
+    } else {
+      payload = { submission_url: submissionUrl.value.trim() };
+    }
+    // The endpoint returns the refreshed status, so the page reflects the new
+    // stage without a reload.
+    application.value = await RecruitmentService.submitCaseResponse(route.params.token, payload);
+    submitDialog.value = false;
+    notify('Case response submitted - thanks!');
+  } catch (err) {
+    console.error('Failed to submit case response:', err);
+    notify(err.response?.data?.detail || 'Could not submit your response. Please try again.', 'error');
+  } finally {
+    submitting.value = false;
+  }
+}
 
 const meta = computed(() => statusMeta(application.value?.status));
 const appliedDepartment = computed(

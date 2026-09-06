@@ -162,6 +162,21 @@ def get_case_brief(token: str, db: Session = Depends(deps.get_db)):
     return RedirectResponse(url=presign_or_502(app.case_brief_s3_key, "case brief"))
 
 
+@router.post("/case-submission/{token}")
+def submit_case_response(token: str, data: schemas.CaseSubmissionIn, db: Session = Depends(deps.get_db)):
+    """
+    Submit a case response (candidate, via their magic link).
+
+    Files are uploaded through /recruitment/uploads first; this records the
+    resulting key, or a link if they hosted it themselves.
+    """
+    app = ApplicationUseCases.get_application_by_token(db, token, purpose="status")
+    if not app:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    app = ApplicationUseCases.submit_case(db, app, data)
+    return ApplicationUseCases.serialize_status(db, app, token=token)
+
+
 # ── Calendly webhook (interview booked / cancelled) ─────────────────────────
 def _verify_calendly_signature(raw: bytes, header: str | None) -> bool:
     """Verify Calendly's Calendly-Webhook-Signature (t=...,v1=hmac). Skipped if

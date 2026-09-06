@@ -90,7 +90,18 @@
               Brief
             </v-btn>
             <v-btn v-else-if="app.case.brief_url" size="small" variant="text" :href="app.case.brief_url" target="_blank" prepend-icon="mdi-file-document-outline">Brief</v-btn>
-            <v-btn v-if="app.case.submission_url" size="small" variant="flat" color="deep-purple" :href="app.case.submission_url" target="_blank" prepend-icon="mdi-briefcase-check-outline">Open submission</v-btn>
+            <v-btn
+              v-if="app.case.submission_s3_key"
+              size="small"
+              variant="flat"
+              color="deep-purple"
+              prepend-icon="mdi-briefcase-check-outline"
+              :loading="openingDoc === 'case-submission'"
+              @click="openCaseSubmission"
+            >
+              Open submission
+            </v-btn>
+            <v-btn v-else-if="app.case.submission_url" size="small" variant="flat" color="deep-purple" :href="app.case.submission_url" target="_blank" prepend-icon="mdi-briefcase-check-outline">Open submission</v-btn>
           </div>
         </v-card-text>
       </v-card>
@@ -561,6 +572,10 @@ function openMaterial(material) {
 
 function openCaseBrief() {
   return openDocument('case-brief', () => RecruitmentService.getCaseBriefUrl(app.value.id));
+}
+
+function openCaseSubmission() {
+  return openDocument('case-submission', () => RecruitmentService.getCaseSubmissionUrl(app.value.id));
 }
 
 const EVENT_STYLE = {

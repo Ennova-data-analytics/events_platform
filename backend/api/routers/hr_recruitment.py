@@ -302,6 +302,17 @@ def get_case_brief_url(
     return HrApplicationUseCases.case_brief_url(db, scoped, application_id)
 
 
+@router.get("/applications/{application_id}/case-submission/url")
+def get_case_submission_url(
+    application_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User = Depends(deps.get_current_active_recruiter),
+):
+    """Presigned URL for a candidate's uploaded case response."""
+    scoped = deps.recruiter_department_ids(db, current_user)
+    return HrApplicationUseCases.case_submission_url(db, scoped, application_id)
+
+
 @router.get("/analytics/funnel")
 def analytics_funnel(
     cycle_id: int = Query(...),

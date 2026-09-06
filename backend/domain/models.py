@@ -773,7 +773,10 @@ class Application(Base):
     case_sent_at = Column(TIMESTAMP(timezone=True))
     case_deadline_at = Column(TIMESTAMP(timezone=True))
     case_submitted_at = Column(TIMESTAMP(timezone=True))
+    # The candidate's response: a link or an uploaded file, never both.
     case_submission_url = Column(Text)
+    case_submission_s3_key = Column(Text)
+    case_submission_filename = Column(String(255))
 
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, index=True)
     updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)

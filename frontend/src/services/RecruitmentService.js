@@ -168,6 +168,32 @@ export const RecruitmentService = {
     return ApiClient.get(`/recruitment/status/${token}`).then((r) => r.data);
   },
 
+  // Candidate submits their case response via their magic link. Files go
+  // through uploadDocument first; `submission_url` is for a self-hosted link.
+  submitCaseResponse(token, { submission_url = null, submission_s3_key = null, submission_filename = null } = {}) {
+    if (USE_MOCK) {
+      return delay(400).then(() => {
+        const id = Number(String(token).replace('mock-token-', '')) || 3;
+        const app = mockApplications.find((a) => a.id === id);
+        if (app?.case) {
+          app.status = 'case_submitted';
+          app.case.submitted_at = new Date().toISOString();
+          app.case.submission_url = submission_url;
+          app.case.submission_filename = submission_filename;
+        }
+        return clone(app);
+      });
+    }
+    return ApiClient.post(`/recruitment/case-submission/${token}`, {
+      submission_url, submission_s3_key, submission_filename,
+    }).then((r) => r.data);
+  },
+
+  getCaseSubmissionUrl(id) {
+    if (USE_MOCK) return delay(150).then(() => '#mock-case-submission');
+    return ApiClient.get(`/hr/recruitment/applications/${id}/case-submission/url`).then((r) => r.data.url);
+  },
+
   // Magic-link slot booking (spec §3.5).
   getBookableSlotsByToken(token) {
     if (USE_MOCK) return delay().then(() => clone(mockSlots.filter((s) => !s.booked_application_id)));
