@@ -194,8 +194,8 @@
 
                   <v-file-input
                     v-model="briefFiles[dep.id]"
-                    :label="dep.case_brief_s3_key ? 'Replace with a new PDF' : 'Upload the case brief (PDF)'"
-                    accept="application/pdf"
+                    :label="dep.case_brief_s3_key ? 'Replace with a new file' : `Upload the case brief (${ACCEPTED_UPLOAD_LABEL})`"
+                    :accept="ACCEPTED_UPLOAD_MIME"
                     variant="outlined"
                     density="compact"
                     prepend-icon=""
@@ -228,6 +228,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue';
 import { RecruitmentService } from '@/services/RecruitmentService.js';
+import { ACCEPTED_UPLOAD_MIME, ACCEPTED_UPLOAD_LABEL } from '@/utils/uploadTypes.js';
 
 const isLoading = ref(true);
 const departments = ref([]);
@@ -266,6 +267,9 @@ async function saveCriteria(dep) {
       skills_sought: dep.skills_sought || [],
     });
     notify(`${dep.name} rubric saved`);
+  } catch (err) {
+    console.error('Failed to save rubric:', err);
+    notify(err.response?.data?.detail || 'Could not save the rubric', 'error');
   } finally {
     saving.value = null;
   }
@@ -308,6 +312,9 @@ async function removeCaseBrief(dep) {
     dep.case_brief_s3_key = null;
     dep.case_brief_filename = null;
     notify(`${dep.name} case brief removed`, 'warning');
+  } catch (err) {
+    console.error('Failed to remove case brief:', err);
+    notify(err.response?.data?.detail || 'Could not remove the case brief', 'error');
   } finally {
     saving.value = null;
   }
@@ -318,6 +325,9 @@ async function saveQuestions(dep) {
   try {
     await RecruitmentService.updateDepartmentQuestions(dep.id, dep.custom_questions);
     notify(`${dep.name} questions saved`);
+  } catch (err) {
+    console.error('Failed to save questions:', err);
+    notify(err.response?.data?.detail || 'Could not save the questions', 'error');
   } finally {
     saving.value = null;
   }

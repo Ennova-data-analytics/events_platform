@@ -15,6 +15,25 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def presign_or_502(s3_key: str, what: str) -> str:
+    """
+    Presign an S3 object, turning a failure into a visible 502.
+
+    generate_predesigned_url returns None when S3 is unreachable or misconfigured.
+    Handing that straight to the client produced a link to "undefined" and no
+    error anywhere, so every user-facing presign goes through here instead.
+    """
+    from core import s3_service
+    url = s3_service.generate_predesigned_url(s3_key)
+    if not url:
+        logger.error("Presigning failed for %s (key=%s)", what, s3_key)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not generate a download link for the {what}. Please try again.",
+        )
+    return url
+
+
 def case_brief_redirect_url(token: str) -> str:
     """
     Permanent link to a candidate's case brief, safe to put in an email.
@@ -513,9 +532,18 @@ class HrApplicationUseCases:
         # Materials belong to this application alone, so their S3 objects would
         # otherwise be orphaned. The candidate's CV and cover letter are left
         # alone - they hang off the candidate and other applications may use them.
-        for material in app.materials:
-            if material.s3_key:
-                s3_service.delete_object(material.s3_key)
+        orphaned = [
+            m.s3_key for m in app.materials
+            if m.s3_key and not s3_service.delete_object(m.s3_key)
+        ]
+        if orphaned:
+            # Not fatal - the caller asked to delete the application, and a
+            # leftover S3 object shouldn't block that. But it must not vanish
+            # quietly, or the bucket accumulates files nothing references.
+            logger.warning(
+                "Application %s deleted, but %d material(s) could not be removed from S3: %s",
+                application_id, len(orphaned), ", ".join(orphaned),
+            )
 
         candidate_email = app.candidate.email if app.candidate else "unknown"
         db.delete(app)
@@ -656,20 +684,18 @@ class HrApplicationUseCases:
 
     @staticmethod
     def cv_url(db: Session, scoped_ids, application_id: int) -> dict:
-        from core import s3_service
         app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
         if not app.candidate or not app.candidate.cv_s3_key:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No CV on file")
-        return {"url": s3_service.generate_predesigned_url(app.candidate.cv_s3_key)}
+        return {"url": presign_or_502(app.candidate.cv_s3_key, "CV")}
 
     @staticmethod
     def case_brief_url(db: Session, scoped_ids, application_id: int) -> dict:
         """Presigned URL for a file case brief, for recruiters viewing it in admin."""
-        from core import s3_service
         app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
         if not app.case_brief_s3_key:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No case brief file on this application")
-        return {"url": s3_service.generate_predesigned_url(app.case_brief_s3_key)}
+        return {"url": presign_or_502(app.case_brief_s3_key, "case brief")}
 
     @staticmethod
     def material_url(db: Session, scoped_ids, application_id: int, material_id: int) -> dict:
@@ -680,12 +706,11 @@ class HrApplicationUseCases:
         from the caller, so a recruiter can only reach files on applications
         within their department scope.
         """
-        from core import s3_service
         app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
         material = next((m for m in app.materials if m.material_id == material_id), None)
         if not material:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material not found")
-        return {"url": s3_service.generate_predesigned_url(material.s3_key)}
+        return {"url": presign_or_502(material.s3_key, "material")}
 
 
 def _find_interview_application(db: Session, email: str) -> models.Application | None:

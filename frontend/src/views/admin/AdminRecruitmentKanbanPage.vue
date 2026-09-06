@@ -261,10 +261,23 @@ function requestStatusChange({ id, to }) {
   confirmDialog.value = true;
 }
 
-async function applyStatusChange({ status, sendInterviewInvite, calendlyLink, brief_url, brief_s3_key, brief_filename }) {
+async function applyStatusChange(payload) {
   const app = pendingApp.value;
   if (!app) return;
+  try {
+    await runStatusChange(app, payload);
+  } catch (err) {
+    console.error('Failed to change status:', err);
+    // The dialog has already closed, so the card would otherwise just sit
+    // there unchanged with no explanation.
+    notify(err.response?.data?.detail || 'Could not change the stage', 'error');
+  } finally {
+    pendingApp.value = null;
+    pendingStatus.value = null;
+  }
+}
 
+async function runStatusChange(app, { status, sendInterviewInvite, calendlyLink, brief_url, brief_s3_key, brief_filename }) {
   if (status === 'case_sent') {
     await RecruitmentService.sendMarketingCase(app.id, { brief_url, brief_s3_key, brief_filename });
     app.status = 'case_sent';
@@ -286,8 +299,6 @@ async function applyStatusChange({ status, sendInterviewInvite, calendlyLink, br
       notify(`Moved to ${statusMeta(status).title}`);
     }
   }
-  pendingApp.value = null;
-  pendingStatus.value = null;
 }
 
 let searchTimer;

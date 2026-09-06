@@ -148,12 +148,14 @@
             <div class="text-subtitle-2 font-weight-bold mb-3">CV & cover letter</div>
             <v-file-input
               v-model="cvFile"
-              label="CV (PDF, max 10 MB) *"
+              :label="`CV (${ACCEPTED_UPLOAD_LABEL}, max ${MAX_UPLOAD_MB} MB) *`"
               variant="outlined"
               prepend-icon=""
-              prepend-inner-icon="mdi-file-pdf-box"
-              accept="application/pdf"
+              prepend-inner-icon="mdi-file-document-outline"
+              :accept="ACCEPTED_UPLOAD_MIME"
               class="mb-3"
+              hint="PDF works best — we read it to prefill a few fields."
+              persistent-hint
               :rules="cvRules"
               @update:model-value="onCvSelected"
             />
@@ -163,7 +165,7 @@
               variant="outlined"
               prepend-icon=""
               prepend-inner-icon="mdi-file-document-outline"
-              accept="application/pdf"
+              :accept="ACCEPTED_UPLOAD_MIME"
               class="mb-2"
             />
             <v-alert v-if="parsing" type="info" variant="tonal" density="compact" class="mb-2">
@@ -234,7 +236,7 @@
                   <span class="text-caption text-medium-emphasis flex-grow-1">Attachment {{ idx + 1 }}</span>
                   <v-btn icon="mdi-close" size="x-small" variant="text" color="error" @click="form.materials.splice(idx, 1)" />
                 </div>
-                <v-file-input v-model="m.file" label="File" variant="outlined" density="compact" prepend-icon="" prepend-inner-icon="mdi-file-outline" hide-details class="mb-2" />
+                <v-file-input v-model="m.file" label="File" variant="outlined" density="compact" prepend-icon="" prepend-inner-icon="mdi-file-outline" :accept="ACCEPTED_UPLOAD_MIME" hide-details class="mb-2" />
                 <v-text-field v-model="m.note" label="What is this? (context)" variant="outlined" density="compact" hide-details placeholder="e.g. A campaign I designed for a student event" />
               </v-card-text>
             </v-card>
@@ -440,6 +442,7 @@
 import { ref, computed } from 'vue';
 import { RecruitmentService } from '@/services/RecruitmentService.js';
 import { ESADE_DEGREES, ESADE_YEARS } from '@/data/recruitmentMock.js';
+import { ACCEPTED_UPLOAD_MIME, ACCEPTED_UPLOAD_LABEL, MAX_UPLOAD_MB } from '@/utils/uploadTypes.js';
 
 const props = defineProps({
   departments: { type: Array, default: () => [] },
@@ -492,8 +495,8 @@ const emailRules = [
 
 const cvRules = [
   (v) => !!v || 'Please attach your CV',
-  (v) => !v || v.size < 10 * 1024 * 1024 || 'File must be under 10 MB',
-  (v) => !v || v.type === 'application/pdf' || 'PDF only',
+  (v) => !v || v.size < MAX_UPLOAD_MB * 1024 * 1024 || `File must be under ${MAX_UPLOAD_MB} MB`,
+  (v) => !v || ACCEPTED_UPLOAD_MIME.includes(v.type) || `Allowed: ${ACCEPTED_UPLOAD_LABEL}`,
 ];
 
 const appliedDepartment = computed(() => props.departments.find((d) => d.id === form.value.department_applied_id));

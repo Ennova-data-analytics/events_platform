@@ -347,15 +347,26 @@ async function saveDepartment() {
       notify('Department added');
     }
     deptDialog.value = false;
+  } catch (err) {
+    console.error('Failed to save department:', err);
+    // Dialog stays open so the entered values aren't lost.
+    notify(err.response?.data?.detail || 'Could not save the department', 'error');
   } finally {
     savingDept.value = false;
   }
 }
 
 async function toggleDepartmentActive(dep, active) {
-  dep.is_active = active;
-  await RecruitmentService.updateDepartment(dep.id, { is_active: active });
-  notify(`${dep.name} ${active ? 'activated' : 'deactivated'}`);
+  const previous = dep.is_active;
+  dep.is_active = active;   // optimistic, reverted below if the save fails
+  try {
+    await RecruitmentService.updateDepartment(dep.id, { is_active: active });
+    notify(`${dep.name} ${active ? 'activated' : 'deactivated'}`);
+  } catch (err) {
+    console.error('Failed to update department:', err);
+    dep.is_active = previous;
+    notify(err.response?.data?.detail || `Could not update ${dep.name}`, 'error');
+  }
 }
 
 onMounted(async () => {

@@ -13,7 +13,7 @@ from datetime import datetime
 from domain import schemas, models
 from domain.use_cases.db_applications import (
     ApplicationUseCases, serialize_department, run_matching_task, send_confirmation_task,
-    book_interview_from_calendly, cancel_interview_from_calendly,
+    book_interview_from_calendly, cancel_interview_from_calendly, presign_or_502,
 )
 from core import s3_service
 from core.config import settings
@@ -37,7 +37,29 @@ def rate_limit(request: Request, key: str, limit: int, window_s: int = 60) -> No
 
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-ALLOWED_UPLOAD_TYPES = {"application/pdf"}
+
+# Content types accepted for CVs, cover letters, application materials and case
+# briefs, mapped to the extension used when a filename is missing.
+#
+# The value is also what gets stored as the S3 object's Content-Type. That is
+# deliberately looked up here rather than taken from the request: the browser
+# supplies file.content_type and it is trivially spoofable, and these files are
+# later served back over presigned URLs. Echoing an arbitrary client string
+# would let someone have text/html served from the bucket. Every type below is
+# inert in that sense - note the absence of image/svg+xml, which can carry
+# script.
+ALLOWED_UPLOAD_TYPES = {
+    "application/pdf": ".pdf",
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.ms-powerpoint": ".ppt",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+}
+
+# Shown to the user when an upload is rejected, so they know what to try instead.
+ALLOWED_UPLOAD_LABEL = "PDF, Word (.doc, .docx), PowerPoint (.ppt, .pptx), PNG or JPEG"
 
 
 # ── Public reads ────────────────────────────────────────────────────────────
@@ -60,17 +82,24 @@ async def upload_document(
     db: Session = Depends(deps.get_db),
 ):
     rate_limit(request, "recruitment_upload", limit=20)
-    if file.content_type not in ALLOWED_UPLOAD_TYPES:
-        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Only PDF uploads are allowed")
+    extension = ALLOWED_UPLOAD_TYPES.get(file.content_type)
+    if extension is None:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"That file type isn't supported. Allowed: {ALLOWED_UPLOAD_LABEL}.",
+        )
     data = await file.read()
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File must be under 10 MB")
     if not data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file")
 
-    safe_name = (file.filename or "document.pdf").replace("/", "_").replace("\\", "_")[-120:]
+    safe_name = (file.filename or f"document{extension}").replace("/", "_").replace("\\", "_")[-120:]
     s3_key = f"recruitment/{uuid.uuid4().hex}_{safe_name}"
-    s3_service.upload_file_to_s3_from_bytes(io.BytesIO(data), s3_key, content_type="application/pdf")
+    # Store the real content type, not a hardcoded PDF - otherwise a .docx comes
+    # back down the presigned URL claiming to be a PDF and won't open. Safe to
+    # pass through: it was just checked against the allowlist above.
+    s3_service.upload_file_to_s3_from_bytes(io.BytesIO(data), s3_key, content_type=file.content_type)
     return schemas.UploadResult(s3_key=s3_key, filename=safe_name)
 
 
@@ -128,7 +157,9 @@ def get_case_brief(token: str, db: Session = Depends(deps.get_db)):
     app = ApplicationUseCases.get_application_by_token(db, token, purpose="status")
     if not app or not app.case_brief_s3_key:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case brief not found")
-    return RedirectResponse(url=s3_service.generate_predesigned_url(app.case_brief_s3_key))
+    # presign_or_502 rather than redirecting to None, which would send the
+    # candidate to a broken page with nothing logged.
+    return RedirectResponse(url=presign_or_502(app.case_brief_s3_key, "case brief"))
 
 
 # ── Calendly webhook (interview booked / cancelled) ─────────────────────────

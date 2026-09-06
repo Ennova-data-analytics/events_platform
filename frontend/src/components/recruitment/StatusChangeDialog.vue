@@ -45,8 +45,8 @@
               </div>
               <v-file-input
                 v-model="caseBriefFile"
-                :label="departmentBriefName ? 'Use a different file for this candidate' : 'Case brief (PDF)'"
-                accept="application/pdf"
+                :label="departmentBriefName ? 'Use a different file for this candidate' : `Case brief (${ACCEPTED_UPLOAD_LABEL})`"
+                :accept="ACCEPTED_UPLOAD_MIME"
                 variant="outlined"
                 density="compact"
                 prepend-icon=""
@@ -154,6 +154,7 @@
 import { ref, computed, watch } from 'vue';
 import { statusMeta, HIGH_STAKES_STATUSES } from '@/data/recruitmentMock.js';
 import { RecruitmentService } from '@/services/RecruitmentService.js';
+import { ACCEPTED_UPLOAD_MIME, ACCEPTED_UPLOAD_LABEL } from '@/utils/uploadTypes.js';
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },

@@ -169,9 +169,16 @@ function closeDeleteDialog() {
 }
 
 async function confirmDelete() {
-  if (eventToDelete.value) {
+  if (!eventToDelete.value) return;
+  try {
     await eventStore.deleteEvent(eventToDelete.value.event_id);
     closeDeleteDialog();
+  } catch (err) {
+    console.error('Failed to delete event:', err);
+    // The store re-throws; without this the dialog just sat there on failure.
+    snackbar.text = err.response?.data?.detail || 'Could not delete the event';
+    snackbar.color = 'error';
+    snackbar.show = true;
   }
 }
 

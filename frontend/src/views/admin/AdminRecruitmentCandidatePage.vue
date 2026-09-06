@@ -587,6 +587,19 @@ function requestStatus(status) {
 }
 
 async function applyStatusChange({ status, sendInterviewInvite: doSend, calendlyLink: link, brief_url, brief_s3_key, brief_filename }) {
+  try {
+    await runStatusChange({ status, doSend, link, brief_url, brief_s3_key, brief_filename });
+  } catch (err) {
+    console.error('Failed to change status:', err);
+    // The dialog has already closed by this point, so without a toast the
+    // click would appear to do nothing at all.
+    notify(err.response?.data?.detail || 'Could not change the stage', 'error');
+  } finally {
+    pendingStatus.value = null;
+  }
+}
+
+async function runStatusChange({ status, doSend, link, brief_url, brief_s3_key, brief_filename }) {
   if (status === 'case_sent') {
     const res = await RecruitmentService.sendMarketingCase(app.value.id, { brief_url, brief_s3_key, brief_filename });
     app.value.status = 'case_sent';
@@ -613,7 +626,6 @@ async function applyStatusChange({ status, sendInterviewInvite: doSend, calendly
       notify(`Moved to ${statusMeta(status).title}`);
     }
   }
-  pendingStatus.value = null;
 }
 
 function pushEvent(type, payload) {

@@ -1,8 +1,11 @@
 import boto3
+import logging
 import mimetypes
 import io
 from botocore.client import Config
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 s3_client = boto3.client(
         "s3",
@@ -63,8 +66,8 @@ def get_object_bytes(object_name: str) -> bytes | None:
     try:
         response = s3_client.get_object(Bucket=settings.S3_BUCKET_NAME, Key=object_name)
         return response["Body"].read()
-    except Exception as e:
-        print(f"Error downloading object {object_name}: {e}")
+    except Exception:
+        logger.exception("Failed to download S3 object %s", object_name)
         return None
 
 
@@ -73,22 +76,28 @@ def delete_object(object_name: str) -> bool:
     try:
         s3_client.delete_object(Bucket=settings.S3_BUCKET_NAME, Key=object_name)
         return True
-    except Exception as e:
-        print(f"Error deleting object {object_name}: {e}")
+    except Exception:
+        logger.exception("Failed to delete S3 object %s", object_name)
         return False
 
 
-def generate_predesigned_url(object_name: str) -> str:
-    """Generates a predesigned URL to share a private S3 object"""
+def generate_predesigned_url(object_name: str) -> str | None:
+    """
+    Generates a predesigned URL to share a private S3 object.
+
+    Returns None if the URL can't be generated. Callers that hand this straight
+    to a user must check for None and fail loudly - a None here previously
+    surfaced as a link to "undefined" with no error anywhere.
+    """
     try:
-        response = s3_client.generate_presigned_url(
+        return s3_client.generate_presigned_url(
             'get_object',
             Params = {'Bucket': settings.S3_BUCKET_NAME, 'Key': object_name},
             ExpiresIn=3600
         )
-        return response
-    except Exception as e:
-        print(f"Error generating URL: {e}")
+    except Exception:
+        logger.exception("Failed to generate presigned URL for %s", object_name)
+        return None
     
 
 
