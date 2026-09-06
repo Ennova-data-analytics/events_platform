@@ -71,29 +71,23 @@
             />
           </template>
 
-          <!-- Interview: selective email + Calendly -->
+          <!-- Interview: the invite always goes out on the move -->
           <template v-else-if="targetStatus === 'interview'">
-            <v-checkbox
-              v-model="sendInterviewInvite"
-              color="primary"
-              hide-details
-              density="compact"
-              class="mb-1"
-              label="Send interview invite email now"
-            />
-            <div class="text-caption text-medium-emphasis mb-2 ml-8">
-              Leave off to move the card now and send the invite later from the applicant screen.
-            </div>
+            <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+              <v-icon start size="small">mdi-email-fast-outline</v-icon>
+              Sends the interview invite with the booking link below.
+            </v-alert>
             <v-text-field
-              v-if="sendInterviewInvite"
               v-model="calendlyLink"
-              label="Calendly link (sent in the email)"
+              label="Booking link *"
               variant="outlined"
               density="compact"
               prepend-inner-icon="mdi-calendar-account"
               placeholder="https://calendly.com/…"
-              hide-details
-              class="ml-8"
+              :hint="defaultCalendly
+                ? 'Saved for this department — edit to use a different one.'
+                : 'No link saved for this department yet; this one will be saved for next time.'"
+              persistent-hint
             />
           </template>
 
@@ -106,6 +100,7 @@
             :color="isHighStakes ? 'warning' : 'primary'"
             variant="flat"
             :loading="uploadingBrief"
+            :disabled="!canConfirm"
             @click="onPrimary"
           >
             {{ isHighStakes ? 'Continue' : 'Confirm move' }}
@@ -169,12 +164,16 @@ const emit = defineEmits(['update:modelValue', 'confirm', 'error']);
 
 const level = ref(1);
 const acknowledged = ref(false);
-const sendInterviewInvite = ref(false);
 const calendlyLink = ref('');
 const caseBriefUrl = ref('');
 const briefMode = ref('file');
 const caseBriefFile = ref(null);
 const uploadingBrief = ref(false);
+
+// Moving to Interview always sends the invite, so a booking link is required.
+const canConfirm = computed(
+  () => props.targetStatus !== 'interview' || !!calendlyLink.value.trim()
+);
 
 const departmentBriefName = computed(
   () => props.department?.case_brief_filename || (props.department?.case_brief_s3_key ? 'Saved brief' : '')
@@ -191,7 +190,6 @@ watch(
     if (open) {
       level.value = 1;
       acknowledged.value = false;
-      sendInterviewInvite.value = false;
       calendlyLink.value = props.defaultCalendly || '';
       caseBriefUrl.value = '';
       caseBriefFile.value = null;
@@ -242,8 +240,7 @@ async function onConfirm() {
 
   emit('confirm', {
     status: props.targetStatus,
-    sendInterviewInvite: sendInterviewInvite.value,
-    calendlyLink: calendlyLink.value,
+    calendlyLink: calendlyLink.value.trim(),
     ...brief,
   });
   close();

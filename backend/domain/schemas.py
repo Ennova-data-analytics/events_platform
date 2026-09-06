@@ -1191,6 +1191,9 @@ class UploadResult(BaseModel):
 # ── Phase 3: HR panel action bodies ─────────────────────────────────────────
 class StatusChangeIn(BaseModel):
     status: str
+    # Booking link used when moving to 'interview', which sends the invite
+    # automatically. Falls back to the department's saved link.
+    calendly_link: str | None = None
 
 
 class FinalDepartmentIn(BaseModel):

@@ -287,20 +287,18 @@ async function applyStatusChange(payload) {
   }
 }
 
-async function runStatusChange(app, { status, sendInterviewInvite, calendlyLink, brief_url, brief_s3_key, brief_filename }) {
+async function runStatusChange(app, { status, calendlyLink, brief_url, brief_s3_key, brief_filename }) {
   if (status === 'case_sent') {
     await RecruitmentService.sendMarketingCase(app.id, { brief_url, brief_s3_key, brief_filename });
     app.status = 'case_sent';
     notify(`Case brief sent to ${app.candidate.full_name} · 48h to submit`);
   } else {
-    await RecruitmentService.updateStatus(app.id, status);
+    // The invite is sent server-side as part of the move to interview.
+    await RecruitmentService.updateStatus(app.id, status, calendlyLink || null);
     app.status = status;
-    if (status === 'interview' && sendInterviewInvite) {
-      await RecruitmentService.sendInterviewInvite(app.id, { calendly_link: calendlyLink });
+    if (status === 'interview') {
       app.interview_invite_sent = true;
-      notify(`Moved to Interview · invite sent with Calendly link`);
-    } else if (status === 'interview') {
-      notify(`Moved to Interview · invite not sent yet (send from applicant screen)`, 'info');
+      notify(`Moved to Interview · invite sent to ${app.candidate.full_name}`);
     } else if (status === 'accepted') {
       notify(`${app.candidate.full_name} accepted · offer email sent`);
     } else if (status === 'rejected') {

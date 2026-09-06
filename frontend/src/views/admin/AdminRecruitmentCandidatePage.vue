@@ -106,8 +106,12 @@
         </v-card-text>
       </v-card>
 
-      <!-- Interview invite (selective send) -->
-      <v-card v-if="app.status === 'interview'" class="mb-4" variant="outlined">
+      <!-- Interview invite. Sent automatically on the move to Interview; this
+           card is for re-sending, e.g. after correcting the booking link or if
+           the candidate never received it. Stays available once an invite has
+           been sent, so a candidate already moved on to Decision can still be
+           sent a fresh booking link. -->
+      <v-card v-if="app.status === 'interview' || app.interview_invite_sent" class="mb-4" variant="outlined">
         <v-card-text class="py-3">
           <div class="d-flex align-center flex-wrap ga-3">
             <v-icon :color="app.interview_invite_sent ? 'success' : 'purple'">
@@ -116,13 +120,14 @@
             <div class="flex-grow-1" style="min-width: 200px">
               <div class="text-subtitle-2 font-weight-bold">Interview invitation</div>
               <div class="text-caption text-medium-emphasis">
-                {{ app.interview_invite_sent ? 'Invite sent - candidate can book via the Calendly link.' : 'Not sent yet. Send when you\'re ready (selective).' }}
+                {{ app.interview_invite_sent
+                  ? 'Invite sent - candidate can book via the link. Re-send if the link changed.'
+                  : 'Not sent. Add a booking link and send it now.' }}
               </div>
             </div>
             <v-text-field
-              v-if="!app.interview_invite_sent"
               v-model="calendlyLink"
-              label="Calendly link"
+              label="Booking link"
               variant="outlined"
               density="compact"
               hide-details
@@ -131,14 +136,14 @@
               placeholder="https://calendly.com/…"
             />
             <v-btn
-              v-if="!app.interview_invite_sent"
               color="primary"
-              variant="flat"
+              :variant="app.interview_invite_sent ? 'outlined' : 'flat'"
               size="small"
               :disabled="!calendlyLink"
+              :loading="sendingInvite"
               @click="sendInterviewInvite"
             >
-              Send invite
+              {{ app.interview_invite_sent ? 'Re-send' : 'Send invite' }}
             </v-btn>
           </div>
         </v-card-text>
@@ -604,9 +609,9 @@ function requestStatus(status) {
   confirmDialog.value = true;
 }
 
-async function applyStatusChange({ status, sendInterviewInvite: doSend, calendlyLink: link, brief_url, brief_s3_key, brief_filename }) {
+async function applyStatusChange({ status, calendlyLink: link, brief_url, brief_s3_key, brief_filename }) {
   try {
-    await runStatusChange({ status, doSend, link, brief_url, brief_s3_key, brief_filename });
+    await runStatusChange({ status, link, brief_url, brief_s3_key, brief_filename });
   } catch (err) {
     console.error('Failed to change status:', err);
     // The dialog has already closed by this point, so without a toast the
@@ -617,7 +622,7 @@ async function applyStatusChange({ status, sendInterviewInvite: doSend, calendly
   }
 }
 
-async function runStatusChange({ status, doSend, link, brief_url, brief_s3_key, brief_filename }) {
+async function runStatusChange({ status, link, brief_url, brief_s3_key, brief_filename }) {
   if (status === 'case_sent') {
     const res = await RecruitmentService.sendMarketingCase(app.value.id, { brief_url, brief_s3_key, brief_filename });
     app.value.status = 'case_sent';
@@ -626,11 +631,12 @@ async function runStatusChange({ status, doSend, link, brief_url, brief_s3_key, 
     pushEvent('email_sent', { template: 'Marketing case brief (48h)' });
     notify('Case brief sent · 48h to submit');
   } else {
-    await RecruitmentService.updateStatus(app.value.id, status);
+    // Moving to interview sends the invite server-side, so the link rides along
+    // with the status change rather than needing a second call.
+    await RecruitmentService.updateStatus(app.value.id, status, link || null);
     app.value.status = status;
     pushEvent('status_change', { to: status });
-    if (status === 'interview' && doSend) {
-      await RecruitmentService.sendInterviewInvite(app.value.id, { calendly_link: link });
+    if (status === 'interview') {
       app.value.interview_invite_sent = true;
       pushEvent('email_sent', { template: 'Interview invitation (Calendly)' });
       notify('Moved to Interview · invite sent');
@@ -650,12 +656,22 @@ function pushEvent(type, payload) {
   app.value.timeline.push({ type, payload, actor: 'You', created_at: new Date().toISOString() });
 }
 
+const sendingInvite = ref(false);
+
 async function sendInterviewInvite() {
-  await RecruitmentService.sendInterviewInvite(app.value.id, { calendly_link: calendlyLink.value });
-  app.value.interview_invite_sent = true;
-  setCalendlyLink(userId.value, app.value.final_department_id || app.value.answers.department_applied_id, calendlyLink.value);
-  pushEvent('email_sent', { template: 'Interview invitation (Calendly)' });
-  notify('Interview invite sent with Calendly link');
+  sendingInvite.value = true;
+  try {
+    await RecruitmentService.sendInterviewInvite(app.value.id, { calendly_link: calendlyLink.value });
+    app.value.interview_invite_sent = true;
+    setCalendlyLink(userId.value, app.value.final_department_id || app.value.answers.department_applied_id, calendlyLink.value);
+    pushEvent('email_sent', { template: 'Interview invitation (Calendly)' });
+    notify('Interview invite sent');
+  } catch (err) {
+    console.error('Failed to send interview invite:', err);
+    notify(err.response?.data?.detail || 'Could not send the interview invite', 'error');
+  } finally {
+    sendingInvite.value = false;
+  }
 }
 
 async function saveDepartment() {

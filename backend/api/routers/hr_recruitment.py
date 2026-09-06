@@ -220,7 +220,10 @@ def change_status(
     current_user: models.User = Depends(deps.get_current_active_recruiter),
 ):
     scoped = deps.recruiter_department_ids(db, current_user)
-    return HrApplicationUseCases.change_status(db, scoped, application_id, data.status, _actor(current_user))
+    return HrApplicationUseCases.change_status(
+        db, scoped, application_id, data.status, _actor(current_user),
+        calendly_link=data.calendly_link,
+    )
 
 
 @router.patch("/applications/{application_id}/department")

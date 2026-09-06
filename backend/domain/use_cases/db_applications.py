@@ -638,15 +638,33 @@ class HrApplicationUseCases:
         return app
 
     @staticmethod
-    def change_status(db: Session, scoped_ids, application_id: int, new_status: str, actor: str) -> dict:
+    def change_status(db: Session, scoped_ids, application_id: int, new_status: str, actor: str,
+                      calendly_link: str | None = None) -> dict:
         if new_status not in models.APPLICATION_STATUSES:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status")
         app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
+
+        # Moving to interview sends the invite, so the candidate always gets a
+        # booking link. Resolved before the status is written: without a link the
+        # email would be useless, so the move is refused rather than half-done.
+        if new_status == "interview" and not app.interview_invite_sent:
+            dept = app.final_department or app.applied_department
+            link = calendly_link or (dept.calendly_link if dept else "")
+            if not link:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "No booking link for this department. Add a Calendly link here, or set "
+                        "one for the department on the Scheduling page, before moving to Interview."
+                    ),
+                )
+            HrApplicationUseCases._send_interview_invite(db, app, link, actor)
+
         app.status = new_status
         ApplicationUseCases.add_event(db, application_id, "status_change", {"to": new_status}, actor=actor)
 
-        # Status change is THE trigger for outcome emails (accepted/rejected).
-        # Interview invites are sent selectively (separate endpoint), not here.
+        # Status change is THE trigger for outcome emails (accepted/rejected)
+        # and, above, for the interview invite.
         if new_status in ("accepted", "rejected"):
             from domain.services.recruitment.emails import send_outcome
             dept = app.final_department or app.applied_department
@@ -682,19 +700,22 @@ class HrApplicationUseCases:
         return {"id": application_id, "text": text}
 
     @staticmethod
-    def send_interview_invite(db: Session, scoped_ids, application_id: int, calendly_link: str, actor: str) -> dict:
-        app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
+    def _send_interview_invite(db: Session, app: models.Application, link: str, actor: str) -> None:
+        """
+        Send the interview invite and record it. Shared by the automatic send on
+        moving to Interview and the manual re-send endpoint. Does not commit -
+        the caller owns the transaction.
+        """
         from domain.services.recruitment.emails import send_interview_invite as _send
-        token = ApplicationUseCases._get_or_create_token(db, application_id, "status")
+        token = ApplicationUseCases._get_or_create_token(db, app.application_id, "status")
         dept = app.final_department or app.applied_department
-        link = calendly_link or (dept.calendly_link if dept else "")
 
-        # Persist an explicitly-typed link onto the department. The candidate's
-        # status page reads department.calendly_link, so without this the link
-        # only ever reached the email - the "Book my interview" button stayed
-        # hidden, and other recruiters didn't see the link either.
-        if calendly_link and dept and dept.calendly_link != calendly_link:
-            dept.calendly_link = calendly_link
+        # Persist the link onto the department. The candidate's status page reads
+        # department.calendly_link, so without this the link only ever reached
+        # the email - the "Book my interview" button stayed hidden, and other
+        # recruiters didn't see the link either.
+        if link and dept and dept.calendly_link != link:
+            dept.calendly_link = link
             logger.info("Saved Calendly link for department %s from an interview invite", dept.department_id)
 
         sent = _send(
@@ -704,7 +725,25 @@ class HrApplicationUseCases:
         app.interview_invite_sent = True
         if sent:
             ApplicationUseCases.add_event(
-                db, application_id, "email_sent", {"template": "Interview invitation (Calendly)"}, actor=actor)
+                db, app.application_id, "email_sent",
+                {"template": "Interview invitation (Calendly)"}, actor=actor)
+        else:
+            # send_email swallows its own failures, so surface it here rather
+            # than letting the UI claim an invite went out.
+            logger.error("Interview invite email failed for application %s", app.application_id)
+
+    @staticmethod
+    def send_interview_invite(db: Session, scoped_ids, application_id: int, calendly_link: str, actor: str) -> dict:
+        """Manual (re-)send from the applicant screen."""
+        app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
+        dept = app.final_department or app.applied_department
+        link = calendly_link or (dept.calendly_link if dept else "")
+        if not link:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No booking link to send. Add a Calendly link for this department first.",
+            )
+        HrApplicationUseCases._send_interview_invite(db, app, link, actor)
         db.commit()
         return {"id": application_id, "interview_invite_sent": True}
 

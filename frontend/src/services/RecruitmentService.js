@@ -263,15 +263,22 @@ export const RecruitmentService = {
     return ApiClient.delete(`/hr/recruitment/applications/${id}`).then(() => true);
   },
 
-  updateStatus(id, status) {
+  // calendly_link is only used when moving to 'interview', which sends the
+  // invite as part of the move.
+  updateStatus(id, status, calendlyLink = null) {
     if (USE_MOCK) {
       return delay(200).then(() => {
         const app = mockApplications.find((a) => a.id === Number(id));
-        if (app) app.status = status;
+        if (app) {
+          app.status = status;
+          if (status === 'interview') app.interview_invite_sent = true;
+        }
         return { id: Number(id), status };
       });
     }
-    return ApiClient.patch(`/hr/recruitment/applications/${id}/status`, { status }).then((r) => r.data);
+    return ApiClient.patch(`/hr/recruitment/applications/${id}/status`, {
+      status, calendly_link: calendlyLink,
+    }).then((r) => r.data);
   },
 
   // Confirm or override the AI-suggested department (spec §3.2).
