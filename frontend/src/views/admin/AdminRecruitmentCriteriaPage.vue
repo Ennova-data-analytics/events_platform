@@ -159,16 +159,42 @@
               </v-card>
             </v-col>
 
-            <!-- Case brief: only departments that run a case stage need one -->
-            <v-col v-if="dep.has_case_stage" cols="12">
+            <!-- Case stage: the toggle lives here alongside the brief, so this
+                 page is self-sufficient. Previously the card was hidden outright
+                 for departments without a case stage, and the only toggle was on
+                 the Cohorts page - so there was no way in from here. -->
+            <v-col cols="12">
               <v-card>
-                <v-card-title class="text-subtitle-1 font-weight-bold">Case brief</v-card-title>
+                <v-card-title class="text-subtitle-1 font-weight-bold">Case study stage</v-card-title>
                 <v-card-text>
-                  <p class="text-caption text-medium-emphasis mb-3">
-                    The PDF sent to candidates when they move to Case Sent. Saved once here and
-                    reused for everyone; a recruiter can still attach a different file for an
-                    individual candidate.
-                  </p>
+                  <div class="d-flex align-center justify-space-between mb-2">
+                    <div>
+                      <div class="text-body-2 font-weight-medium">
+                        {{ dep.name }} runs a case study before interviews
+                      </div>
+                      <div class="text-caption text-medium-emphasis">
+                        Adds the Case Sent / Case Submitted stages to the board for this department.
+                      </div>
+                    </div>
+                    <v-switch
+                      :model-value="dep.has_case_stage"
+                      color="deep-purple"
+                      density="compact"
+                      hide-details
+                      :loading="saving === `case-${dep.id}`"
+                      class="ml-4 flex-shrink-0"
+                      @update:model-value="toggleCaseStage(dep, $event)"
+                    />
+                  </div>
+
+                  <template v-if="dep.has_case_stage">
+                    <v-divider class="my-3" />
+                    <div class="text-subtitle-2 font-weight-bold mb-1">Case brief</div>
+                    <p class="text-caption text-medium-emphasis mb-3">
+                      The file sent to candidates when they move to Case Sent. Saved once here and
+                      reused for everyone; a recruiter can still attach a different file for an
+                      individual candidate.
+                    </p>
 
                   <div v-if="dep.case_brief_s3_key" class="d-flex align-center ga-3 mb-3">
                     <v-icon size="32" color="red-darken-1">mdi-file-pdf-box</v-icon>
@@ -213,6 +239,7 @@
                   >
                     Save brief
                   </v-btn>
+                  </template>
                 </v-card-text>
               </v-card>
             </v-col>
@@ -276,6 +303,22 @@ async function saveCriteria(dep) {
 }
 // Per-department pending file selections, keyed by department id.
 const briefFiles = reactive({});
+
+async function toggleCaseStage(dep, enabled) {
+  const previous = dep.has_case_stage;
+  dep.has_case_stage = enabled;   // optimistic, reverted below if the save fails
+  saving.value = `case-${dep.id}`;
+  try {
+    await RecruitmentService.updateDepartment(dep.id, { has_case_stage: enabled });
+    notify(`${dep.name} ${enabled ? 'now runs' : 'no longer runs'} a case stage`);
+  } catch (err) {
+    console.error('Failed to update case stage:', err);
+    dep.has_case_stage = previous;
+    notify(err.response?.data?.detail || 'Could not update the case stage', 'error');
+  } finally {
+    saving.value = null;
+  }
+}
 
 async function saveCaseBrief(dep) {
   const file = briefFiles[dep.id];
