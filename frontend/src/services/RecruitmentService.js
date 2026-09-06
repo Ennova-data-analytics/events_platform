@@ -214,6 +214,18 @@ export const RecruitmentService = {
     return ApiClient.get(`/hr/recruitment/applications/${id}`).then((r) => r.data);
   },
 
+  // Super-admin only. Permanent, and frees the candidate's email to apply again.
+  deleteApplication(id) {
+    if (USE_MOCK) {
+      return delay(200).then(() => {
+        const i = mockApplications.findIndex((a) => a.id === Number(id));
+        if (i !== -1) mockApplications.splice(i, 1);
+        return true;
+      });
+    }
+    return ApiClient.delete(`/hr/recruitment/applications/${id}`).then(() => true);
+  },
+
   updateStatus(id, status) {
     if (USE_MOCK) {
       return delay(200).then(() => {

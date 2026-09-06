@@ -49,6 +49,16 @@
                   </v-list-item>
                 </v-list>
               </v-menu>
+              <v-btn
+                v-if="authStore.isSuperAdmin"
+                size="small"
+                variant="text"
+                color="error"
+                prepend-icon="mdi-delete-outline"
+                @click="deleteDialog = true"
+              >
+                Delete application
+              </v-btn>
             </div>
           </div>
         </v-card-text>
@@ -404,13 +414,38 @@
       @error="notify($event, 'error')"
     />
 
+    <v-dialog v-model="deleteDialog" :max-width="$vuetify.display.mobile ? '92vw' : '480px'">
+      <v-card>
+        <v-card-title class="d-flex align-center pt-4">
+          <v-icon color="error" class="mr-2">mdi-alert-outline</v-icon>
+          Delete this application?
+        </v-card-title>
+        <v-card-text>
+          <p class="mb-3">
+            Permanently deletes <strong>{{ app?.candidate.full_name }}</strong>'s application,
+            along with its timeline, uploaded materials, interviews and status link.
+            This can't be undone.
+          </p>
+          <v-alert type="info" variant="tonal" density="compact">
+            {{ app?.candidate.email }} is kept in the talent pool and will be able to apply
+            again to this cohort.
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="deleting" @click="deleteDialog = false">Cancel</v-btn>
+          <v-btn color="error" variant="flat" :loading="deleting" @click="confirmDelete">Delete</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="toast.show" :color="toast.color" :timeout="2800" location="top">{{ toast.text }}</v-snackbar>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth.store';
 import { RecruitmentService } from '@/services/RecruitmentService.js';
 import { APPLICATION_STATUSES, statusMeta } from '@/data/recruitmentMock.js';
@@ -420,6 +455,7 @@ import YoutubeEmbed from '@/components/media/YoutubeEmbed.vue';
 import StatusChangeDialog from '@/components/recruitment/StatusChangeDialog.vue';
 
 const route = useRoute();
+const router = useRouter();
 const authStore = useAuthStore();
 const userId = computed(() => authStore.user?.id || authStore.user?.email || 'anon');
 
@@ -599,6 +635,22 @@ async function saveDepartment() {
   app.value.final_department = departments.value.find((d) => d.id === finalDepartmentId.value);
   pushEvent('override', { department: app.value.final_department.name });
   notify(isOverride ? 'Department overridden (logged)' : 'Suggestion confirmed');
+}
+
+const deleteDialog = ref(false);
+const deleting = ref(false);
+
+async function confirmDelete() {
+  deleting.value = true;
+  try {
+    await RecruitmentService.deleteApplication(app.value.id);
+    // The record is gone, so there's nothing left to show on this page.
+    router.push({ path: '/admin/recruitment', query: { deleted: app.value.candidate.email } });
+  } catch (err) {
+    console.error('Failed to delete application:', err);
+    notify(err.response?.data?.detail || 'Could not delete the application', 'error');
+    deleting.value = false;
+  }
 }
 
 async function addNote() {

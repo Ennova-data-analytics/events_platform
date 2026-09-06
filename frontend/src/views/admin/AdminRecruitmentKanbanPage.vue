@@ -154,7 +154,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth.store';
 import { RecruitmentService } from '@/services/RecruitmentService.js';
 import { statusMeta, APPLICATION_STATUSES } from '@/data/recruitmentMock.js';
@@ -163,6 +163,7 @@ import KanbanBoard from '@/components/recruitment/KanbanBoard.vue';
 import ApplicantList from '@/components/recruitment/ApplicantList.vue';
 import StatusChangeDialog from '@/components/recruitment/StatusChangeDialog.vue';
 
+const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const userId = computed(() => authStore.user?.id || authStore.user?.email || 'anon');
@@ -294,6 +295,13 @@ watch(() => filters.search, () => { clearTimeout(searchTimer); });
 watch(() => filters.cycle_id, load);
 
 onMounted(async () => {
+  // Confirmation for a delete that happened on the candidate page, which
+  // redirects here because its record no longer exists.
+  if (route.query.deleted) {
+    notify(`Application deleted · ${route.query.deleted} can apply again`, 'warning');
+    router.replace({ query: {} });
+  }
+
   const prefs = loadPrefs(userId.value);
   filters.department_id = prefs.departmentFilter;
   viewMode.value = prefs.viewMode || 'kanban';
