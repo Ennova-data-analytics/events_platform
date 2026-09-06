@@ -497,6 +497,32 @@ class HrApplicationUseCases:
         return serialize_application(db, app)
 
     @staticmethod
+    def delete_application(db: Session, scoped_ids: list[int] | None, application_id: int) -> None:
+        """
+        Permanently delete an application.
+
+        Materials, timeline events, interviews and magic-link tokens go with it
+        via cascade. The candidate row is deliberately kept: it is the talent
+        pool entry, is shared across cycles, and re-applying with the same email
+        reuses it. That also means deleting an application frees the candidate to
+        submit again, since submit_application dedupes on (candidate, cycle).
+        """
+        from core import s3_service
+        app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
+
+        # Materials belong to this application alone, so their S3 objects would
+        # otherwise be orphaned. The candidate's CV and cover letter are left
+        # alone - they hang off the candidate and other applications may use them.
+        for material in app.materials:
+            if material.s3_key:
+                s3_service.delete_object(material.s3_key)
+
+        candidate_email = app.candidate.email if app.candidate else "unknown"
+        db.delete(app)
+        db.commit()
+        logger.info("Deleted application %s (%s)", application_id, candidate_email)
+
+    @staticmethod
     def _load_scoped(db: Session, scoped_ids: list[int] | None, application_id: int) -> models.Application:
         app = db.query(models.Application).filter(models.Application.application_id == application_id).first()
         if not app:

@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Response, status, Query
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -192,6 +192,24 @@ def get_application(
 ):
     scoped = deps.recruiter_department_ids(db, current_user)
     return HrApplicationUseCases.get_application(db, scoped, application_id)
+
+
+@router.delete("/applications/{application_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_application(
+    application_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User = Depends(deps.get_current_active_admin),
+):
+    """
+    Permanently delete an application (super-admin only).
+
+    Deliberately narrower than the rest of this router, which any recruiter can
+    use: this cannot be undone, so it is not something a department-scoped
+    recruiter should be able to do. The candidate is kept, which frees them to
+    apply again with the same email.
+    """
+    HrApplicationUseCases.delete_application(db, None, application_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.patch("/applications/{application_id}/status")
