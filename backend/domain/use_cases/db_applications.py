@@ -688,6 +688,15 @@ class HrApplicationUseCases:
         token = ApplicationUseCases._get_or_create_token(db, application_id, "status")
         dept = app.final_department or app.applied_department
         link = calendly_link or (dept.calendly_link if dept else "")
+
+        # Persist an explicitly-typed link onto the department. The candidate's
+        # status page reads department.calendly_link, so without this the link
+        # only ever reached the email - the "Book my interview" button stayed
+        # hidden, and other recruiters didn't see the link either.
+        if calendly_link and dept and dept.calendly_link != calendly_link:
+            dept.calendly_link = calendly_link
+            logger.info("Saved Calendly link for department %s from an interview invite", dept.department_id)
+
         sent = _send(
             to_email=app.candidate.email, to_name=app.candidate.full_name or "",
             department_name=dept.name if dept else "Ennova", calendly_link=link, status_token=token.token,

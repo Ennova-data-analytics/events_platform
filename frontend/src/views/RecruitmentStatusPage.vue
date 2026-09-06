@@ -178,12 +178,20 @@
                 <v-icon color="purple" class="mr-2">mdi-calendar-clock</v-icon>
                 <span class="text-subtitle-2 font-weight-bold">Book your interview</span>
               </div>
-              <p class="text-body-2 text-medium-emphasis mb-3">
-                Congrats on reaching the interview stage! Pick a slot that works for you - we've also emailed you this link.
+              <!-- Only promise a booking link when there is one. The department's
+                   Calendly link is set on the admin Scheduling page, and when it's
+                   missing this card used to show encouraging copy with no button. -->
+              <template v-if="calendlyLink">
+                <p class="text-body-2 text-medium-emphasis mb-3">
+                  Congrats on reaching the interview stage! Pick a slot that works for you - we've also emailed you this link.
+                </p>
+                <v-btn :href="calendlyLink" target="_blank" color="primary" variant="flat" size="small" prepend-icon="mdi-calendar-account">
+                  Book my interview
+                </v-btn>
+              </template>
+              <p v-else class="text-body-2 text-medium-emphasis mb-0">
+                Congrats on reaching the interview stage! We'll be in touch by email shortly to arrange a time.
               </p>
-              <v-btn v-if="calendlyLink" :href="calendlyLink" target="_blank" color="primary" variant="flat" size="small" prepend-icon="mdi-calendar-account">
-                Book my interview
-              </v-btn>
             </v-card-text>
           </v-card>
 
