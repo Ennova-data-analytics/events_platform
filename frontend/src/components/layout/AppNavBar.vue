@@ -25,7 +25,7 @@
       <template v-else>
         <NotificationBell />
         <v-btn to="/profile" variant="text" class="nav-link">PROFILE</v-btn>
-        <v-btn v-if="authStore.isOrganiser" to="/admin" variant="text" class="nav-link">ADMIN</v-btn>
+        <v-btn v-if="authStore.canAccessAdmin" to="/admin" variant="text" class="nav-link">ADMIN</v-btn>
         <v-btn @click="authStore.logout()" variant="text" class="nav-link">LOGOUT</v-btn>
       </template>
     </div>
@@ -55,7 +55,7 @@
         <v-list-item to="/profile" prepend-icon="mdi-account">
           <v-list-item-title>Profile</v-list-item-title>
         </v-list-item>
-        <v-list-item v-if="authStore.isOrganiser" to="/admin" prepend-icon="mdi-shield-crown">
+        <v-list-item v-if="authStore.canAccessAdmin" to="/admin" prepend-icon="mdi-shield-crown">
           <v-list-item-title>Admin</v-list-item-title>
         </v-list-item>
         <v-list-item @click="authStore.logout()" prepend-icon="mdi-logout">

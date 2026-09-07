@@ -20,19 +20,32 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value?.roles?.some(role => role.role_name === 'super_admin');
   });
 
+  // Mirrors get_current_active_recruiter on the backend. Note a plain organiser
+  // is NOT a recruiter: the recruitment endpoints only accept recruiter or
+  // super_admin.
+  const isRecruiter = computed(() => {
+    return user.value?.roles?.some(role => role.role_name === 'recruiter' || role.role_name === 'super_admin');
+  });
+
+  // Anyone with a reason to be in /admin at all. Recruiters get in for the
+  // recruitment section even without the organiser role.
+  const canAccessAdmin = computed(() => isOrganiser.value || isRecruiter.value);
+
   async function register(userData, cvFile = null) {
     error.value = null;
     try {
       await AuthService.register(userData);
       await login({ email: userData.email, password: userData.password });
       if (cvFile) {
-        await UserService.uploadCv(cvFile);
+        // The response was never captured, so this threw a ReferenceError on
+        // every registration that included a CV.
+        const response = await UserService.uploadCv(cvFile);
         user.value = response.data;
         localStorage.setItem('authUser', JSON.stringify(user.value));
       }
     } catch (err) {
-      console.error('Registration failed:', err.response.data);
-      error.value = err.response.data.detail || 'Registration failed.';
+      console.error('Registration failed:', err);
+      error.value = err.response?.data?.detail || 'Registration failed.';
     }
   }
 
@@ -79,5 +92,5 @@ export const useAuthStore = defineStore('auth', () => {
     router.push('/login');
   }
 
-  return { token, user, error, isAuthenticated, isOrganiser, isSuperAdmin, register, login, logout, fetchCurrentUser, setAuthFromResponse };
+  return { token, user, error, isAuthenticated, isOrganiser, isSuperAdmin, isRecruiter, canAccessAdmin, register, login, logout, fetchCurrentUser, setAuthFromResponse };
 });

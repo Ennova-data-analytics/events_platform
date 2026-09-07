@@ -57,6 +57,9 @@
                 Marketing runs a case study earlier in the pipeline, then a live interview - so it still uses this link.
               </div>
             </div>
+            <v-alert v-if="saveError" type="error" variant="tonal" density="compact" class="mb-2">
+              {{ saveError }}
+            </v-alert>
             <v-alert v-if="savedFlash" type="success" variant="tonal" density="compact">
               Saved.
             </v-alert>
@@ -114,6 +117,7 @@ const isLoading = ref(true);
 const departments = ref([]);
 const previewDeptId = ref(null);
 const savedFlash = ref(false);
+const saveError = ref('');
 const toast = ref({ show: false, text: '', color: 'success' });
 
 // Every department runs a live interview (Marketing adds a case study first).
@@ -123,14 +127,23 @@ const interviewDepartmentItems = computed(() =>
 const previewDept = computed(() => departments.value.find((d) => d.id === previewDeptId.value));
 
 async function save(dep) {
-  await RecruitmentService.updateDepartmentCalendly(dep.id, dep.calendly_link || '');
-  savedFlash.value = true;
-  setTimeout(() => (savedFlash.value = false), 1500);
+  try {
+    await RecruitmentService.updateDepartmentCalendly(dep.id, dep.calendly_link || '');
+    savedFlash.value = true;
+    setTimeout(() => (savedFlash.value = false), 1500);
+  } catch (err) {
+    console.error('Failed to save Calendly link:', err);
+    saveError.value = err.response?.data?.detail || `Could not save the link for ${dep.name}`;
+    setTimeout(() => (saveError.value = ''), 4000);
+  }
 }
 
 onMounted(async () => {
   try {
-    departments.value = await RecruitmentService.getOpenPositions();
+    // The HR endpoint is department-scoped, so a recruiter only sees the
+    // departments they can actually edit. The public /positions list would
+    // show every department and then 403 on save.
+    departments.value = await RecruitmentService.getHrDepartments();
     previewDeptId.value = interviewDepartmentItems.value[0]?.value || null;
   } finally {
     isLoading.value = false;

@@ -11,6 +11,14 @@
       <v-progress-circular indeterminate color="primary" size="64" />
     </div>
 
+    <!-- A recruiter only ever sees their assigned departments here, so an empty
+         list means nobody has scoped them yet - say so rather than render a
+         blank page. -->
+    <v-alert v-else-if="!departments.length" type="info" variant="tonal">
+      No departments are assigned to you yet, so there's nothing to configure.
+      Ask a super-admin to assign you to a department under Admin → User Roles.
+    </v-alert>
+
     <template v-else>
       <v-tabs v-model="tab" color="primary" class="mb-4" show-arrows>
         <v-tab v-for="dep in departments" :key="dep.id" :value="dep.id">{{ dep.name }}</v-tab>

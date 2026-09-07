@@ -202,22 +202,26 @@ const routes = [
       {
         path: 'recruitment',
         name: 'admin-recruitment',
-        component: () => import('../views/admin/AdminRecruitmentKanbanPage.vue')
+        component: () => import('../views/admin/AdminRecruitmentKanbanPage.vue'),
+        meta: { requiresRecruiter: true }
       },
       {
         path: 'recruitment/candidate/:id',
         name: 'admin-recruitment-candidate',
-        component: () => import('../views/admin/AdminRecruitmentCandidatePage.vue')
+        component: () => import('../views/admin/AdminRecruitmentCandidatePage.vue'),
+        meta: { requiresRecruiter: true }
       },
       {
         path: 'recruitment/scheduling',
         name: 'admin-recruitment-scheduling',
-        component: () => import('../views/admin/AdminRecruitmentSchedulingPage.vue')
+        component: () => import('../views/admin/AdminRecruitmentSchedulingPage.vue'),
+        meta: { requiresRecruiter: true }
       },
       {
         path: 'recruitment/criteria',
         name: 'admin-recruitment-criteria',
-        component: () => import('../views/admin/AdminRecruitmentCriteriaPage.vue')
+        component: () => import('../views/admin/AdminRecruitmentCriteriaPage.vue'),
+        meta: { requiresRecruiter: true }
       },
       {
         path: 'recruitment/cohorts',
@@ -228,7 +232,8 @@ const routes = [
       {
         path: 'recruitment/analytics',
         name: 'admin-recruitment-analytics',
-        component: () => import('../views/admin/AdminRecruitmentAnalyticsPage.vue')
+        component: () => import('../views/admin/AdminRecruitmentAnalyticsPage.vue'),
+        meta: { requiresRecruiter: true }
       },
       {
         path: 'user-roles',
@@ -245,18 +250,38 @@ const router = createRouter({
   routes: routes
 });
 
+// Where to send someone who lands on an admin page they can't use. Recruiters
+// without the organiser role have no business on the events dashboard, so they
+// go to the recruitment board instead.
+function adminHome(authStore) {
+  if (authStore.isOrganiser) return { name: 'admin-dashboard' };
+  if (authStore.isRecruiter) return { name: 'admin-recruitment' };
+  return { name: 'home' };
+}
+
 router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore();
   const requiresAuth = to.meta.requiresAuth;
 
   if (requiresAuth && !authStore.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } });
-  } else if (to.meta.requiresSuperAdmin && !authStore.isSuperAdmin) {
-    next({ name: 'admin-dashboard' });
+    return;
+  }
+
+  // /admin itself is only gated by auth, so redirect a recruiter-only user off
+  // the events dashboard rather than showing them a page of 403s.
+  if (to.path === '/admin' && !authStore.isOrganiser) {
+    next(authStore.isRecruiter ? { name: 'admin-recruitment' } : { name: 'home' });
+    return;
+  }
+
+  if (to.meta.requiresSuperAdmin && !authStore.isSuperAdmin) {
+    next(adminHome(authStore));
+  } else if (to.meta.requiresRecruiter && !authStore.isRecruiter) {
+    next(adminHome(authStore));
   } else {
     next();
   }
-
 });
 
 export default router;
