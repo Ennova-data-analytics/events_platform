@@ -126,13 +126,24 @@ export const RecruitmentService = {
       });
     }
 
-    // Upload documents (best-effort ordering; all before submit).
-    const cvUpload = form.cv_file ? await this.uploadDocument(form.cv_file) : null;
-    const coverUpload = form.cover_letter ? await this.uploadDocument(form.cover_letter) : null;
+    // Upload documents (best-effort ordering; all before submit). Each upload is
+    // labelled so a rejection can name the offending file - "That file isn't
+    // supported" is useless when four were attached.
+    const upload = async (file, label) => {
+      try {
+        return await this.uploadDocument(file);
+      } catch (err) {
+        err.uploadLabel = label;
+        throw err;
+      }
+    };
+
+    const cvUpload = form.cv_file ? await upload(form.cv_file, 'Your CV') : null;
+    const coverUpload = form.cover_letter ? await upload(form.cover_letter, 'Your cover letter') : null;
     const materials = [];
     for (const m of form.materials || []) {
       if (m.file) {
-        const up = await this.uploadDocument(m.file);
+        const up = await upload(m.file, `"${m.file.name}"`);
         materials.push({ s3_key: up.s3_key, filename: up.filename, note: m.note || '' });
       }
     }
@@ -259,6 +270,14 @@ export const RecruitmentService = {
       });
     }
     return ApiClient.get(`/hr/recruitment/applications/${id}`).then((r) => r.data);
+  },
+
+  // Re-queue the AI department match, e.g. after it failed or the rubric changed.
+  rematchApplication(id) {
+    if (USE_MOCK) {
+      return delay(300).then(() => ({ id: Number(id), match_status: 'pending' }));
+    }
+    return ApiClient.post(`/hr/recruitment/applications/${id}/rematch`).then((r) => r.data);
   },
 
   // Super-admin only. Permanent, and frees the candidate's email to apply again.

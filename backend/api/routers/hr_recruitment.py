@@ -1,11 +1,11 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Response, status, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status, Query
 from sqlalchemy.orm import Session
 from typing import List
 
 from domain import schemas, models
 from domain.use_cases.db_recruitment import RecruitmentUseCases
-from domain.use_cases.db_applications import HrApplicationUseCases, compute_funnel
+from domain.use_cases.db_applications import HrApplicationUseCases, compute_funnel, run_matching_task
 from api import deps
 
 router = APIRouter()
@@ -292,6 +292,20 @@ def send_case(
         db, scoped, application_id, data.brief_url, data.hours, _actor(current_user),
         brief_s3_key=data.brief_s3_key, brief_filename=data.brief_filename,
     )
+
+
+@router.post("/applications/{application_id}/rematch")
+def rerun_matching(
+    application_id: int,
+    background: BackgroundTasks,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User = Depends(deps.get_current_active_recruiter),
+):
+    """Re-run the AI department match for this candidate."""
+    scoped = deps.recruiter_department_ids(db, current_user)
+    result = HrApplicationUseCases.rerun_matching(db, scoped, application_id, _actor(current_user))
+    background.add_task(run_matching_task, application_id)
+    return result
 
 
 @router.get("/applications/{application_id}/case-brief/url")

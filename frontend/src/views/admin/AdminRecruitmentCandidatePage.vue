@@ -169,7 +169,17 @@
                   Matching pending - the model hasn't returned yet.
                   <span v-if="app.match_flags?.includes('cv_unreadable')"> CV could not be parsed; matching will run on answers only.</span>
                 </v-alert>
-                <v-btn size="small" variant="text" color="info" class="mt-2" prepend-icon="mdi-refresh">Retry matching</v-btn>
+                <v-btn
+                  size="small"
+                  variant="text"
+                  color="info"
+                  class="mt-2"
+                  prepend-icon="mdi-refresh"
+                  :loading="rematching"
+                  @click="retryMatching"
+                >
+                  Retry matching
+                </v-btn>
               </template>
               <template v-else>
                 <div class="d-flex align-center mb-2">
@@ -681,6 +691,34 @@ async function saveDepartment() {
   app.value.final_department = departments.value.find((d) => d.id === finalDepartmentId.value);
   pushEvent('override', { department: app.value.final_department.name });
   notify(isOverride ? 'Department overridden (logged)' : 'Suggestion confirmed');
+}
+
+const rematching = ref(false);
+
+// Re-queue the AI match. It runs as a background task, so poll the application
+// back until it leaves 'pending' rather than leaving the card stuck.
+async function retryMatching() {
+  rematching.value = true;
+  try {
+    await RecruitmentService.rematchApplication(app.value.id);
+    notify('Matching re-queued - this takes a few seconds');
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const fresh = await RecruitmentService.getApplication(app.value.id);
+      if (!fresh.match_pending) {
+        app.value = fresh;
+        buildScorecard();
+        notify('Matching finished');
+        return;
+      }
+    }
+    notify('Still running - refresh in a moment to see the result', 'info');
+  } catch (err) {
+    console.error('Failed to re-run matching:', err);
+    notify(err.response?.data?.detail || 'Could not re-run matching', 'error');
+  } finally {
+    rematching.value = false;
+  }
 }
 
 const deleteDialog = ref(false);

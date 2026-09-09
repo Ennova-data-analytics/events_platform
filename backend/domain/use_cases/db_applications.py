@@ -915,6 +915,26 @@ class HrApplicationUseCases:
         return {"url": presign_or_502(app.candidate.cv_s3_key, "CV")}
 
     @staticmethod
+    def rerun_matching(db: Session, scoped_ids, application_id: int, actor: str) -> dict:
+        """
+        Queue the AI match again, e.g. after it failed or the department's rubric
+        changed. Marks the candidate's applications pending straight away so the
+        UI reflects the retry; run_matching_task then rewrites all of them from
+        one LLM call.
+        """
+        app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
+        siblings = db.query(models.Application).filter(
+            models.Application.candidate_id == app.candidate_id,
+            models.Application.cycle_id == app.cycle_id,
+        ).all()
+        for sibling in siblings:
+            sibling.match_status = "pending"
+        ApplicationUseCases.add_event(db, application_id, "note", {"text": "AI matching re-run"}, actor=actor)
+        db.commit()
+        logger.info("Re-running AI matching for application %s (%d row(s))", application_id, len(siblings))
+        return {"id": application_id, "match_status": "pending"}
+
+    @staticmethod
     def case_brief_url(db: Session, scoped_ids, application_id: int) -> dict:
         """Presigned URL for a file case brief, for recruiters viewing it in admin."""
         app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)

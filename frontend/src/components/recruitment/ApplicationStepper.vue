@@ -507,6 +507,7 @@ import { ref, computed } from 'vue';
 import { RecruitmentService } from '@/services/RecruitmentService.js';
 import { ESADE_DEGREES, ESADE_YEARS } from '@/data/recruitmentMock.js';
 import { ACCEPTED_UPLOAD_MIME, ACCEPTED_UPLOAD_LABEL, MAX_UPLOAD_MB } from '@/utils/uploadTypes.js';
+import { describeSubmissionError } from '@/utils/apiErrors.js';
 
 const props = defineProps({
   departments: { type: Array, default: () => [] },
@@ -738,10 +739,10 @@ async function handleSubmit() {
     // by the rate limiter, or a rejected file type, just saw "try again" - and
     // nothing was logged anywhere to diagnose it afterwards.
     console.error('Application submission failed:', err.response?.status, err.response?.data, err);
-    const detail = err.response?.data?.detail;
-    submitError.value = err.response?.status === 429
-      ? 'Too many submissions from this network right now. Please wait a minute and try again.'
-      : detail || 'Something went wrong submitting your application. Please try again.';
+    // describeSubmissionError handles the cases a raw `detail` can't: a 422's
+    // field-error array, a rejected upload naming the wrong file, a closed
+    // cohort, and a network failure with no response at all.
+    submitError.value = describeSubmissionError(err, err.uploadLabel);
     isSubmitting.value = false;
     reportFailure(err);
   }
@@ -761,7 +762,7 @@ function selectedDepartmentNames() {
 // and this must never raise on top of it.
 function reportFailure(err) {
   const url = err.response?.config?.url || err.config?.url || '';
-  const stage = url.includes('/uploads') ? 'file upload'
+  const stage = url.includes('/uploads') ? `file upload (${err.uploadLabel || 'unknown file'})`
     : url.includes('/applications') ? 'submit'
     : 'unknown';
   const status = err.response?.status;
