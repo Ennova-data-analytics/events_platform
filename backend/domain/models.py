@@ -782,7 +782,12 @@ class Application(Base):
     updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (
-        UniqueConstraint('candidate_id', 'cycle_id', name='uq_application_candidate_cycle'),
+        # One application per department: a candidate ranking three departments
+        # gets three rows, so each team runs its own independent pipeline.
+        UniqueConstraint(
+            'candidate_id', 'cycle_id', 'department_applied_id',
+            name='uq_application_candidate_cycle_department',
+        ),
     )
 
     candidate = relationship("Candidate", back_populates="applications")

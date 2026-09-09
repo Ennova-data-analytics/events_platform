@@ -19,15 +19,31 @@ def _shell(title: str, body_html: str) -> str:
     """
 
 
-def send_application_received(*, to_email: str, to_name: str, department_name: str, status_token: str) -> bool:
-    """Confirmation email with the private status-page magic link (spec §3.4.1)."""
+def send_application_received(*, to_email: str, to_name: str, department_names: list[str], status_token: str) -> bool:
+    """
+    Confirmation email with the private status-page magic link (spec §3.4.1).
+
+    A candidate applying to several departments files one application per
+    department but gets a single email naming all of them, and a single link.
+    """
     url = _status_url(status_token)
+    names = [n for n in department_names if n] or ["Ennova"]
+    if len(names) == 1:
+        applied_to = f"<strong>{names[0]}</strong>"
+        teams_note = ""
+    else:
+        applied_to = ", ".join(f"<strong>{n}</strong>" for n in names[:-1]) + f" and <strong>{names[-1]}</strong>"
+        teams_note = (
+            "<p>Each team reviews your application separately, so they may progress at "
+            "different speeds. Your status page shows all of them.</p>"
+        )
     body = _shell(
         "Application received 🎉",
         f"""
         <p>Hi {to_name.split(' ')[0] if to_name else 'there'},</p>
-        <p>Thanks for applying to <strong>{department_name}</strong> at Ennova. Your application is in
+        <p>Thanks for applying to {applied_to} at Ennova. Your application is in
         and our team reviews every one personally.</p>
+        {teams_note}
         <p>You can track your application any time here — no account needed:</p>
         <p style="margin: 20px 0;">
           <a href="{url}" style="background:#1867c0;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;display:inline-block;">
@@ -42,7 +58,7 @@ def send_application_received(*, to_email: str, to_name: str, department_name: s
         to_name=to_name,
         subject="We received your Ennova application",
         html_content=body,
-        text_content=f"Thanks for applying to {department_name}. Track your status: {url}",
+        text_content=f"Thanks for applying to {', '.join(names)}. Track your status: {url}",
     )
 
 
@@ -187,4 +203,64 @@ def send_outcome(*, to_email: str, to_name: str, department_name: str, accepted:
     return email_service.send_email(
         to_email=to_email, to_name=to_name, subject=subject,
         html_content=_shell(title, inner), text_content=text,
+    )
+
+
+def send_application_failure_alert(
+    *,
+    full_name: str | None,
+    email: str | None,
+    phone: str | None,
+    departments: str | None,
+    stage: str,
+    error: str,
+) -> bool:
+    """
+    Internal alert: a candidate tried to apply and couldn't.
+
+    Goes to RECRUITMENT_ALERT_EMAIL so someone can reach out directly - hence
+    the phone number. Silently does nothing when no alert address is
+    configured, which is the expected state in local development.
+    """
+    to = settings.RECRUITMENT_ALERT_EMAIL
+    if not to:
+        logger.info("Application failure not alerted: RECRUITMENT_ALERT_EMAIL is unset")
+        return False
+
+    def _row(label: str, value: str | None) -> str:
+        return (
+            f'<tr><td style="padding:4px 12px 4px 0;color:#666;">{label}</td>'
+            f'<td style="padding:4px 0;"><strong>{value or "-"}</strong></td></tr>'
+        )
+
+    body = _shell(
+        "An application failed to submit",
+        f"""
+        <p>Someone tried to apply and hit an error. Their details, so you can follow up:</p>
+        <table style="border-collapse:collapse;margin:16px 0;">
+          {_row("Name", full_name)}
+          {_row("Email", email)}
+          {_row("Phone", phone)}
+          {_row("Departments", departments)}
+          {_row("Failed at", stage)}
+        </table>
+        <p style="background:#fff4f4;border-left:3px solid #d32f2f;padding:10px 14px;margin:16px 0;">
+          <code style="font-size:13px;">{error}</code>
+        </p>
+        <p style="color:#666;font-size:13px;">
+          Reported by the application form, so it covers upload failures that never reached the
+          submit endpoint.
+        </p>
+        """,
+    )
+    return email_service.send_email(
+        to_email=to,
+        to_name="Ennova Recruitment",
+        subject=f"Application failed - {full_name or email or 'unknown candidate'}",
+        html_content=body,
+        text_content=(
+            f"Application failed at {stage}.\n"
+            f"Name: {full_name or '-'}\nEmail: {email or '-'}\nPhone: {phone or '-'}\n"
+            f"Departments: {departments or '-'}\nError: {error}"
+        ),
     )

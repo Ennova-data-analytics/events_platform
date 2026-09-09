@@ -4,7 +4,7 @@ import uuid
 import logging
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, UploadFile, File, Request
+from fastapi import APIRouter, Depends, HTTPException, Response, status, BackgroundTasks, UploadFile, File, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -101,6 +101,50 @@ async def upload_document(
     # pass through: it was just checked against the allowlist above.
     s3_service.upload_file_to_s3_from_bytes(io.BytesIO(data), s3_key, content_type=file.content_type)
     return schemas.UploadResult(s3_key=s3_key, filename=safe_name)
+
+
+# ── Failed-submission alerting ──────────────────────────────────────────────
+@router.post("/report-failure", status_code=status.HTTP_204_NO_CONTENT)
+def report_application_failure(
+    data: schemas.ApplicationFailureReport,
+    request: Request,
+    background: BackgroundTasks,
+):
+    """
+    Record that a candidate failed to submit, and alert the recruitment inbox.
+
+    Called by the application form's error handler. It lives here rather than
+    inside the submit endpoint because the CV upload runs first: a failure there
+    (a rejected file type, or a 429) means /applications is never reached, and a
+    server-side hook would never see the candidate at all.
+
+    Always returns 204. This is best-effort telemetry on an error path - it must
+    never turn one failure the candidate can retry into two.
+    """
+    rate_limit(request, "recruitment_failure_report", limit=10, window_s=300)
+    logger.warning(
+        "Application submission failed | stage=%s email=%s phone=%s departments=%s error=%s",
+        data.stage, data.email, data.phone, data.departments, data.error,
+    )
+    background.add_task(
+        _send_failure_alert_task,
+        data.full_name, data.email, data.phone, data.departments,
+        data.stage or "unknown", data.error or "no error detail supplied",
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _send_failure_alert_task(full_name, email, phone, departments, stage, error) -> None:
+    from domain.services.recruitment.emails import send_application_failure_alert
+    try:
+        send_application_failure_alert(
+            full_name=full_name, email=email, phone=phone,
+            departments=departments, stage=stage, error=error,
+        )
+    except Exception:
+        # The alert is the last line of defence; if it fails the warning logged
+        # above is still on disk.
+        logger.exception("Failed to send application-failure alert")
 
 
 # ── In-flow AI preview ──────────────────────────────────────────────────────

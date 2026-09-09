@@ -4,13 +4,13 @@
       <v-stepper-header>
         <v-stepper-item :value="1" title="Basic info" :complete="step > 1" :editable="step > 1" />
         <v-divider />
-        <v-stepper-item :value="2" title="Department" :complete="step > 2" :editable="step > 2" />
+        <v-stepper-item :value="2" title="Departments" :complete="step > 2" :editable="step > 2" />
         <v-divider />
         <v-stepper-item :value="3" title="About you" :complete="step > 3" :editable="step > 3" />
         <v-divider />
         <v-stepper-item :value="4" title="Match" :complete="step > 4" :editable="step > 4" />
         <v-divider />
-        <v-stepper-item :value="5" title="Other teams" :editable="step > 4" />
+        <v-stepper-item :value="5" title="Finish" :editable="step > 4" />
       </v-stepper-header>
 
       <v-stepper-window>
@@ -139,6 +139,58 @@
             <v-alert v-if="!form.department_applied_id" type="info" variant="tonal" density="compact" class="mt-4">
               Select a department to continue.
             </v-alert>
+
+            <!-- Additional departments are chosen here rather than at the end,
+                 because the next step asks each chosen department's own
+                 questions and needs to know the full list first. -->
+            <template v-if="form.department_applied_id">
+              <v-divider class="my-5" />
+            <v-switch
+              v-model="form.applying_other_departments"
+              color="primary"
+              hide-details
+              density="compact"
+              label="Do you wish to apply to any other Ennova department too?"
+              @update:model-value="syncRanking"
+            />
+            <v-select
+              v-if="form.applying_other_departments"
+              v-model="form.other_departments"
+              :items="otherDepartmentItems"
+              label="Which other departments?"
+              variant="outlined"
+              multiple
+              chips
+              closable-chips
+              class="mt-3 mb-2"
+              prepend-inner-icon="mdi-shuffle-variant"
+              @update:model-value="syncRanking"
+            />
+
+            <!-- Ranking of the departments they're applying to -->
+            <template v-if="rankingDepartments.length > 1">
+              <div class="text-subtitle-2 font-weight-bold mt-3 mb-1">Rank your choices</div>
+              <p class="text-caption text-medium-emphasis mb-2">Put your first choice at the top - recruiters see this order.</p>
+              <v-list class="rank-list py-0" density="compact">
+                <v-list-item
+                  v-for="(dep, idx) in rankingDepartments"
+                  :key="dep.id"
+                  class="rank-item mb-1"
+                >
+                  <template #prepend>
+                    <v-avatar size="26" :color="idx === 0 ? 'primary' : 'grey-lighten-1'" class="mr-2">
+                      <span class="text-caption font-weight-bold">{{ idx + 1 }}</span>
+                    </v-avatar>
+                  </template>
+                  <v-list-item-title class="text-body-2">{{ dep.name }}</v-list-item-title>
+                  <template #append>
+                    <v-btn icon="mdi-arrow-up" size="x-small" variant="text" :disabled="idx === 0" @click="moveRank(idx, -1)" />
+                    <v-btn icon="mdi-arrow-down" size="x-small" variant="text" :disabled="idx === rankingDepartments.length - 1" @click="moveRank(idx, 1)" />
+                  </template>
+                </v-list-item>
+              </v-list>
+            </template>
+            </template>
           </div>
         </v-stepper-window-item>
 
@@ -218,39 +270,67 @@
               persistent-hint
             />
 
-            <!-- Department custom questions -->
-            <template v-if="customQuestions.length">
+            <!-- One panel per department the candidate is applying to. Every
+                 team's questions get asked, not just the first choice's - the
+                 header flags any panel still missing a required answer so they
+                 don't sail past it. -->
+            <template v-if="departmentsWithQuestions.length">
               <v-divider class="my-4" />
-              <div class="text-subtitle-2 font-weight-bold mb-1">A few questions from the {{ appliedDepartmentName }} team</div>
-              <p class="text-caption text-medium-emphasis mb-3">Quick ones - just to get a feel for you.</p>
-              <template v-for="q in customQuestions" :key="q.id">
-                <v-select
-                  v-if="q.type === 'select'"
-                  v-model="form.custom_answers[q.id]"
-                  :items="q.options"
-                  :label="q.label + (q.required ? ' *' : '')"
-                  variant="outlined"
-                  class="mb-3"
-                  :rules="q.required ? [v => !!v || 'Required'] : []"
-                />
-                <v-textarea
-                  v-else-if="q.type === 'textarea'"
-                  v-model="form.custom_answers[q.id]"
-                  :label="q.label + (q.required ? ' *' : '')"
-                  variant="outlined"
-                  rows="3"
-                  class="mb-3"
-                  :rules="q.required ? [v => !!v || 'Required'] : []"
-                />
-                <v-text-field
-                  v-else
-                  v-model="form.custom_answers[q.id]"
-                  :label="q.label + (q.required ? ' *' : '')"
-                  variant="outlined"
-                  class="mb-3"
-                  :rules="q.required ? [v => !!v || 'Required'] : []"
-                />
-              </template>
+              <div class="text-subtitle-2 font-weight-bold mb-1">Questions from the teams you picked</div>
+              <p class="text-caption text-medium-emphasis mb-3">
+                Each team asks its own. Answer them all - a blank section weakens that application.
+              </p>
+              <v-expansion-panels v-model="openQuestionPanels" multiple variant="accordion" class="mb-2">
+                <v-expansion-panel v-for="dep in departmentsWithQuestions" :key="dep.id">
+                  <v-expansion-panel-title>
+                    <div class="d-flex align-center ga-2 flex-grow-1">
+                      <span class="text-body-2 font-weight-medium">{{ dep.name }}</span>
+                      <v-chip
+                        v-if="departmentQuestionsIncomplete(dep)"
+                        size="x-small"
+                        color="warning"
+                        variant="tonal"
+                      >
+                        * Needs answers
+                      </v-chip>
+                      <v-icon v-else size="small" color="success">mdi-check-circle-outline</v-icon>
+                    </div>
+                  </v-expansion-panel-title>
+                  <v-expansion-panel-text>
+                    <template v-for="q in dep.custom_questions" :key="q.id">
+                      <v-select
+                        v-if="q.type === 'select'"
+                        v-model="answersFor(dep.id)[q.id]"
+                        :items="q.options"
+                        :label="q.label + (q.required ? ' *' : '')"
+                        variant="outlined"
+                        density="comfortable"
+                        class="mb-3"
+                        :rules="q.required ? [v => !!v || 'Required'] : []"
+                      />
+                      <v-textarea
+                        v-else-if="q.type === 'textarea'"
+                        v-model="answersFor(dep.id)[q.id]"
+                        :label="q.label + (q.required ? ' *' : '')"
+                        variant="outlined"
+                        density="comfortable"
+                        rows="3"
+                        class="mb-3"
+                        :rules="q.required ? [v => !!v || 'Required'] : []"
+                      />
+                      <v-text-field
+                        v-else
+                        v-model="answersFor(dep.id)[q.id]"
+                        :label="q.label + (q.required ? ' *' : '')"
+                        variant="outlined"
+                        density="comfortable"
+                        class="mb-3"
+                        :rules="q.required ? [v => !!v || 'Required'] : []"
+                      />
+                    </template>
+                  </v-expansion-panel-text>
+                </v-expansion-panel>
+              </v-expansion-panels>
             </template>
 
             <v-divider class="my-4" />
@@ -366,56 +446,10 @@
           </div>
         </v-stepper-window-item>
 
-        <!-- ───────────────────────────────────────────────── Step 5: Other teams -->
+        <!-- ────────────────────────────────────────────────────── Step 5: Finish -->
         <v-stepper-window-item :value="5">
           <div class="pa-2">
             <p class="text-body-2 text-medium-emphasis mb-3">Almost there! 🎉 A couple of last things.</p>
-
-            <v-switch
-              v-model="form.applying_other_departments"
-              color="primary"
-              hide-details
-              density="compact"
-              label="Do you wish to apply to any other Ennova department too?"
-              @update:model-value="syncRanking"
-            />
-            <v-select
-              v-if="form.applying_other_departments"
-              v-model="form.other_departments"
-              :items="otherDepartmentItems"
-              label="Which other departments?"
-              variant="outlined"
-              multiple
-              chips
-              closable-chips
-              class="mt-3 mb-2"
-              prepend-inner-icon="mdi-shuffle-variant"
-              @update:model-value="syncRanking"
-            />
-
-            <!-- Ranking of the departments they're applying to -->
-            <template v-if="rankingDepartments.length > 1">
-              <div class="text-subtitle-2 font-weight-bold mt-3 mb-1">Rank your choices</div>
-              <p class="text-caption text-medium-emphasis mb-2">Put your first choice at the top - recruiters see this order.</p>
-              <v-list class="rank-list py-0" density="compact">
-                <v-list-item
-                  v-for="(dep, idx) in rankingDepartments"
-                  :key="dep.id"
-                  class="rank-item mb-1"
-                >
-                  <template #prepend>
-                    <v-avatar size="26" :color="idx === 0 ? 'primary' : 'grey-lighten-1'" class="mr-2">
-                      <span class="text-caption font-weight-bold">{{ idx + 1 }}</span>
-                    </v-avatar>
-                  </template>
-                  <v-list-item-title class="text-body-2">{{ dep.name }}</v-list-item-title>
-                  <template #append>
-                    <v-btn icon="mdi-arrow-up" size="x-small" variant="text" :disabled="idx === 0" @click="moveRank(idx, -1)" />
-                    <v-btn icon="mdi-arrow-down" size="x-small" variant="text" :disabled="idx === rankingDepartments.length - 1" @click="moveRank(idx, 1)" />
-                  </template>
-                </v-list-item>
-              </v-list>
-            </template>
 
             <v-text-field
               v-model="form.other_associations"
@@ -533,7 +567,29 @@ const cvRules = [
 
 const appliedDepartment = computed(() => props.departments.find((d) => d.id === form.value.department_applied_id));
 const appliedDepartmentName = computed(() => appliedDepartment.value?.name || 'this team');
-const customQuestions = computed(() => appliedDepartment.value?.custom_questions || []);
+
+// Every department being applied to, in ranked order, that actually asks
+// something. custom_answers is keyed by department id so each application is
+// submitted with only its own team's answers.
+const openQuestionPanels = ref([]);
+const departmentsWithQuestions = computed(() =>
+  (rankingDepartments.value.length ? rankingDepartments.value : [appliedDepartment.value])
+    .filter((d) => d && (d.custom_questions || []).length)
+);
+
+function answersFor(departmentId) {
+  if (!form.value.custom_answers[departmentId]) {
+    form.value.custom_answers[departmentId] = {};
+  }
+  return form.value.custom_answers[departmentId];
+}
+
+function departmentQuestionsIncomplete(dep) {
+  const answers = form.value.custom_answers[dep.id] || {};
+  return (dep.custom_questions || []).some(
+    (q) => q.required && !String(answers[q.id] ?? '').trim()
+  );
+}
 
 const departmentSelectItems = computed(() => props.departments.map((d) => ({ title: d.name, value: d.id })));
 const otherDepartmentItems = computed(() =>
@@ -561,13 +617,10 @@ function addLink() {
 
 function selectDepartment(id) {
   form.value.department_applied_id = id;
-  // Keep custom-question answers relevant to the chosen department.
-  form.value.custom_answers = {};
   syncRanking();
 }
 
 function onDepartmentChanged() {
-  form.value.custom_answers = {};
   syncRanking();
   runAiPreview();
 }
@@ -580,6 +633,13 @@ function syncRanking() {
   const kept = form.value.department_ranking.filter((id) => uniq.includes(id));
   const added = uniq.filter((id) => !kept.includes(id));
   form.value.department_ranking = [...kept, ...added];
+
+  // Drop answers for departments no longer selected, but keep the rest -
+  // answers are per department now, so changing the first choice must not
+  // discard what they typed for the others.
+  for (const key of Object.keys(form.value.custom_answers)) {
+    if (!uniq.includes(Number(key))) delete form.value.custom_answers[key];
+  }
 }
 
 function moveRank(idx, dir) {
@@ -599,10 +659,12 @@ const stepValid = computed(() => {
       return !!form.value.department_applied_id;
     case 3:
       // Background and motivation gate here too - they're required, and the AI
-      // preview on step 4 reads them.
+      // preview on step 4 reads them. Required custom questions gate for EVERY
+      // department picked, not just the first choice.
       return !!form.value.background?.trim()
         && !!form.value.motivation?.trim()
-        && !!cvFile.value && cvFile.value.size < MAX_UPLOAD_MB * 1024 * 1024;
+        && !!cvFile.value && cvFile.value.size < MAX_UPLOAD_MB * 1024 * 1024
+        && !departmentsWithQuestions.value.some(departmentQuestionsIncomplete);
     default:
       return true;
   }
@@ -671,10 +733,50 @@ async function handleSubmit() {
       cv_file: cvFile.value,
     });
     emit('submit', result);
-  } catch {
-    submitError.value = 'Something went wrong submitting your application. Please try again.';
+  } catch (err) {
+    // Show the server's actual reason. A bare catch here meant a candidate hit
+    // by the rate limiter, or a rejected file type, just saw "try again" - and
+    // nothing was logged anywhere to diagnose it afterwards.
+    console.error('Application submission failed:', err.response?.status, err.response?.data, err);
+    const detail = err.response?.data?.detail;
+    submitError.value = err.response?.status === 429
+      ? 'Too many submissions from this network right now. Please wait a minute and try again.'
+      : detail || 'Something went wrong submitting your application. Please try again.';
     isSubmitting.value = false;
+    reportFailure(err);
   }
+}
+
+// Names of every department this candidate is applying to, for the alert.
+function selectedDepartmentNames() {
+  const ids = [form.value.department_applied_id, ...(form.value.other_departments || [])];
+  return props.departments
+    .filter((d) => ids.includes(d.id))
+    .map((d) => d.name)
+    .join(', ');
+}
+
+// Alert recruitment that someone couldn't apply, with enough detail to call
+// them back. Fire-and-forget: the candidate has already been shown the error,
+// and this must never raise on top of it.
+function reportFailure(err) {
+  const url = err.response?.config?.url || err.config?.url || '';
+  const stage = url.includes('/uploads') ? 'file upload'
+    : url.includes('/applications') ? 'submit'
+    : 'unknown';
+  const status = err.response?.status;
+  const detail = err.response?.data?.detail;
+
+  RecruitmentService.reportApplicationFailure({
+    full_name: form.value.full_name || null,
+    email: form.value.email || null,
+    phone: form.value.phone || null,
+    departments: selectedDepartmentNames() || null,
+    stage,
+    error: [status && `HTTP ${status}`, detail || err.message]
+      .filter(Boolean).join(' - ')
+      .slice(0, 2000),
+  });
 }
 </script>
 

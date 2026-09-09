@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # Recruitment module. Token secret falls back to SECRET_KEY if unset.
     RECRUITMENT_TOKEN_SECRET: str = ""
     RETENTION_MONTHS: int = 6
+    # Where to send an alert when a candidate fails to submit an application.
+    # Empty disables the alerts.
+    RECRUITMENT_ALERT_EMAIL: str = ""
     CALENDLY_WEBHOOK_SECRET: str = ""          # optional; verifies Calendly signatures
     RECRUITMENT_SCHEDULER_ENABLED: bool = True  # reminder/nudge/retention jobs
 

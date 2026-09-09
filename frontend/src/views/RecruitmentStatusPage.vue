@@ -54,6 +54,30 @@
             </v-card-text>
           </v-card>
 
+          <!-- Every department applied to, each with its own stage. Only shown
+               when there's more than one, so single-department applicants see
+               no change. -->
+          <v-card v-if="(application.applications || []).length > 1" class="mb-4" variant="outlined">
+            <v-card-text class="pa-4 pa-sm-5">
+              <div class="text-subtitle-2 font-weight-bold mb-1">Your applications</div>
+              <p class="text-caption text-medium-emphasis mb-3">
+                Each team reviews separately, so these can move at different speeds.
+              </p>
+              <div
+                v-for="a in application.applications"
+                :key="a.id"
+                class="d-flex align-center ga-3 py-2"
+              >
+                <v-icon size="small" color="grey-darken-1">mdi-account-tie-outline</v-icon>
+                <span class="text-body-2 flex-grow-1">{{ a.department?.name || 'Department' }}</span>
+                <v-chip :color="statusMeta(a.status).color" variant="tonal" size="small">
+                  <v-icon start :icon="statusMeta(a.status).icon" size="x-small" />
+                  {{ statusMeta(a.status).title }}
+                </v-chip>
+              </div>
+            </v-card-text>
+          </v-card>
+
           <!-- ── Action cards ──────────────────────────────────────────── -->
 
           <!-- Marketing case: brief + deadline -->

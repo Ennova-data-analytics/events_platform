@@ -51,16 +51,18 @@ def department_match_clause(department_id: int):
     """
     SQL condition for "this application concerns `department_id`".
 
-    A candidate may rank several departments (department_ranking holds the full
-    preference order, department_applied_id only the first choice), so matching
-    on the first choice alone hid an applicant from every other department they
-    picked. Final placement still counts, since it can be set to a department
-    outside the candidate's ranking.
+    Each ranked department now has its own application row, so matching on that
+    row's own department is both sufficient and correct. It must NOT also match
+    department_ranking: the ranking is still stored for display, and matching on
+    it would surface a candidate's Innovation row under an HR filter too, once
+    per department they ranked.
+
+    Final placement still counts, since it can be set to a department outside
+    the candidate's ranking.
     """
     return (
         (models.Application.final_department_id == department_id)
         | (models.Application.department_applied_id == department_id)
-        | models.Application.department_ranking.contains([department_id])
     )
 
 
@@ -74,9 +76,7 @@ def department_match_any_clause(department_ids: list[int]):
 
 def application_departments(app: models.Application) -> set[int]:
     """Every department an application concerns, mirroring department_match_clause."""
-    ids = {d for d in (app.department_applied_id, app.final_department_id) if d}
-    ids.update(d for d in (app.department_ranking or []) if isinstance(d, int))
-    return ids
+    return {d for d in (app.department_applied_id, app.final_department_id) if d}
 
 
 def serialize_department(d: models.Department | None, include_rubric: bool = False) -> dict | None:
@@ -233,10 +233,13 @@ class ApplicationUseCases:
             candidate.gdpr_consent_at = _now()
         db.flush()  # candidate_id
 
-        # Idempotency: one application per (candidate, cycle).
+        # Idempotency is still per (candidate, cycle): a second submission
+        # returns the existing first-choice application rather than adding more.
         existing = (
             db.query(models.Application)
-            .filter(models.Application.candidate_id == candidate.candidate_id, models.Application.cycle_id == cycle.cycle_id)
+            .filter(models.Application.candidate_id == candidate.candidate_id,
+                    models.Application.cycle_id == cycle.cycle_id)
+            .order_by(models.Application.application_id)
             .first()
         )
         if existing:
@@ -244,30 +247,69 @@ class ApplicationUseCases:
             db.commit()
             return existing, token.token, True
 
-        application = models.Application(
-            candidate_id=candidate.candidate_id,
-            cycle_id=cycle.cycle_id,
-            department_applied_id=data.department_applied_id,
-            department_ranking=data.department_ranking or [data.department_applied_id],
-            answers=data.answers or {},
-            source=data.source,
-            status="applied",
-            match_status="pending",
+        # One application per ranked department, so each team runs its own
+        # pipeline. First entry is the candidate's first choice and carries the
+        # status token; order is preserved and duplicates dropped.
+        ranking = data.department_ranking or []
+        ordered_ids: list[int] = []
+        for dep_id in [data.department_applied_id, *ranking]:
+            if dep_id and dep_id not in ordered_ids:
+                ordered_ids.append(dep_id)
+
+        # Ignore ids naming a department that no longer exists - the foreign key
+        # would reject them and lose the whole submission.
+        known = {
+            d.department_id for d in
+            db.query(models.Department).filter(models.Department.department_id.in_(ordered_ids)).all()
+        }
+        ordered_ids = [d for d in ordered_ids if d in known] or [data.department_applied_id]
+
+        answers = data.answers or {}
+        # custom_answers arrives keyed by department id; each application keeps
+        # only its own department's answers, so the admin view and the matcher
+        # see exactly what was asked for that team.
+        by_department = answers.get("custom_answers") or {}
+        per_department_answers = isinstance(by_department, dict) and any(
+            str(k).isdigit() for k in by_department
         )
-        db.add(application)
-        db.flush()  # application_id
 
-        for m in data.materials:
-            db.add(models.ApplicationMaterial(
-                application_id=application.application_id,
-                s3_key=m.s3_key, filename=m.filename, note=m.note,
-            ))
+        applications: list[models.Application] = []
+        for dep_id in ordered_ids:
+            dep_answers = dict(answers)
+            if per_department_answers:
+                dep_answers["custom_answers"] = by_department.get(str(dep_id)) or by_department.get(dep_id) or {}
+            application = models.Application(
+                candidate_id=candidate.candidate_id,
+                cycle_id=cycle.cycle_id,
+                department_applied_id=dep_id,
+                department_ranking=ordered_ids,
+                answers=dep_answers,
+                source=data.source,
+                status="applied",
+                match_status="pending",
+            )
+            db.add(application)
+            applications.append(application)
+        db.flush()  # application_id for each
 
-        ApplicationUseCases.add_event(db, application.application_id, "status_change", {"to": "applied"}, actor="system")
-        token = ApplicationUseCases._get_or_create_token(db, application.application_id, "status")
+        for application in applications:
+            for m in data.materials:
+                db.add(models.ApplicationMaterial(
+                    application_id=application.application_id,
+                    s3_key=m.s3_key, filename=m.filename, note=m.note,
+                ))
+            ApplicationUseCases.add_event(
+                db, application.application_id, "status_change", {"to": "applied"}, actor="system")
+
+        primary = applications[0]
+        token = ApplicationUseCases._get_or_create_token(db, primary.application_id, "status")
         db.commit()
-        db.refresh(application)
-        return application, token.token, False
+        db.refresh(primary)
+        logger.info(
+            "Created %d application(s) for candidate %s across departments %s",
+            len(applications), candidate.candidate_id, ordered_ids,
+        )
+        return primary, token.token, False
 
     # ── Events / tokens ─────────────────────────────────────────────────────
     @staticmethod
@@ -405,6 +447,25 @@ class ApplicationUseCases:
                 for e in app.events
             ],
         }
+        # Every department the candidate applied to this cycle, each with its own
+        # stage. One magic link, one page, three independent pipelines.
+        siblings = (
+            db.query(models.Application)
+            .filter(models.Application.candidate_id == app.candidate_id,
+                    models.Application.cycle_id == app.cycle_id)
+            .order_by(models.Application.application_id)
+            .all()
+        )
+        out["applications"] = [
+            {
+                "id": s_app.application_id,
+                "status": s_app.status,
+                "is_current": s_app.application_id == app.application_id,
+                "department": serialize_department(s_app.applied_department),
+            }
+            for s_app in siblings
+        ]
+
         if app.case_sent_at:
             out["case"] = {
                 # An uploaded brief is served through the token redirect, which
@@ -610,10 +671,21 @@ class HrApplicationUseCases:
         # Materials belong to this application alone, so their S3 objects would
         # otherwise be orphaned. The candidate's CV and cover letter are left
         # alone - they hang off the candidate and other applications may use them.
-        orphaned = [
-            m.s3_key for m in app.materials
-            if m.s3_key and not s3_service.delete_object(m.s3_key)
-        ]
+        # A material's S3 key is shared with the candidate's other applications
+        # (the same files were attached to each department's row), so only remove
+        # the object once nothing else points at it.
+        orphaned = []
+        for m in app.materials:
+            if not m.s3_key:
+                continue
+            still_referenced = db.query(models.ApplicationMaterial).filter(
+                models.ApplicationMaterial.s3_key == m.s3_key,
+                models.ApplicationMaterial.application_id != application_id,
+            ).first()
+            if still_referenced:
+                continue
+            if not s3_service.delete_object(m.s3_key):
+                orphaned.append(m.s3_key)
         if orphaned:
             # Not fatal - the caller asked to delete the application, and a
             # leftover S3 object shouldn't block that. But it must not vanish
@@ -950,14 +1022,29 @@ def run_matching_task(application_id: int) -> None:
             departments=departments,
         )
         ranked = result["ranked_departments"]
-        if ranked:
-            top = ranked[0]
-            app.suggested_department_id = top["department_id"]
-            app.match_confidence = top["confidence"]
-            app.match_rationale = top["rationale"]
-        app.match_ranking = ranked
-        app.match_flags = result["flags"]
-        app.match_status = "done"
+        by_department = {r["department_id"]: r for r in ranked}
+        top = ranked[0] if ranked else None
+
+        # One LLM call covers the whole candidate, so distribute its result
+        # across every application they filed this cycle: each department gets
+        # ITS OWN score and rationale rather than the top-ranked team's.
+        siblings = db.query(models.Application).filter(
+            models.Application.candidate_id == app.candidate_id,
+            models.Application.cycle_id == app.cycle_id,
+        ).all()
+        for sibling in siblings:
+            own = by_department.get(sibling.department_applied_id)
+            if own:
+                sibling.match_confidence = own["confidence"]
+                sibling.match_rationale = own["rationale"]
+            elif top:
+                sibling.match_confidence = top["confidence"]
+                sibling.match_rationale = top["rationale"]
+            if top:
+                sibling.suggested_department_id = top["department_id"]
+            sibling.match_ranking = ranked
+            sibling.match_flags = result["flags"]
+            sibling.match_status = "done"
         ApplicationUseCases.add_event(
             db, application_id, "ai_match",
             {"ranking": ranked, "flags": result["flags"]}, actor="ai",
@@ -987,11 +1074,20 @@ def send_confirmation_task(application_id: int, status_token: str) -> None:
         app = db.query(models.Application).filter(models.Application.application_id == application_id).first()
         if not app or not app.candidate:
             return
-        dept = app.applied_department
+        # Name every department this candidate applied to, not just the row that
+        # happens to carry the token.
+        siblings = (
+            db.query(models.Application)
+            .filter(models.Application.candidate_id == app.candidate_id,
+                    models.Application.cycle_id == app.cycle_id)
+            .order_by(models.Application.application_id)
+            .all()
+        )
+        names = [s_app.applied_department.name for s_app in siblings if s_app.applied_department]
         sent = send_application_received(
             to_email=app.candidate.email,
             to_name=app.candidate.full_name or "",
-            department_name=dept.name if dept else "Ennova",
+            department_names=names,
             status_token=status_token,
         )
         if sent:

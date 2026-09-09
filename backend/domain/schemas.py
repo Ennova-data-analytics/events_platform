@@ -1208,6 +1208,20 @@ class InterviewInviteIn(BaseModel):
     calendly_link: str | None = None
 
 
+class ApplicationFailureReport(BaseModel):
+    """
+    Reported by the application form when a candidate couldn't submit. Every
+    field is optional: the point is to capture whatever they had filled in, and
+    a partial report is far better than none.
+    """
+    full_name: str | None = Field(None, max_length=255)
+    email: str | None = Field(None, max_length=255)
+    phone: str | None = Field(None, max_length=64)
+    departments: str | None = Field(None, max_length=500)
+    stage: str | None = Field(None, max_length=64, description="Which step failed, e.g. 'upload' or 'submit'")
+    error: str | None = Field(None, max_length=2000)
+
+
 class CaseSubmissionIn(BaseModel):
     """A candidate's case response: either a link or an uploaded file."""
     submission_url: str | None = None

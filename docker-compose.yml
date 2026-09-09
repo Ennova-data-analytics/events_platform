@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build:
@@ -7,7 +5,23 @@ services:
       dockerfile: backend.Dockerfile
     env_file:
       - .env
-    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    # --forwarded-allow-ips="*" makes uvicorn trust X-Forwarded-For, so
+    # request.client.host is the real visitor rather than the nginx container.
+    # Without it every caller shared one address, so the per-IP rate limits in
+    # the recruitment router applied across all applicants at once.
+    #
+    # "*" is safe here for two reasons: this service publishes no ports, so
+    # nginx is the only thing that can reach it; and nginx overwrites
+    # X-Forwarded-For with $remote_addr, so a client can't inject a fake one.
+    # Both conditions must hold - see the comment in nginx/nginx.conf.
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --forwarded-allow-ips="*"
+    # Cap log growth. Note this only takes effect when the container is
+    # recreated, and recreating it discards the existing log.
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   nginx:
     image: nginx:1.21.3-alpine

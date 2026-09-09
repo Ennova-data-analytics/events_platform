@@ -58,6 +58,16 @@ export const RecruitmentService = {
     return ApiClient.post('/recruitment/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
 
+  // Tell the backend a candidate couldn't submit, so recruitment gets an alert
+  // with their contact details. Best-effort: never let this throw, or a failed
+  // application would surface as two errors instead of one.
+  reportApplicationFailure(details) {
+    if (USE_MOCK) return Promise.resolve();
+    return ApiClient.post('/recruitment/report-failure', details).catch((err) => {
+      console.error('Could not report the submission failure:', err);
+    });
+  },
+
   // Best-effort CV parse to prefill the form (spec §3.7). No server endpoint in
   // v1 — prefill is optional, so this is a graceful no-op when live.
   parseCv() {
