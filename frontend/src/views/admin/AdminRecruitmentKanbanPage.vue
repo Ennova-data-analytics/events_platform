@@ -77,12 +77,21 @@
             />
           </v-col>
         </v-row>
-        <div v-if="anyFilterActive" class="d-flex align-center mt-2">
-          <v-chip size="x-small" variant="tonal" class="mr-2">{{ filtered.length }} shown</v-chip>
+        <div class="d-flex align-center flex-wrap ga-2 mt-3">
+          <!-- Applications and people differ: someone applying to three
+               departments files three applications. -->
+          <v-chip size="small" variant="tonal" color="primary">
+            <v-icon start size="x-small">mdi-file-document-multiple-outline</v-icon>
+            {{ filtered.length }} application{{ filtered.length === 1 ? '' : 's' }}
+          </v-chip>
+          <v-chip size="small" variant="tonal">
+            <v-icon start size="x-small">mdi-account-multiple-outline</v-icon>
+            {{ uniqueCandidateCount }} {{ uniqueCandidateCount === 1 ? 'person' : 'people' }}
+          </v-chip>
           <span v-if="listForced" class="text-caption text-medium-emphasis">Filtered - showing detailed list.</span>
           <span v-else-if="showCaseStages" class="text-caption text-medium-emphasis">Case stages shown for this department.</span>
           <v-spacer />
-          <v-btn size="x-small" variant="text" @click="clearFilters">Clear filters</v-btn>
+          <v-btn v-if="anyFilterActive" size="x-small" variant="text" @click="clearFilters">Clear filters</v-btn>
         </div>
       </v-card-text>
     </v-card>
@@ -197,10 +206,13 @@ const headers = [
 
 // A candidate can rank several departments, so every department they picked has
 // to find them here - matching the first choice alone hid them from the rest.
+// Mirrors department_match_clause on the backend. It must NOT match
+// ranked_departments: each ranked department now has its own application row,
+// and every row carries the full ranking, so matching on it showed the same
+// candidate once per department they picked under every filter.
 function appliesToDepartment(app, departmentId) {
   if (app.final_department_id === departmentId) return true;
-  if (app.answers?.department_applied_id === departmentId) return true;
-  return (app.ranked_departments || []).some((d) => d.id === departmentId);
+  return (app.department_applied_id ?? app.answers?.department_applied_id) === departmentId;
 }
 
 // Client-side filtering keeps the mockup snappy and the list/kanban in sync.
@@ -214,6 +226,12 @@ const filtered = computed(() =>
     }
     return true;
   })
+);
+
+// Distinct people behind the visible applications, keyed on the candidate's
+// email since that's what the API exposes and what submission dedupes on.
+const uniqueCandidateCount = computed(
+  () => new Set(filtered.value.map((a) => a.candidate?.email).filter(Boolean)).size
 );
 
 const anyFilterActive = computed(() => !!(filters.department_id || filters.stage || filters.search));

@@ -232,11 +232,11 @@ export const RecruitmentService = {
         let items = clone(mockApplications);
         if (params.cycle_id) items = items.filter((a) => a.cycle_id === params.cycle_id);
         if (params.department_id) {
-          // Mirrors the backend: first choice, any ranked choice, or final placement.
+          // Mirrors the backend: this row's own department, or final placement.
+          // Not the ranking - each ranked department has its own row now.
           items = items.filter(
             (a) => a.final_department_id === params.department_id
-              || a.answers?.department_applied_id === params.department_id
-              || (a.ranked_departments || []).some((d) => d.id === params.department_id)
+              || (a.department_applied_id ?? a.answers?.department_applied_id) === params.department_id
           );
         }
         if (params.search) {
