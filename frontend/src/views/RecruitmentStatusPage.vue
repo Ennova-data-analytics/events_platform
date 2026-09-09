@@ -77,7 +77,24 @@
                     {{ statusMeta(a.status).title }}
                   </v-chip>
                 </div>
-                <p class="text-body-2 text-medium-emphasis mb-0">{{ narrativeFor(a.status).body }}</p>
+                <p class="text-body-2 text-medium-emphasis mb-3">{{ narrativeFor(a.status).body }}</p>
+
+                <!-- Compact per-department progress. The full timeline below is
+                     hidden for multi-department applicants, since one stepper
+                     can only ever describe one of their applications. -->
+                <div class="d-flex align-center flex-wrap ga-1">
+                  <template v-for="(st, i) in stagesFor(a)" :key="st.value">
+                    <v-icon v-if="i > 0" size="x-small" color="grey-lighten-1">mdi-chevron-right</v-icon>
+                    <span
+                      class="text-caption"
+                      :class="st.current
+                        ? 'font-weight-bold text-primary'
+                        : (st.reached ? 'text-medium-emphasis' : 'text-disabled')"
+                    >
+                      {{ st.label }}
+                    </span>
+                  </template>
+                </div>
 
                 <!-- Case study for this department -->
                 <template v-if="a.case && !a.case.submitted_at">
@@ -308,8 +325,8 @@
             </v-card-text>
           </v-card>
 
-          <!-- ── Progress timeline ─────────────────────────────────────── -->
-          <v-card class="mb-4">
+          <!-- ── Progress timeline (single application only) ───────────── -->
+          <v-card v-if="!isMultiApplication" class="mb-4">
             <v-card-title class="text-subtitle-1 font-weight-bold px-6 pt-5">Progress</v-card-title>
             <v-card-text class="px-4 px-sm-6 pb-6">
               <v-timeline side="end" density="comfortable" truncate-line="both" align="start">
@@ -338,8 +355,12 @@
             <v-card-text class="px-4 px-sm-6 pb-6">
               <v-row dense class="mb-2">
                 <v-col cols="6" sm="4">
-                  <div class="text-caption text-medium-emphasis">Department</div>
-                  <div class="text-body-2 font-weight-medium">{{ appliedDepartment?.name || '-' }}</div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ isMultiApplication ? 'Departments' : 'Department' }}
+                  </div>
+                  <div class="text-body-2 font-weight-medium">
+                    {{ isMultiApplication ? allDepartmentNames : (appliedDepartment?.name || '-') }}
+                  </div>
                 </v-col>
                 <v-col cols="6" sm="4">
                   <div class="text-caption text-medium-emphasis">Programme</div>
@@ -377,7 +398,9 @@
                 </v-chip>
               </div>
 
-              <div v-if="application.other_departments?.length" class="mt-3 text-caption text-medium-emphasis">
+              <!-- Only meaningful for a single application; with several, each
+                   department has its own card above. -->
+              <div v-if="!isMultiApplication && application.other_departments?.length" class="mt-3 text-caption text-medium-emphasis">
                 Also being considered by: {{ application.other_departments.map(d => d.name).join(', ') }}.
               </div>
             </v-card-text>
@@ -559,6 +582,23 @@ const STAGE_DESC = {
   interview: 'Meet the team.',
   decision: 'Final call and outcome email.',
 };
+
+// Stage list for one application, used by the compact per-department strip.
+function stagesFor(a) {
+  const journey = [
+    { value: 'applied', label: 'Applied' },
+    { value: 'in_review', label: 'In review' },
+    ...(a.case ? [{ value: 'case', label: 'Case study' }] : []),
+    { value: 'interview', label: 'Interview' },
+    { value: 'decision', label: 'Decision' },
+  ];
+  const order = journey.map((st) => st.value);
+  let reachedIdx;
+  if (['accepted', 'rejected'].includes(a.status)) reachedIdx = order.indexOf('decision');
+  else if (['case_sent', 'case_submitted'].includes(a.status)) reachedIdx = order.indexOf('case');
+  else reachedIdx = order.indexOf(a.status);
+  return journey.map((st, idx) => ({ ...st, reached: idx <= reachedIdx, current: idx === reachedIdx }));
+}
 
 const stages = computed(() => {
   const isMarketing = !!application.value?.case;
