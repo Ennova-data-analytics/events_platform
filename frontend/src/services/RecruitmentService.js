@@ -180,7 +180,7 @@ export const RecruitmentService = {
 
   // Candidate submits their case response via their magic link. Files go
   // through uploadDocument first; `submission_url` is for a self-hosted link.
-  submitCaseResponse(token, { submission_url = null, submission_s3_key = null, submission_filename = null } = {}) {
+  submitCaseResponse(token, { application_id = null, submission_url = null, submission_s3_key = null, submission_filename = null } = {}) {
     if (USE_MOCK) {
       return delay(400).then(() => {
         const id = Number(String(token).replace('mock-token-', '')) || 3;
@@ -195,7 +195,7 @@ export const RecruitmentService = {
       });
     }
     return ApiClient.post(`/recruitment/case-submission/${token}`, {
-      submission_url, submission_s3_key, submission_filename,
+      application_id, submission_url, submission_s3_key, submission_filename,
     }).then((r) => r.data);
   },
 

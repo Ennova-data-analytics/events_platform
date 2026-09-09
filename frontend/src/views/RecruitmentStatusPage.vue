@@ -22,16 +22,20 @@
             <v-card-text class="pa-4 pa-sm-6">
               <div class="d-flex align-center justify-space-between flex-wrap ga-3">
                 <div>
-                  <div class="text-overline text-medium-emphasis">Your application</div>
+                  <div class="text-overline text-medium-emphasis">
+                    {{ isMultiApplication ? 'Your applications' : 'Your application' }}
+                  </div>
                   <h1 class="text-h6 text-sm-h5 font-weight-bold">{{ application.candidate.full_name }}</h1>
                   <div class="text-body-2 text-medium-emphasis d-flex align-center flex-wrap ga-1">
                     <v-icon size="x-small">mdi-account-tie-outline</v-icon>
-                    {{ appliedDepartment?.name || 'Team to be confirmed' }}
+                    <!-- With several applications a single department name here
+                         is misleading, so name them all. -->
+                    {{ isMultiApplication ? allDepartmentNames : (appliedDepartment?.name || 'Team to be confirmed') }}
                     <span class="mx-1">·</span>
                     <span>Ref {{ reference }}</span>
                   </div>
                 </div>
-                <v-chip :color="meta.color" variant="flat" size="large">
+                <v-chip v-if="!isMultiApplication" :color="meta.color" variant="flat" size="large">
                   <v-icon start :icon="meta.icon" />
                   {{ meta.title }}
                 </v-chip>
@@ -42,8 +46,10 @@
             </v-card-text>
           </v-card>
 
-          <!-- Current status narrative -->
-          <v-card class="mb-4" :color="narrative.tone" variant="tonal">
+          <!-- Current status narrative. Per-application when there are
+               several, so it isn't narrating one team's stage as if it were
+               the whole picture. -->
+          <v-card v-if="!isMultiApplication" class="mb-4" :color="narrative.tone" variant="tonal">
             <v-card-text class="pa-4 pa-sm-5 d-flex ga-3 ga-sm-4">
               <v-icon :icon="narrative.icon" size="32" class="mt-1" />
               <div>
@@ -54,34 +60,90 @@
             </v-card-text>
           </v-card>
 
-          <!-- Every department applied to, each with its own stage. Only shown
-               when there's more than one, so single-department applicants see
-               no change. -->
-          <v-card v-if="(application.applications || []).length > 1" class="mb-4" variant="outlined">
-            <v-card-text class="pa-4 pa-sm-5">
-              <div class="text-subtitle-2 font-weight-bold mb-1">Your applications</div>
-              <p class="text-caption text-medium-emphasis mb-3">
-                Each team reviews separately, so these can move at different speeds.
-              </p>
-              <div
-                v-for="a in application.applications"
-                :key="a.id"
-                class="d-flex align-center ga-3 py-2"
-              >
-                <v-icon size="small" color="grey-darken-1">mdi-account-tie-outline</v-icon>
-                <span class="text-body-2 flex-grow-1">{{ a.department?.name || 'Department' }}</span>
-                <v-chip :color="statusMeta(a.status).color" variant="tonal" size="small">
-                  <v-icon start :icon="statusMeta(a.status).icon" size="x-small" />
-                  {{ statusMeta(a.status).title }}
-                </v-chip>
-              </div>
-            </v-card-text>
-          </v-card>
+          <!-- One self-contained card per department: its own stage, its own
+               narrative and its own actions. The single set of action cards
+               below is driven by whichever application holds the token, so a
+               candidate at Interview with two teams saw one booking button and
+               could only book one of them. -->
+          <template v-if="isMultiApplication">
+            <v-card v-for="a in application.applications" :key="a.id" class="mb-4" variant="outlined">
+              <v-card-text class="pa-4 pa-sm-5">
+                <div class="d-flex align-center justify-space-between flex-wrap ga-2 mb-2">
+                  <div class="d-flex align-center ga-2">
+                    <v-icon :icon="statusMeta(a.status).icon" :color="statusMeta(a.status).color" />
+                    <span class="text-subtitle-1 font-weight-bold">{{ a.department?.name || 'Department' }}</span>
+                  </div>
+                  <v-chip :color="statusMeta(a.status).color" variant="tonal" size="small">
+                    {{ statusMeta(a.status).title }}
+                  </v-chip>
+                </div>
+                <p class="text-body-2 text-medium-emphasis mb-0">{{ narrativeFor(a.status).body }}</p>
+
+                <!-- Case study for this department -->
+                <template v-if="a.case && !a.case.submitted_at">
+                  <v-divider class="my-3" />
+                  <div class="d-flex align-center justify-space-between flex-wrap ga-2 mb-2">
+                    <span class="text-subtitle-2 font-weight-bold">Case study</span>
+                    <v-chip :color="isOverdue(a.case) ? 'error' : 'deep-purple'" variant="tonal" size="small">
+                      {{ isOverdue(a.case) ? 'Deadline passed' : countdownFor(a.case) + ' left' }}
+                    </v-chip>
+                  </div>
+                  <p class="text-body-2 text-medium-emphasis mb-3">Due {{ formatDateTime(a.case.deadline_at) }}.</p>
+                  <div class="d-flex ga-2 flex-wrap">
+                    <v-btn v-if="a.case.brief_url" :href="a.case.brief_url" target="_blank" color="deep-purple" variant="flat" size="small" prepend-icon="mdi-download">
+                      Download brief
+                    </v-btn>
+                    <v-btn variant="outlined" size="small" prepend-icon="mdi-upload" @click="openSubmitDialog(a)">
+                      Submit response
+                    </v-btn>
+                  </div>
+                </template>
+                <template v-else-if="a.case?.submitted_at">
+                  <v-divider class="my-3" />
+                  <div class="d-flex align-center ga-2">
+                    <v-icon color="success" size="small">mdi-briefcase-check-outline</v-icon>
+                    <span class="text-body-2 text-medium-emphasis">
+                      Case submitted {{ formatDateTime(a.case.submitted_at) }}
+                    </span>
+                  </div>
+                </template>
+
+                <!-- Interview for this department -->
+                <template v-if="a.interview">
+                  <v-divider class="my-3" />
+                  <div class="d-flex align-center ga-2">
+                    <v-icon color="purple" size="small">mdi-calendar-check</v-icon>
+                    <span class="text-body-2">Interview booked for {{ formatDateTime(a.interview.starts_at) }}</span>
+                  </div>
+                  <v-btn v-if="a.interview.meeting_link" :href="a.interview.meeting_link" target="_blank" size="small" variant="text" color="primary" prepend-icon="mdi-video" class="mt-2">
+                    Join the call
+                  </v-btn>
+                </template>
+                <template v-else-if="a.status === 'interview'">
+                  <v-divider class="my-3" />
+                  <v-btn
+                    v-if="a.department?.calendly_link"
+                    :href="a.department.calendly_link"
+                    target="_blank"
+                    color="primary"
+                    variant="flat"
+                    size="small"
+                    prepend-icon="mdi-calendar-account"
+                  >
+                    Book my {{ a.department.name }} interview
+                  </v-btn>
+                  <p v-else class="text-body-2 text-medium-emphasis mb-0">
+                    We'll email you shortly to arrange a time for this one.
+                  </p>
+                </template>
+              </v-card-text>
+            </v-card>
+          </template>
 
           <!-- ── Action cards ──────────────────────────────────────────── -->
 
           <!-- Marketing case: brief + deadline -->
-          <v-card v-if="application.case && !application.case.submitted_at" class="mb-4" variant="outlined">
+          <v-card v-if="!isMultiApplication && application.case && !application.case.submitted_at" class="mb-4" variant="outlined">
             <v-card-text class="pa-4 pa-sm-5">
               <div class="d-flex align-center justify-space-between flex-wrap ga-2 mb-2">
                 <div class="d-flex align-center">
@@ -108,7 +170,7 @@
           </v-card>
 
           <!-- Confirmation once they've submitted -->
-          <v-card v-else-if="application.case?.submitted_at" class="mb-4" variant="outlined">
+          <v-card v-else-if="!isMultiApplication && application.case?.submitted_at" class="mb-4" variant="outlined">
             <v-card-text class="pa-4 pa-sm-5">
               <div class="d-flex align-center mb-2">
                 <v-icon color="success" class="mr-2">mdi-briefcase-check-outline</v-icon>
@@ -180,7 +242,7 @@
           </v-dialog>
 
           <!-- Interview booked -->
-          <v-card v-if="application.interview" class="mb-4" variant="outlined">
+          <v-card v-if="!isMultiApplication && application.interview" class="mb-4" variant="outlined">
             <v-card-text class="pa-4 pa-sm-5">
               <div class="d-flex align-center mb-2">
                 <v-icon color="success" class="mr-2">mdi-calendar-check</v-icon>
@@ -196,7 +258,7 @@
           </v-card>
 
           <!-- Interview invite (book via Calendly) -->
-          <v-card v-else-if="application.status === 'interview'" class="mb-4" variant="outlined">
+          <v-card v-else-if="!isMultiApplication && application.status === 'interview'" class="mb-4" variant="outlined">
             <v-card-text class="pa-4 pa-sm-5">
               <div class="d-flex align-center mb-2">
                 <v-icon color="purple" class="mr-2">mdi-calendar-clock</v-icon>
@@ -374,8 +436,42 @@ function notify(text, color = 'success') {
   toast.show = true;
 }
 
+// ── Multi-department applicants ───────────────────────────────────────────
+// A candidate picking several departments files one application per team, each
+// with its own stage and actions.
+const isMultiApplication = computed(() => (application.value?.applications || []).length > 1);
+const allDepartmentNames = computed(
+  () => (application.value?.applications || [])
+    .map((a) => a.department?.name).filter(Boolean).join(' · ')
+);
+
+function narrativeFor(status) {
+  return NARRATIVES[status] || NARRATIVES.applied;
+}
+function isOverdue(caseBlock) {
+  return !!caseBlock?.deadline_at && new Date(caseBlock.deadline_at) < new Date();
+}
+function countdownFor(caseBlock) {
+  if (!caseBlock?.deadline_at) return '';
+  const diff = new Date(caseBlock.deadline_at).getTime() - Date.now();
+  if (diff <= 0) return 'overdue';
+  const hrs = Math.round(diff / 3600000);
+  return hrs < 24 ? `${hrs}h` : `${Math.round(hrs / 24)}d`;
+}
+
 // ── Case response submission ──────────────────────────────────────────────
 const submitDialog = ref(false);
+// Which application the dialog is answering for; null means the one holding
+// the token, which is all a single-department candidate needs.
+const submitForApplicationId = ref(null);
+
+function openSubmitDialog(app) {
+  submitForApplicationId.value = app?.id ?? null;
+  submissionFile.value = null;
+  submissionUrl.value = '';
+  submitMode.value = 'file';
+  submitDialog.value = true;
+}
 const submitMode = ref('file');
 const submissionFile = ref(null);
 const submissionUrl = ref('');
@@ -395,6 +491,7 @@ async function submitCaseResponse() {
     } else {
       payload = { submission_url: submissionUrl.value.trim() };
     }
+    payload.application_id = submitForApplicationId.value;
     // The endpoint returns the refreshed status, so the page reflects the new
     // stage without a reload.
     application.value = await RecruitmentService.submitCaseResponse(route.params.token, payload);

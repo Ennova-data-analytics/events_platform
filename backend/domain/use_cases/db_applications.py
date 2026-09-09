@@ -34,7 +34,7 @@ def presign_or_502(s3_key: str, what: str) -> str:
     return url
 
 
-def case_brief_redirect_url(token: str) -> str:
+def case_brief_redirect_url(token: str, application_id: int | None = None) -> str:
     """
     Permanent link to a candidate's case brief, safe to put in an email.
 
@@ -44,7 +44,8 @@ def case_brief_redirect_url(token: str) -> str:
     production and Vite does the same in dev, so one form works in both.
     """
     from core.config import settings
-    return f"{settings.FRONTEND_URL.rstrip('/')}/api/recruitment/case-brief/{token}"
+    base = f"{settings.FRONTEND_URL.rstrip('/')}/api/recruitment/case-brief/{token}"
+    return f"{base}?application_id={application_id}" if application_id else base
 
 
 def department_match_clause(department_id: int):
@@ -456,12 +457,38 @@ class ApplicationUseCases:
             .order_by(models.Application.application_id)
             .all()
         )
+        def _case_block(a: models.Application) -> dict | None:
+            if not a.case_sent_at:
+                return None
+            return {
+                "brief_url": (
+                    case_brief_redirect_url(token, a.application_id)
+                    if a.case_brief_s3_key and token
+                    else a.case_brief_url
+                ),
+                "sent_at": a.case_sent_at.isoformat(),
+                "deadline_at": a.case_deadline_at.isoformat() if a.case_deadline_at else None,
+                "submitted_at": a.case_submitted_at.isoformat() if a.case_submitted_at else None,
+                "submission_filename": a.case_submission_filename,
+            }
+
+        def _interview_block(a: models.Application) -> dict | None:
+            iv = a.interviews[0] if a.interviews else None
+            if not iv or not iv.scheduled_at:
+                return None
+            return {"starts_at": iv.scheduled_at.isoformat(), "meeting_link": iv.meeting_link}
+
+        # Each application carries its own stage, booking link and case, so the
+        # status page can offer the right action per department rather than only
+        # for whichever row happens to hold the token.
         out["applications"] = [
             {
                 "id": s_app.application_id,
                 "status": s_app.status,
                 "is_current": s_app.application_id == app.application_id,
-                "department": serialize_department(s_app.applied_department),
+                "department": serialize_department(s_app.final_department or s_app.applied_department),
+                "case": _case_block(s_app),
+                "interview": _interview_block(s_app),
             }
             for s_app in siblings
         ]

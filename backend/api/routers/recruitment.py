@@ -188,18 +188,40 @@ def get_status(token: str, db: Session = Depends(deps.get_db)):
 
 
 @router.get("/case-brief/{token}")
-def get_case_brief(token: str, db: Session = Depends(deps.get_db)):
+def get_case_brief(
+    token: str,
+    application_id: int | None = None,
+    db: Session = Depends(deps.get_db),
+):
     """
     Redirect a candidate to their case brief.
 
     This is the link that goes in the case email. It has to stay valid for the
     whole deadline window, so it mints a fresh presigned URL on each request
     rather than embedding one that would expire within the hour. Access is
-    scoped to the candidate's own application by their status token, and stays
-    open after the deadline so they can re-read the brief.
+    scoped by the candidate's status token, and stays open after the deadline so
+    they can re-read the brief.
+
+    application_id targets one of the candidate's OTHER applications this cycle,
+    since a candidate applying to several departments holds one token but may
+    owe a case to more than one of them. It is checked against the token's own
+    candidate and cycle, so it can't reach anyone else's brief.
     """
     app = ApplicationUseCases.get_application_by_token(db, token, purpose="status")
-    if not app or not app.case_brief_s3_key:
+    if not app:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case brief not found")
+
+    if application_id and application_id != app.application_id:
+        sibling = db.query(models.Application).filter(
+            models.Application.application_id == application_id,
+            models.Application.candidate_id == app.candidate_id,
+            models.Application.cycle_id == app.cycle_id,
+        ).first()
+        if not sibling:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case brief not found")
+        app = sibling
+
+    if not app.case_brief_s3_key:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case brief not found")
     # presign_or_502 rather than redirecting to None, which would send the
     # candidate to a broken page with nothing logged.
@@ -217,8 +239,22 @@ def submit_case_response(token: str, data: schemas.CaseSubmissionIn, db: Session
     app = ApplicationUseCases.get_application_by_token(db, token, purpose="status")
     if not app:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
-    app = ApplicationUseCases.submit_case(db, app, data)
-    return ApplicationUseCases.serialize_status(db, app, token=token)
+
+    # Target one specific application: a candidate with several may owe a case
+    # to more than one department. Scoped to their own candidate and cycle.
+    token_app = app
+    if data.application_id and data.application_id != app.application_id:
+        sibling = db.query(models.Application).filter(
+            models.Application.application_id == data.application_id,
+            models.Application.candidate_id == app.candidate_id,
+            models.Application.cycle_id == app.cycle_id,
+        ).first()
+        if not sibling:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+        app = sibling
+
+    ApplicationUseCases.submit_case(db, app, data)
+    return ApplicationUseCases.serialize_status(db, token_app, token=token)
 
 
 # ── Calendly webhook (interview booked / cancelled) ─────────────────────────

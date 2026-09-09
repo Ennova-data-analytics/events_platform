@@ -1224,6 +1224,9 @@ class ApplicationFailureReport(BaseModel):
 
 class CaseSubmissionIn(BaseModel):
     """A candidate's case response: either a link or an uploaded file."""
+    # Which application this answers. Omitted means the one holding the token,
+    # which is all a single-department candidate ever needs.
+    application_id: int | None = None
     submission_url: str | None = None
     submission_s3_key: str | None = None
     submission_filename: str | None = None
