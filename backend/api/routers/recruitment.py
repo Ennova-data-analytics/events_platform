@@ -241,20 +241,41 @@ def submit_case_response(token: str, data: schemas.CaseSubmissionIn, db: Session
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
 
     # Target one specific application: a candidate with several may owe a case
-    # to more than one department. Scoped to their own candidate and cycle.
-    token_app = app
-    if data.application_id and data.application_id != app.application_id:
-        sibling = db.query(models.Application).filter(
-            models.Application.application_id == data.application_id,
-            models.Application.candidate_id == app.candidate_id,
-            models.Application.cycle_id == app.cycle_id,
-        ).first()
-        if not sibling:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
-        app = sibling
+    # to more than one department.
+    ApplicationUseCases.submit_case(db, _target_application(db, app, data.application_id), data)
+    return ApplicationUseCases.serialize_status(db, app, token=token)
 
-    ApplicationUseCases.submit_case(db, app, data)
-    return ApplicationUseCases.serialize_status(db, token_app, token=token)
+
+@router.post("/offer-response/{token}")
+def respond_to_offer(token: str, data: schemas.OfferResponseIn, db: Session = Depends(deps.get_db)):
+    """
+    Accept or decline an offer (candidate, via their magic link). Accepting
+    locks the candidate's other open applications this cycle.
+    """
+    app = ApplicationUseCases.get_application_by_token(db, token, purpose="status")
+    if not app:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    ApplicationUseCases.respond_to_offer(db, _target_application(db, app, data.application_id), data.decision)
+    db.refresh(app)
+    return ApplicationUseCases.serialize_status(db, app, token=token)
+
+
+def _target_application(db: Session, token_app: models.Application, application_id: int | None) -> models.Application:
+    """
+    The application a candidate action is aimed at: the token's own, or one of
+    the candidate's other applications this cycle. Scoped to their own
+    candidate and cycle, so it can't reach anyone else's.
+    """
+    if not application_id or application_id == token_app.application_id:
+        return token_app
+    sibling = db.query(models.Application).filter(
+        models.Application.application_id == application_id,
+        models.Application.candidate_id == token_app.candidate_id,
+        models.Application.cycle_id == token_app.cycle_id,
+    ).first()
+    if not sibling:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    return sibling
 
 
 # ── Calendly webhook (interview booked / cancelled) ─────────────────────────

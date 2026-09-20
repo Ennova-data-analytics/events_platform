@@ -222,7 +222,7 @@ def change_status(
     scoped = deps.recruiter_department_ids(db, current_user)
     return HrApplicationUseCases.change_status(
         db, scoped, application_id, data.status, _actor(current_user),
-        calendly_link=data.calendly_link,
+        calendly_link=data.calendly_link, offer_days=data.offer_days,
     )
 
 

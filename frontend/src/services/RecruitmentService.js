@@ -210,6 +210,21 @@ export const RecruitmentService = {
     }).then((r) => r.data);
   },
 
+  // Candidate accepts or declines an offer via their magic link. Returns the
+  // refreshed status, since accepting also locks their other applications.
+  respondToOffer(token, { application_id = null, decision }) {
+    if (USE_MOCK) {
+      return delay(400).then(() => {
+        const id = Number(String(token).replace('mock-token-', '')) || 3;
+        const app = mockApplications.find((a) => a.id === id);
+        if (app) app.status = decision === 'accept' ? 'accepted' : 'offer_declined';
+        return clone(app);
+      });
+    }
+    return ApiClient.post(`/recruitment/offer-response/${token}`, { application_id, decision })
+      .then((r) => r.data);
+  },
+
   getCaseSubmissionUrl(id) {
     if (USE_MOCK) return delay(150).then(() => '#mock-case-submission');
     return ApiClient.get(`/hr/recruitment/applications/${id}/case-submission/url`).then((r) => r.data.url);
@@ -293,8 +308,8 @@ export const RecruitmentService = {
   },
 
   // calendly_link is only used when moving to 'interview', which sends the
-  // invite as part of the move.
-  updateStatus(id, status, calendlyLink = null) {
+  // invite as part of the move; offer_days only when moving to 'offered'.
+  updateStatus(id, status, calendlyLink = null, offerDays = null) {
     if (USE_MOCK) {
       return delay(200).then(() => {
         const app = mockApplications.find((a) => a.id === Number(id));
@@ -306,7 +321,7 @@ export const RecruitmentService = {
       });
     }
     return ApiClient.patch(`/hr/recruitment/applications/${id}/status`, {
-      status, calendly_link: calendlyLink,
+      status, calendly_link: calendlyLink, offer_days: offerDays,
     }).then((r) => r.data);
   },
 

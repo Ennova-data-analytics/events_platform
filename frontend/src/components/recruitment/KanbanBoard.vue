@@ -22,7 +22,8 @@
             :key="app.id"
             variant="outlined"
             class="mb-2 kanban-card"
-            draggable="true"
+            :class="{ 'kanban-card--locked': isFrozen(app) }"
+            :draggable="!isFrozen(app)"
             @dragstart="onDragStart(app)"
             @dragend="dragging = null"
             @click="$emit('open', app.id)"
@@ -36,6 +37,17 @@
               </div>
 
               <div class="d-flex align-center flex-wrap ga-1 mt-2">
+                <!-- Where this candidate ranked the department in view. -->
+                <v-chip
+                  v-if="choiceMeta(app)"
+                  size="x-small"
+                  :color="choiceMeta(app).color"
+                  :variant="choiceMeta(app).first ? 'flat' : 'tonal'"
+                  :title="choiceMeta(app).title"
+                >
+                  <v-icon start size="x-small">{{ choiceMeta(app).icon }}</v-icon>
+                  {{ choiceMeta(app).text }}
+                </v-chip>
                 <v-chip
                   v-if="app.final_department"
                   size="x-small"
@@ -64,6 +76,22 @@
                 </v-chip>
               </div>
 
+              <!-- Locked: the candidate accepted another department's offer -->
+              <div v-if="app.locked" class="mt-2">
+                <v-chip size="x-small" color="grey-darken-1" variant="flat">
+                  <v-icon start size="x-small">mdi-lock-outline</v-icon>
+                  Accepted by {{ app.locked.by_department || 'another department' }}
+                </v-chip>
+              </div>
+
+              <!-- Offer awaiting the candidate's answer -->
+              <div v-else-if="app.status === 'offered' && app.offer" class="mt-2">
+                <v-chip size="x-small" :color="app.offer.overdue ? 'error' : 'teal'" variant="tonal">
+                  <v-icon start size="x-small">mdi-timer-sand</v-icon>
+                  {{ app.offer.overdue ? 'Offer overdue' : `Answer due ${offerCountdown(app)}` }}
+                </v-chip>
+              </div>
+
               <!-- Marketing case deadline badge -->
               <div v-if="app.case && !app.case.submitted_at" class="mt-2">
                 <v-chip size="x-small" :color="caseOverdue(app) ? 'error' : 'deep-purple'" variant="tonal">
@@ -89,7 +117,7 @@
 
 <script setup>
 import { ref } from 'vue';
-import { APPLICATION_STATUSES } from '@/data/recruitmentMock.js';
+import { APPLICATION_STATUSES, choiceMeta } from '@/data/recruitmentMock.js';
 
 import { computed } from 'vue';
 
@@ -125,6 +153,12 @@ function itemsFor(status) {
   return props.applications.filter((a) => a.status === status);
 }
 
+// Locked cards and accepted offers can't be moved: a locked application is
+// closed, and moving an accepted one would strand the applications it locked.
+function isFrozen(app) {
+  return !!app.locked || app.status === 'accepted';
+}
+
 function onDragStart(app) {
   dragging.value = app;
 }
@@ -147,6 +181,12 @@ function timeAgo(iso) {
   if (days === 0) return 'today';
   if (days === 1) return '1 day ago';
   return `${days} days ago`;
+}
+
+function offerCountdown(app) {
+  const diff = new Date(app.offer.expires_at).getTime() - Date.now();
+  const hrs = Math.max(1, Math.round(diff / 3600000));
+  return hrs < 24 ? `in ${hrs}h` : `in ${Math.round(hrs / 24)}d`;
 }
 
 function caseOverdue(app) {
@@ -190,6 +230,10 @@ function caseCountdown(app) {
 }
 .kanban-card:active {
   cursor: grabbing;
+}
+.kanban-card--locked {
+  cursor: pointer;
+  opacity: 0.6;
 }
 .kanban-empty {
   border: 1px dashed rgba(var(--v-theme-on-surface), 0.15);

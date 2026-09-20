@@ -1194,6 +1194,15 @@ class StatusChangeIn(BaseModel):
     # Booking link used when moving to 'interview', which sends the invite
     # automatically. Falls back to the department's saved link.
     calendly_link: str | None = None
+    # Days the candidate has to answer, used when moving to 'offered'.
+    offer_days: int | None = Field(None, ge=1, le=60)
+
+
+class OfferResponseIn(BaseModel):
+    """A candidate accepting or declining an offer from their status page."""
+    # Which application's offer. Omitted means the one holding the token.
+    application_id: int | None = None
+    decision: Literal['accept', 'decline']
 
 
 class FinalDepartmentIn(BaseModel):

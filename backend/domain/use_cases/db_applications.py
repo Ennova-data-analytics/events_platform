@@ -9,6 +9,7 @@ from domain import models, schemas
 logger = logging.getLogger(__name__)
 
 TOKEN_TTL_DAYS = 180
+OFFER_DAYS_DEFAULT = 7
 
 
 def _now() -> datetime:
@@ -102,6 +103,33 @@ def serialize_department(d: models.Department | None, include_rubric: bool = Fal
     return out
 
 
+def offer_block(app: models.Application) -> dict | None:
+    """The application's offer, if one was ever sent. Shared by HR and candidate views."""
+    if not app.offer_sent_at:
+        return None
+    return {
+        "sent_at": app.offer_sent_at.isoformat(),
+        "expires_at": app.offer_expires_at.isoformat() if app.offer_expires_at else None,
+        "responded_at": app.offer_responded_at.isoformat() if app.offer_responded_at else None,
+        "overdue": bool(
+            app.status == "offered" and app.offer_expires_at and app.offer_expires_at < _now()
+        ),
+    }
+
+
+def lock_block(app: models.Application) -> dict | None:
+    """Why the application is locked: the candidate accepted another department's offer."""
+    if not app.locked_at:
+        return None
+    by = app.locked_by
+    dept = (by.final_department or by.applied_department) if by else None
+    return {
+        "locked_at": app.locked_at.isoformat(),
+        "by_application_id": app.locked_by_application_id,
+        "by_department": dept.name if dept else None,
+    }
+
+
 def serialize_application(db: Session, app: models.Application) -> dict:
     """Full HR-facing serialization of an application (used for list + detail)."""
     cand = app.candidate
@@ -154,6 +182,8 @@ def serialize_application(db: Session, app: models.Application) -> dict:
         "ranked_departments": ranked,
         "other_departments": others,
         "interview_invite_sent": app.interview_invite_sent,
+        "offer": offer_block(app),
+        "locked": lock_block(app),
         "timeline": [
             {"type": e.type, "payload": e.payload, "actor": e.actor,
              "created_at": e.created_at.isoformat() if e.created_at else None}
@@ -175,6 +205,70 @@ def serialize_application(db: Session, app: models.Application) -> dict:
             "submission_filename": app.case_submission_filename,
         }
     return out
+
+
+def ensure_unlocked(app: models.Application) -> None:
+    """Refuse any action on an application closed by an offer accepted elsewhere."""
+    if not app.locked_at:
+        return
+    by = lock_block(app)["by_department"] or "another department"
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=f"This application is locked: the candidate has accepted an offer from {by}.",
+    )
+
+
+def _accepted_sibling(db: Session, app: models.Application) -> models.Application | None:
+    """The candidate's accepted application this cycle, other than `app`, if any."""
+    return (
+        db.query(models.Application)
+        .filter(models.Application.candidate_id == app.candidate_id,
+                models.Application.cycle_id == app.cycle_id,
+                models.Application.application_id != app.application_id,
+                models.Application.status == "accepted")
+        .first()
+    )
+
+
+def _department_name(app: models.Application) -> str:
+    dept = app.final_department or app.applied_department
+    return dept.name if dept else "Ennova"
+
+
+def _notify_department_recruiters(db: Session, app: models.Application, **email_kwargs) -> int:
+    """
+    Email every recruiter assigned to the application's department. Returns how
+    many were sent. A department with no recruiters, or a failed send, is logged
+    rather than raised: the candidate's response is already committed.
+    """
+    from domain.services.recruitment.emails import send_recruiter_offer_update
+    dept = app.final_department or app.applied_department
+    if not dept:
+        logger.warning("Application %s has no department; no recruiter to notify", app.application_id)
+        return 0
+    recruiters = (
+        db.query(models.User)
+        .join(models.RecruiterDepartment, models.RecruiterDepartment.user_id == models.User.user_id)
+        .filter(models.RecruiterDepartment.department_id == dept.department_id)
+        .all()
+    )
+    if not recruiters:
+        logger.warning(
+            "No recruiters assigned to %s; offer update for application %s went to no one",
+            dept.name, app.application_id,
+        )
+        return 0
+    sent = 0
+    for r in recruiters:
+        if send_recruiter_offer_update(
+            to_email=r.email, to_name=r.full_name or "", department_name=dept.name, **email_kwargs,
+        ):
+            sent += 1
+        else:
+            logger.error(
+                "Offer update email to recruiter %s failed (application %s)", r.email, app.application_id,
+            )
+    return sent
 
 
 class ApplicationUseCases:
@@ -361,6 +455,7 @@ class ApplicationUseCases:
         technicality. case_submitted_at is recorded so reviewers can compare it
         against case_deadline_at and see for themselves.
         """
+        ensure_unlocked(app)
         if not app.case_sent_at:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -400,6 +495,96 @@ class ApplicationUseCases:
             "Case response submitted for application %s (late=%s)", app.application_id, late,
         )
         return app
+
+    @staticmethod
+    def respond_to_offer(db: Session, app: models.Application, decision: str) -> None:
+        """
+        The candidate accepts or declines an offer.
+
+        Accepting locks every other open application the candidate has this
+        cycle. Those rows keep their stage and history, so each department can
+        still see how far the candidate got, but nothing more can happen on them.
+        The candidate's rows are locked FOR UPDATE first, so two offers accepted
+        at the same moment can't both succeed.
+        """
+        if decision not in ("accept", "decline"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Decision must be accept or decline")
+
+        siblings = (
+            db.query(models.Application)
+            .filter(models.Application.candidate_id == app.candidate_id,
+                    models.Application.cycle_id == app.cycle_id)
+            .order_by(models.Application.application_id)
+            .with_for_update()
+            .populate_existing()
+            .all()
+        )
+        ensure_unlocked(app)
+        if app.status != "offered":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="There is no open offer on this application. Refresh the page to see its latest status.",
+            )
+
+        now = _now()
+        department = _department_name(app)
+        candidate_name = app.candidate.full_name or app.candidate.email
+
+        if decision == "decline":
+            app.status = "offer_declined"
+            app.offer_responded_at = now
+            ApplicationUseCases.add_event(
+                db, app.application_id, "status_change", {"to": "offer_declined"}, actor="candidate")
+            db.commit()
+            logger.info("Candidate declined offer on application %s", app.application_id)
+            _notify_department_recruiters(db, app, candidate_name=candidate_name, outcome="declined")
+            return
+
+        already = next((s for s in siblings if s.application_id != app.application_id and s.status == "accepted"), None)
+        if already:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"You've already accepted an offer from {_department_name(already)}.",
+            )
+
+        app.status = "accepted"
+        app.offer_responded_at = now
+        ApplicationUseCases.add_event(
+            db, app.application_id, "status_change", {"to": "accepted"}, actor="candidate")
+        locked: list[models.Application] = []
+        for s_app in siblings:
+            if s_app.application_id == app.application_id or s_app.locked_at:
+                continue
+            if s_app.status in models.CLOSED_STATUSES:
+                continue
+            s_app.locked_at = now
+            s_app.locked_by_application_id = app.application_id
+            ApplicationUseCases.add_event(
+                db, s_app.application_id, "locked",
+                {"by_department": department, "by_application_id": app.application_id}, actor="candidate")
+            locked.append(s_app)
+        db.commit()
+        logger.info(
+            "Candidate accepted offer on application %s; locked %d other application(s)",
+            app.application_id, len(locked),
+        )
+
+        # Emails go out only once the acceptance is committed, so no one is told
+        # about an outcome that then failed to save.
+        from domain.services.recruitment.emails import send_offer_accepted
+        if send_offer_accepted(
+            to_email=app.candidate.email, to_name=app.candidate.full_name or "",
+            department_name=department, closed_departments=[_department_name(s) for s in locked],
+        ):
+            ApplicationUseCases.add_event(
+                db, app.application_id, "email_sent", {"template": "Offer accepted confirmation"}, actor="system")
+        else:
+            logger.error("Offer accepted confirmation email failed for application %s", app.application_id)
+        _notify_department_recruiters(db, app, candidate_name=candidate_name, outcome="accepted")
+        for s_app in locked:
+            _notify_department_recruiters(
+                db, s_app, candidate_name=candidate_name, outcome="locked", accepted_department=department)
+        db.commit()
 
     # ── Candidate-facing status serialization ───────────────────────────────
     @staticmethod
@@ -489,9 +674,13 @@ class ApplicationUseCases:
                 "department": serialize_department(s_app.final_department or s_app.applied_department),
                 "case": _case_block(s_app),
                 "interview": _interview_block(s_app),
+                "offer": offer_block(s_app),
+                "locked": lock_block(s_app),
             }
             for s_app in siblings
         ]
+        out["offer"] = offer_block(app)
+        out["locked"] = lock_block(app)
 
         if app.case_sent_at:
             out["case"] = {
@@ -561,20 +750,27 @@ def compute_funnel(db: Session, cycle_id: int, scoped_ids: list[int] | None) -> 
     else:
         apps = q.all()
 
-    # A candidate "reached" a stage if they're at or past it.
-    order = ["applied", "in_review", "case_sent", "case_submitted", "interview", "decision", "accepted", "rejected"]
+    # A candidate "reached" a stage if they're at or past it. Every outcome
+    # status sits after the decision stage.
+    order = ["applied", "in_review", "case_sent", "case_submitted", "interview", "decision"]
     rank = {s: i for i, s in enumerate(order)}
 
     def reached(app, stage):
-        cur = rank.get(app.status, 0)
-        if app.status in ("accepted", "rejected"):
-            cur = rank["decision"] if stage != app.status else cur
+        cur = rank["decision"] if app.status not in rank else rank[app.status]
+        if app.status == "withdrawn":
+            cur = 0
         return cur >= rank[stage]
+
+    def was_offered(app):
+        # Accepted rows from before offers existed have no offer_sent_at.
+        return bool(app.offer_sent_at) or app.status in ("offered", "accepted", "offer_declined")
 
     total = len(apps)
     interviewed = sum(1 for a in apps if reached(a, "interview"))
-    offered = sum(1 for a in apps if a.status in ("accepted",) or reached(a, "decision"))
-    accepted = sum(1 for a in apps if a.status == "accepted")
+    offered = sum(1 for a in apps if was_offered(a))
+    # People, not rows: a candidate accepts at most one offer per cycle, but
+    # rows accepted before that rule existed could otherwise count twice.
+    accepted = len({a.candidate_id for a in apps if a.status == "accepted"})
     overall = {
         "applied": total,
         "in_review": sum(1 for a in apps if reached(a, "in_review")),
@@ -593,7 +789,7 @@ def compute_funnel(db: Session, cycle_id: int, scoped_ids: list[int] | None) -> 
         row["applied"] += 1
         if reached(a, "interview"):
             row["interview"] += 1
-        if reached(a, "decision"):
+        if was_offered(a):
             row["offered"] += 1
         if a.status == "accepted":
             row["accepted"] += 1
@@ -620,12 +816,14 @@ def compute_funnel(db: Session, cycle_id: int, scoped_ids: list[int] | None) -> 
             confirmed += 1
     ai_match = {"confirmed": confirmed, "overridden": overridden, "pending": pending}
 
-    # Median days from application to a decision (accepted/rejected/decision).
+    # Median days from application to a decision. Sending the offer is the
+    # recruiter's decision; the candidate's answer comes after.
+    decision_statuses = ("decision", "offered", "accepted", "offer_declined", "rejected")
     decided_spans = []
     for a in apps:
-        if a.status in ("accepted", "rejected", "decision"):
+        if a.status in decision_statuses:
             ev = next((e for e in a.events if e.type == "status_change"
-                       and (e.payload or {}).get("to") in ("accepted", "rejected", "decision")), None)
+                       and (e.payload or {}).get("to") in decision_statuses), None)
             if ev and a.created_at and ev.created_at:
                 decided_spans.append((ev.created_at - a.created_at).total_seconds() / 86400)
     avg_days_to_decision = round(sum(decided_spans) / len(decided_spans), 1) if decided_spans else None
@@ -738,10 +936,30 @@ class HrApplicationUseCases:
 
     @staticmethod
     def change_status(db: Session, scoped_ids, application_id: int, new_status: str, actor: str,
-                      calendly_link: str | None = None) -> dict:
+                      calendly_link: str | None = None, offer_days: int | None = None) -> dict:
         if new_status not in models.APPLICATION_STATUSES:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status")
+        if new_status in models.CANDIDATE_ONLY_STATUSES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only the candidate can accept or decline an offer. Move them to Offered to send one.",
+            )
         app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
+        ensure_unlocked(app)
+        if app.status == "accepted":
+            # Moving it would leave the candidate's other applications locked
+            # behind an offer that no longer stands.
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The candidate has accepted this offer, so its stage can no longer be changed.",
+            )
+        if new_status == "offered":
+            other = _accepted_sibling(db, app)
+            if other:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"The candidate has already accepted an offer from {_department_name(other)}.",
+                )
 
         # Moving to interview sends the invite, so the candidate always gets a
         # booking link. Resolved before the status is written: without a link the
@@ -762,26 +980,68 @@ class HrApplicationUseCases:
         app.status = new_status
         ApplicationUseCases.add_event(db, application_id, "status_change", {"to": new_status}, actor=actor)
 
-        # Status change is THE trigger for outcome emails (accepted/rejected)
+        # Status change is THE trigger for outcome emails (offer/rejection)
         # and, above, for the interview invite.
-        if new_status in ("accepted", "rejected"):
-            from domain.services.recruitment.emails import send_outcome
-            dept = app.final_department or app.applied_department
-            sent = send_outcome(
+        if new_status == "offered":
+            HrApplicationUseCases._send_offer(db, app, offer_days or OFFER_DAYS_DEFAULT)
+        elif new_status == "rejected":
+            from domain.services.recruitment.emails import send_rejection
+            sent = send_rejection(
                 to_email=app.candidate.email, to_name=app.candidate.full_name or "",
-                department_name=dept.name if dept else "Ennova", accepted=(new_status == "accepted"),
+                department_name=_department_name(app),
             )
             if sent:
-                ApplicationUseCases.add_event(
-                    db, application_id, "email_sent",
-                    {"template": "Offer" if new_status == "accepted" else "Rejection"}, actor="system")
+                ApplicationUseCases.add_event(db, application_id, "email_sent", {"template": "Rejection"}, actor="system")
+            else:
+                logger.error("Rejection email failed for application %s", application_id)
         db.commit()
         db.refresh(app)
         return serialize_application(db, app)
 
     @staticmethod
+    def _send_offer(db: Session, app: models.Application, days: int) -> None:
+        """
+        Record the offer and email it. Re-sending replaces the deadline and
+        clears any earlier response. Does not commit - the caller owns the
+        transaction.
+        """
+        from domain.services.recruitment.emails import send_offer
+        now = _now()
+        app.offer_sent_at = now
+        app.offer_expires_at = now + timedelta(days=days)
+        app.offer_responded_at = None
+
+        # Siblings still in progress, so the email can say what accepting closes.
+        open_others = (
+            db.query(models.Application)
+            .filter(models.Application.candidate_id == app.candidate_id,
+                    models.Application.cycle_id == app.cycle_id,
+                    models.Application.application_id != app.application_id,
+                    models.Application.locked_at.is_(None),
+                    models.Application.status.notin_(models.CLOSED_STATUSES))
+            .order_by(models.Application.application_id)
+            .all()
+        )
+        # Any of the candidate's rows opens the full status page, which lists
+        # every application this cycle, so this row's own token is enough.
+        token = ApplicationUseCases._get_or_create_token(db, app.application_id, "status")
+        sent = send_offer(
+            to_email=app.candidate.email, to_name=app.candidate.full_name or "",
+            department_name=_department_name(app),
+            deadline_str=app.offer_expires_at.strftime("%a %d %b, %H:%M"),
+            status_token=token.token,
+            other_open_departments=[_department_name(o) for o in open_others],
+        )
+        if sent:
+            ApplicationUseCases.add_event(
+                db, app.application_id, "email_sent", {"template": f"Offer ({days}-day deadline)"}, actor="system")
+        else:
+            logger.error("Offer email failed for application %s", app.application_id)
+
+    @staticmethod
     def set_final_department(db: Session, scoped_ids, application_id: int, department_id: int, actor: str) -> dict:
         app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
+        ensure_unlocked(app)
         dept = db.query(models.Department).filter(models.Department.department_id == department_id).first()
         if not dept:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department not found")
@@ -835,6 +1095,7 @@ class HrApplicationUseCases:
     def send_interview_invite(db: Session, scoped_ids, application_id: int, calendly_link: str, actor: str) -> dict:
         """Manual (re-)send from the applicant screen."""
         app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
+        ensure_unlocked(app)
         dept = app.final_department or app.applied_department
         link = calendly_link or (dept.calendly_link if dept else "")
         if not link:
@@ -858,6 +1119,7 @@ class HrApplicationUseCases:
         brief_filename: str | None = None,
     ) -> dict:
         app = HrApplicationUseCases._load_scoped(db, scoped_ids, application_id)
+        ensure_unlocked(app)
         from domain.services.recruitment.emails import send_marketing_case as _send
         now = _now()
         deadline = now + timedelta(hours=hours or 48)
@@ -973,7 +1235,8 @@ def _find_interview_application(db: Session, email: str) -> models.Application |
         return None
     return (
         db.query(models.Application)
-        .filter(models.Application.candidate_id == cand.candidate_id, models.Application.status == "interview")
+        .filter(models.Application.candidate_id == cand.candidate_id, models.Application.status == "interview",
+                models.Application.locked_at.is_(None))
         .order_by(models.Application.created_at.desc())
         .first()
     )

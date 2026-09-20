@@ -36,7 +36,16 @@
               </v-chip>
               <v-menu>
                 <template #activator="{ props: menuProps }">
-                  <v-btn v-bind="menuProps" size="small" variant="outlined" append-icon="mdi-menu-down">Change stage</v-btn>
+                  <v-btn
+                    v-bind="menuProps"
+                    size="small"
+                    variant="outlined"
+                    append-icon="mdi-menu-down"
+                    :disabled="stageLocked"
+                    :title="stageLocked ? stageLockedReason : ''"
+                  >
+                    Change stage
+                  </v-btn>
                 </template>
                 <v-list density="compact">
                   <v-list-item
@@ -60,6 +69,41 @@
                 Delete application
               </v-btn>
             </div>
+          </div>
+        </v-card-text>
+      </v-card>
+
+      <!-- Locked: the candidate accepted another department's offer. The row
+           keeps its stage and history, but nothing more can happen on it. -->
+      <v-alert v-if="app.locked" type="info" variant="tonal" color="grey-darken-1" icon="mdi-lock-outline" class="mb-4">
+        <div class="font-weight-bold">
+          {{ app.locked.by_department || 'Another department' }} has already accepted this candidate
+        </div>
+        <div class="text-body-2">
+          They accepted that offer on {{ formatDateTime(app.locked.locked_at) }}, so this application is locked at
+          <strong>{{ statusMeta(app.status).title }}</strong>. No further stage changes or emails are possible.
+          If an interview was booked, cancel it in Calendly.
+        </div>
+      </v-alert>
+
+      <!-- Offer: sent, awaiting the candidate, or answered -->
+      <v-card v-if="app.offer && ['offered', 'accepted', 'offer_declined'].includes(app.status)" class="mb-4" variant="tonal" :color="offerPanel.color">
+        <v-card-text class="py-3">
+          <div class="d-flex align-center flex-wrap ga-3">
+            <v-icon>{{ offerPanel.icon }}</v-icon>
+            <div class="flex-grow-1">
+              <div class="text-subtitle-2 font-weight-bold">{{ offerPanel.title }}</div>
+              <div class="text-caption">
+                Sent {{ formatDateTime(app.offer.sent_at) }}
+                <template v-if="app.offer.responded_at"> · answered {{ formatDateTime(app.offer.responded_at) }}</template>
+                <template v-else> · answer due {{ formatDateTime(app.offer.expires_at) }}</template>
+              </div>
+            </div>
+          </div>
+          <div v-if="app.status === 'offered'" class="text-caption mt-2">
+            {{ app.offer.overdue
+              ? 'The deadline has passed but the offer is still open. Move to Offered again to send a new deadline, or Rejected to withdraw it.'
+              : 'To withdraw the offer, move the candidate to Rejected.' }}
           </div>
         </v-card-text>
       </v-card>
@@ -477,7 +521,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth.store';
 import { RecruitmentService } from '@/services/RecruitmentService.js';
-import { APPLICATION_STATUSES, statusMeta } from '@/data/recruitmentMock.js';
+import { APPLICATION_STATUSES, CANDIDATE_ONLY_STATUSES, statusMeta } from '@/data/recruitmentMock.js';
 import { getCalendlyLink, setCalendlyLink } from '@/utils/recruitmentPrefs.js';
 import { useDocumentOpener } from '@/composables/useDocumentOpener.js';
 import YoutubeEmbed from '@/components/media/YoutubeEmbed.vue';
@@ -533,9 +577,30 @@ const weightedScore = computed(() => {
 // case stages unless this is a Marketing application.
 const stageOptions = computed(() => {
   const isMarketing = app.value?.applied_department?.has_case_stage;
+  // Offered stays listed while already offered: choosing it again re-sends
+  // the offer with a fresh deadline.
   return APPLICATION_STATUSES.filter(
-    (s) => s.value !== app.value?.status && (!s.marketing_only || isMarketing)
+    (s) => (s.value !== app.value?.status || s.value === 'offered')
+      && (!s.marketing_only || isMarketing)
+      && !CANDIDATE_ONLY_STATUSES.includes(s.value)
   );
+});
+
+// A locked application is closed, and moving an accepted one would strand the
+// applications its acceptance locked. The backend refuses both as well.
+const stageLocked = computed(() => !!app.value?.locked || app.value?.status === 'accepted');
+const stageLockedReason = computed(() =>
+  app.value?.locked
+    ? 'Locked: the candidate accepted another department\'s offer'
+    : 'The candidate has accepted this offer'
+);
+
+const offerPanel = computed(() => {
+  const st = app.value?.status;
+  if (st === 'accepted') return { color: 'success', icon: 'mdi-check-decagram', title: 'Offer accepted by the candidate' };
+  if (st === 'offer_declined') return { color: 'blue-grey', icon: 'mdi-hand-back-left-outline', title: 'Offer declined by the candidate' };
+  if (app.value?.offer?.overdue) return { color: 'error', icon: 'mdi-timer-alert-outline', title: 'Offer overdue: no answer yet' };
+  return { color: 'teal', icon: 'mdi-email-seal-outline', title: 'Offer sent: awaiting the candidate' };
 });
 
 const confidenceColor = computed(() => {
@@ -598,6 +663,7 @@ const EVENT_STYLE = {
   email_sent: { icon: 'mdi-email-outline', color: 'teal' },
   ai_match: { icon: 'mdi-robot-outline', color: 'info' },
   override: { icon: 'mdi-gesture-tap', color: 'deep-orange' },
+  locked: { icon: 'mdi-lock-outline', color: 'grey-darken-1' },
   note: { icon: 'mdi-note-text-outline', color: 'grey' },
 };
 const eventIcon = (t) => EVENT_STYLE[t]?.icon || 'mdi-circle-small';
@@ -608,6 +674,7 @@ function eventLabel(ev) {
     case 'email_sent': return `Email sent: ${ev.payload.template}`;
     case 'ai_match': return `AI matched ${ev.payload.department} (${Math.round(ev.payload.confidence * 100)}%)`;
     case 'override': return `Department set to ${ev.payload.department}`;
+    case 'locked': return `Locked: candidate accepted an offer from ${ev.payload.by_department}`;
     case 'note': return ev.payload.text;
     default: return ev.type;
   }
@@ -619,9 +686,9 @@ function requestStatus(status) {
   confirmDialog.value = true;
 }
 
-async function applyStatusChange({ status, calendlyLink: link, brief_url, brief_s3_key, brief_filename }) {
+async function applyStatusChange({ status, calendlyLink: link, offerDays, brief_url, brief_s3_key, brief_filename }) {
   try {
-    await runStatusChange({ status, link, brief_url, brief_s3_key, brief_filename });
+    await runStatusChange({ status, link, offerDays, brief_url, brief_s3_key, brief_filename });
   } catch (err) {
     console.error('Failed to change status:', err);
     // The dialog has already closed by this point, so without a toast the
@@ -632,7 +699,7 @@ async function applyStatusChange({ status, calendlyLink: link, brief_url, brief_
   }
 }
 
-async function runStatusChange({ status, link, brief_url, brief_s3_key, brief_filename }) {
+async function runStatusChange({ status, link, offerDays, brief_url, brief_s3_key, brief_filename }) {
   if (status === 'case_sent') {
     const res = await RecruitmentService.sendMarketingCase(app.value.id, { brief_url, brief_s3_key, brief_filename });
     app.value.status = 'case_sent';
@@ -643,16 +710,17 @@ async function runStatusChange({ status, link, brief_url, brief_s3_key, brief_fi
   } else {
     // Moving to interview sends the invite server-side, so the link rides along
     // with the status change rather than needing a second call.
-    await RecruitmentService.updateStatus(app.value.id, status, link || null);
+    const updated = await RecruitmentService.updateStatus(app.value.id, status, link || null, offerDays);
     app.value.status = status;
     pushEvent('status_change', { to: status });
     if (status === 'interview') {
       app.value.interview_invite_sent = true;
       pushEvent('email_sent', { template: 'Interview invitation (Calendly)' });
       notify('Moved to Interview · invite sent');
-    } else if (status === 'accepted') {
-      pushEvent('email_sent', { template: 'Offer' });
-      notify('Accepted · offer email sent');
+    } else if (status === 'offered') {
+      app.value.offer = updated?.offer ?? null;
+      pushEvent('email_sent', { template: `Offer (${offerDays}-day deadline)` });
+      notify('Offer sent · awaiting the candidate\'s answer');
     } else if (status === 'rejected') {
       pushEvent('email_sent', { template: 'Rejection' });
       notify('Rejected · outcome email sent', 'warning');

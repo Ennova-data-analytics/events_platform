@@ -16,10 +16,32 @@
           </p>
 
           <!-- Email side-effect notice -->
-          <v-alert v-if="isHighStakes" type="warning" variant="tonal" density="compact" class="mb-3">
-            <v-icon start size="small">mdi-email-fast-outline</v-icon>
-            This sends the <strong>{{ targetStatus === 'accepted' ? 'offer' : 'rejection' }}</strong> email to the candidate. It can't be unsent.
-          </v-alert>
+          <template v-if="isHighStakes">
+            <v-alert type="warning" variant="tonal" density="compact" class="mb-3">
+              <v-icon start size="small">mdi-email-fast-outline</v-icon>
+              This sends the <strong>{{ isOffer ? 'offer' : 'rejection' }}</strong> email to the candidate. It can't be unsent.
+            </v-alert>
+
+            <!-- Offer: the candidate answers it on their status page -->
+            <template v-if="isOffer">
+              <p class="text-body-2 text-medium-emphasis mb-3">
+                The candidate accepts or declines on their status page. Accepting closes and locks
+                their applications with other departments.
+              </p>
+              <v-text-field
+                v-model.number="offerDays"
+                type="number"
+                min="1"
+                max="60"
+                label="Days to respond"
+                variant="outlined"
+                density="compact"
+                prepend-inner-icon="mdi-calendar-clock"
+                :hint="`Deadline ${offerDeadlineLabel}. Overdue offers stay open and are flagged on the board.`"
+                persistent-hint
+              />
+            </template>
+          </template>
 
           <!-- Marketing case send -->
           <template v-else-if="targetStatus === 'case_sent'">
@@ -111,13 +133,13 @@
       <!-- ── Level 2: high-stakes final confirmation ───────────────────── -->
       <template v-else>
         <v-card-title class="d-flex align-center pt-4">
-          <v-icon :color="targetStatus === 'accepted' ? 'success' : 'error'" class="mr-2">mdi-shield-alert-outline</v-icon>
+          <v-icon :color="isOffer ? 'success' : 'error'" class="mr-2">mdi-shield-alert-outline</v-icon>
           Final check
         </v-card-title>
         <v-card-text>
           <p class="text-body-2 mb-3">
-            You're about to <strong :class="targetStatus === 'accepted' ? 'text-success' : 'text-error'">
-              {{ targetStatus === 'accepted' ? 'ACCEPT' : 'REJECT' }}</strong>
+            You're about to <strong :class="isOffer ? 'text-success' : 'text-error'">
+              {{ isOffer ? 'SEND AN OFFER TO' : 'REJECT' }}</strong>
             {{ application.candidate.full_name }} for
             {{ (application.final_department || application.applied_department)?.name }}.
           </p>
@@ -132,12 +154,12 @@
           <v-spacer />
           <v-btn variant="text" @click="level = 1">Back</v-btn>
           <v-btn
-            :color="targetStatus === 'accepted' ? 'success' : 'error'"
+            :color="isOffer ? 'success' : 'error'"
             variant="flat"
             :disabled="!acknowledged"
             @click="onConfirm"
           >
-            {{ targetStatus === 'accepted' ? 'Accept & send offer' : 'Reject & send email' }}
+            {{ isOffer ? 'Send offer' : 'Reject & send email' }}
           </v-btn>
         </v-card-actions>
       </template>
@@ -170,10 +192,21 @@ const briefMode = ref('file');
 const caseBriefFile = ref(null);
 const uploadingBrief = ref(false);
 
+const offerDays = ref(7);
+const isOffer = computed(() => props.targetStatus === 'offered');
+const offerDaysValid = computed(() => Number.isInteger(offerDays.value) && offerDays.value >= 1 && offerDays.value <= 60);
+const offerDeadlineLabel = computed(() => {
+  if (!offerDaysValid.value) return 'must be 1-60 days away';
+  const d = new Date(Date.now() + offerDays.value * 86400000);
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+});
+
 // Moving to Interview always sends the invite, so a booking link is required.
-const canConfirm = computed(
-  () => props.targetStatus !== 'interview' || !!calendlyLink.value.trim()
-);
+const canConfirm = computed(() => {
+  if (props.targetStatus === 'interview') return !!calendlyLink.value.trim();
+  if (isOffer.value) return offerDaysValid.value;
+  return true;
+});
 
 const departmentBriefName = computed(
   () => props.department?.case_brief_filename || (props.department?.case_brief_s3_key ? 'Saved brief' : '')
@@ -194,6 +227,7 @@ watch(
       caseBriefUrl.value = '';
       caseBriefFile.value = null;
       briefMode.value = 'file';
+      offerDays.value = 7;
     }
   }
 );
@@ -241,6 +275,7 @@ async function onConfirm() {
   emit('confirm', {
     status: props.targetStatus,
     calendlyLink: calendlyLink.value.trim(),
+    offerDays: isOffer.value ? offerDays.value : null,
     ...brief,
   });
   close();

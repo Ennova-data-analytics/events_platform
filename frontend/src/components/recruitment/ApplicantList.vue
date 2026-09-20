@@ -13,6 +13,17 @@
                 <v-icon start :icon="statusMeta(app.status).icon" size="x-small" />
                 {{ statusMeta(app.status).title }}
               </v-chip>
+              <!-- Where this candidate ranked the department in view. -->
+              <v-chip
+                v-if="choiceMeta(app)"
+                size="x-small"
+                :color="choiceMeta(app).color"
+                :variant="choiceMeta(app).first ? 'flat' : 'tonal'"
+                :title="choiceMeta(app).title"
+              >
+                <v-icon start :icon="choiceMeta(app).icon" size="x-small" />
+                {{ choiceMeta(app).text }}
+              </v-chip>
             </div>
             <div class="text-caption text-medium-emphasis">
               <a :href="`mailto:${app.candidate.email}`">{{ app.candidate.email }}</a>
@@ -144,7 +155,7 @@
 </template>
 
 <script setup>
-import { statusMeta } from '@/data/recruitmentMock.js';
+import { statusMeta, choiceMeta } from '@/data/recruitmentMock.js';
 import { RecruitmentService } from '@/services/RecruitmentService.js';
 import { useDocumentOpener } from '@/composables/useDocumentOpener.js';
 

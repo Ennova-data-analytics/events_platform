@@ -14,7 +14,9 @@ export const APPLICATION_STATUSES = [
   { value: 'case_submitted', title: 'Case Submitted', color: 'indigo', icon: 'mdi-briefcase-check-outline', marketing_only: true },
   { value: 'interview', title: 'Interview', color: 'purple', icon: 'mdi-account-voice' },
   { value: 'decision', title: 'Decision', color: 'amber-darken-2', icon: 'mdi-scale-balance' },
+  { value: 'offered', title: 'Offered', color: 'teal', icon: 'mdi-email-seal-outline' },
   { value: 'accepted', title: 'Accepted', color: 'success', icon: 'mdi-check-decagram' },
+  { value: 'offer_declined', title: 'Offer Declined', color: 'blue-grey', icon: 'mdi-hand-back-left-outline' },
   { value: 'rejected', title: 'Rejected', color: 'error', icon: 'mdi-close-circle-outline' },
   { value: 'withdrawn', title: 'Withdrawn', color: 'grey', icon: 'mdi-account-off-outline' },
 ];
@@ -23,7 +25,43 @@ export const statusMeta = (value) =>
   APPLICATION_STATUSES.find((s) => s.value === value) || APPLICATION_STATUSES[0];
 
 // Status transitions that trigger an outcome email requiring extra care.
-export const HIGH_STAKES_STATUSES = ['accepted', 'rejected'];
+export const HIGH_STAKES_STATUSES = ['offered', 'rejected'];
+
+// Set only by the candidate answering an offer, never by a recruiter.
+export const CANDIDATE_ONLY_STATUSES = ['accepted', 'offer_declined'];
+
+// Where this row's department sits in the candidate's own ranking.
+//
+// Every application row carries the full ranking, and each ranked department
+// has its own row, so "this department" is the row's own - which is also the
+// department a recruiter is looking at, filtered or not.
+//
+// Returns null when the ranking is missing (rows predating it) or doesn't name
+// the row's department, so the UI can simply show nothing.
+export function choiceMeta(app) {
+  const ranked = app?.ranked_departments || [];
+  const own = app?.department_applied_id ?? app?.answers?.department_applied_id;
+  if (!ranked.length || !own) return null;
+  if (ranked.length === 1) {
+    return {
+      text: 'Only this team',
+      title: 'Applied to this department only',
+      icon: 'mdi-account-heart-outline',
+      color: 'success',
+      first: true,
+    };
+  }
+  const idx = ranked.findIndex((d) => d.id === own);
+  if (idx < 0) return null;
+  const ordinal = ['1st', '2nd', '3rd'][idx] || `${idx + 1}th`;
+  return {
+    text: `${ordinal} choice of ${ranked.length}`,
+    title: `Ranked this department ${ordinal} of ${ranked.length}: ${ranked.map((d) => d.name).join(' › ')}`,
+    icon: idx === 0 ? 'mdi-star' : 'mdi-star-outline',
+    color: idx === 0 ? 'amber-darken-2' : 'grey',
+    first: idx === 0,
+  };
+}
 
 // Esade academic context (used in the application form selects).
 // Current Esade programmes (verified against esade.edu, 2026 intake).

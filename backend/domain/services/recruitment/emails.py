@@ -177,32 +177,116 @@ def send_booking_nudge(*, to_email: str, to_name: str, department_name: str, cal
     )
 
 
-def send_outcome(*, to_email: str, to_name: str, department_name: str, accepted: bool) -> bool:
-    """Offer or (warm) rejection email (spec §3.4.5)."""
+def send_offer(*, to_email: str, to_name: str, department_name: str, deadline_str: str,
+               status_token: str, other_open_departments: list[str]) -> bool:
+    """
+    Offer email. The candidate accepts or declines it on their status page;
+    nothing is final until they do.
+    """
     first = to_name.split(' ')[0] if to_name else 'there'
-    if accepted:
-        title = "Welcome to Ennova! 🎉"
-        inner = f"""
+    url = _status_url(status_token)
+    others_note = ""
+    if other_open_departments:
+        names = ", ".join(f"<strong>{n}</strong>" for n in other_open_departments)
+        others_note = (
+            f"<p>You also have applications in progress with {names}. You don't have to decide "
+            f"straight away - you have until {deadline_str}. Accepting this offer closes those "
+            "applications.</p>"
+        )
+    body = _shell(
+        "You've got an offer! 🎉",
+        f"""
         <p>Hi {first},</p>
         <p>We're delighted to offer you a place in <strong>{department_name}</strong>. Congratulations — it was a
         genuinely strong application.</p>
-        <p>We'll be in touch shortly with onboarding details. Welcome to the team!</p>
-        """
-        subject = f"You're in — welcome to {department_name} at Ennova"
-        text = f"Congratulations! You've been accepted into {department_name} at Ennova."
-    else:
-        title = "An update on your application"
-        inner = f"""
+        {others_note}
+        <p>Please accept or decline the offer from your status page by <strong>{deadline_str}</strong>:</p>
+        <p style="margin: 20px 0;">
+          <a href="{url}" style="background:#1867c0;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;display:inline-block;">
+            Respond to my offer
+          </a>
+        </p>
+        <p style="color:#666;font-size:13px;">Or copy this link: {url}</p>
+        """,
+    )
+    return email_service.send_email(
+        to_email=to_email, to_name=to_name,
+        subject=f"Your offer from {department_name} at Ennova",
+        html_content=body,
+        text_content=(
+            f"You've got an offer from {department_name} at Ennova. "
+            f"Accept or decline it by {deadline_str}: {url}"
+        ),
+    )
+
+
+def send_offer_accepted(*, to_email: str, to_name: str, department_name: str,
+                        closed_departments: list[str]) -> bool:
+    """Confirmation to the candidate that their acceptance was recorded."""
+    first = to_name.split(' ')[0] if to_name else 'there'
+    closed_note = ""
+    if closed_departments:
+        names = ", ".join(f"<strong>{n}</strong>" for n in closed_departments)
+        closed_note = f"<p>Your applications with {names} are now closed, and those teams have been told.</p>"
+    body = _shell(
+        f"Welcome to {department_name}! 🎉",
+        f"""
         <p>Hi {first},</p>
-        <p>Thank you for applying to <strong>{department_name}</strong> and for the time you put into it.
-        After careful consideration we won't be moving forward this time — it was a close, difficult decision.</p>
-        <p>Please don't let this discourage you from applying again next cycle. We'd genuinely welcome it.</p>
-        """
-        subject = "Your Ennova application"
-        text = f"Thank you for applying to {department_name}. Unfortunately we won't be moving forward this time."
+        <p>You've accepted your offer from <strong>{department_name}</strong>. We can't wait to have you on the team.</p>
+        {closed_note}
+        <p>We'll be in touch shortly with onboarding details.</p>
+        """,
+    )
+    return email_service.send_email(
+        to_email=to_email, to_name=to_name,
+        subject=f"You're in — welcome to {department_name} at Ennova",
+        html_content=body,
+        text_content=f"You've accepted your offer from {department_name} at Ennova. Welcome to the team!",
+    )
+
+
+def send_recruiter_offer_update(*, to_email: str, to_name: str, candidate_name: str,
+                                department_name: str, outcome: str,
+                                accepted_department: str | None = None) -> bool:
+    """
+    Tell a department's recruiters what happened to one of their candidates.
+
+    outcome is 'accepted' or 'declined' (their own offer), or 'locked' (the
+    candidate accepted another department's offer, so theirs is closed).
+    """
+    if outcome == "accepted":
+        subject = f"{candidate_name} accepted the {department_name} offer"
+        line = f"<strong>{candidate_name}</strong> accepted your offer for <strong>{department_name}</strong>."
+    elif outcome == "declined":
+        subject = f"{candidate_name} declined the {department_name} offer"
+        line = f"<strong>{candidate_name}</strong> declined your offer for <strong>{department_name}</strong>."
+    else:
+        subject = f"{candidate_name} accepted an offer from {accepted_department}"
+        line = (
+            f"<strong>{candidate_name}</strong> accepted an offer from <strong>{accepted_department}</strong>, "
+            f"so their {department_name} application is now locked. No further emails will go to them "
+            "about it. If they had an interview booked with you, please cancel it."
+        )
+    body = _shell("Offer update", f"<p>Hi {to_name.split(' ')[0] if to_name else 'there'},</p><p>{line}</p>")
     return email_service.send_email(
         to_email=to_email, to_name=to_name, subject=subject,
-        html_content=_shell(title, inner), text_content=text,
+        html_content=body, text_content=subject,
+    )
+
+
+def send_rejection(*, to_email: str, to_name: str, department_name: str) -> bool:
+    """Warm rejection email (spec §3.4.5)."""
+    first = to_name.split(' ')[0] if to_name else 'there'
+    inner = f"""
+    <p>Hi {first},</p>
+    <p>Thank you for applying to <strong>{department_name}</strong> and for the time you put into it.
+    After careful consideration we won't be moving forward this time — it was a close, difficult decision.</p>
+    <p>Please don't let this discourage you from applying again next cycle. We'd genuinely welcome it.</p>
+    """
+    return email_service.send_email(
+        to_email=to_email, to_name=to_name, subject="Your Ennova application",
+        html_content=_shell("An update on your application", inner),
+        text_content=f"Thank you for applying to {department_name}. Unfortunately we won't be moving forward this time.",
     )
 
 

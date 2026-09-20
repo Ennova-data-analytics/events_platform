@@ -662,8 +662,16 @@ class AttendanceRecord(Base):
 # convention of not using DB enums — see Registration.status / Event.status).
 APPLICATION_STATUSES = (
     'applied', 'in_review', 'case_sent', 'case_submitted',
-    'interview', 'decision', 'accepted', 'rejected', 'withdrawn',
+    'interview', 'decision', 'offered', 'accepted', 'offer_declined',
+    'rejected', 'withdrawn',
 )
+
+# Set only by the candidate answering an offer on their status page, never by a
+# recruiter: 'offered' is the recruiter's decision, 'accepted' the candidate's.
+CANDIDATE_ONLY_STATUSES = ('accepted', 'offer_declined')
+
+# Stages at which an application is finished and has nothing left to lock.
+CLOSED_STATUSES = ('accepted', 'offer_declined', 'rejected', 'withdrawn')
 
 
 class Department(Base):
@@ -778,6 +786,17 @@ class Application(Base):
     case_submission_s3_key = Column(Text)
     case_submission_filename = Column(String(255))
 
+    # Offer. The deadline is advisory, like the case deadline: an overdue offer
+    # stays answerable and is flagged to recruiters rather than lapsing.
+    offer_sent_at = Column(TIMESTAMP(timezone=True))
+    offer_expires_at = Column(TIMESTAMP(timezone=True))
+    offer_responded_at = Column(TIMESTAMP(timezone=True))
+
+    # Set when the candidate accepts an offer from another department this
+    # cycle. The row keeps its stage and history, but no one can act on it.
+    locked_at = Column(TIMESTAMP(timezone=True))
+    locked_by_application_id = Column(Integer, ForeignKey('applications.application_id', ondelete="SET NULL"))
+
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, index=True)
     updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -798,6 +817,7 @@ class Application(Base):
     materials = relationship("ApplicationMaterial", back_populates="application", cascade="all, delete-orphan")
     events = relationship("ApplicationEvent", back_populates="application", cascade="all, delete-orphan", order_by="ApplicationEvent.created_at")
     interviews = relationship("Interview", back_populates="application", cascade="all, delete-orphan")
+    locked_by = relationship("Application", remote_side=[application_id], foreign_keys=[locked_by_application_id])
     tokens = relationship("RecruitmentToken", back_populates="application", cascade="all, delete-orphan")
 
 

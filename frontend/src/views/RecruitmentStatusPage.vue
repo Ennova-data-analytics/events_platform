@@ -70,14 +70,18 @@
               <v-card-text class="pa-4 pa-sm-5">
                 <div class="d-flex align-center justify-space-between flex-wrap ga-2 mb-2">
                   <div class="d-flex align-center ga-2">
-                    <v-icon :icon="statusMeta(a.status).icon" :color="statusMeta(a.status).color" />
+                    <v-icon :icon="cardMeta(a).icon" :color="cardMeta(a).color" />
                     <span class="text-subtitle-1 font-weight-bold">{{ a.department?.name || 'Department' }}</span>
                   </div>
-                  <v-chip :color="statusMeta(a.status).color" variant="tonal" size="small">
-                    {{ statusMeta(a.status).title }}
+                  <v-chip :color="cardMeta(a).color" variant="tonal" size="small">
+                    {{ cardMeta(a).title }}
                   </v-chip>
                 </div>
-                <p class="text-body-2 text-medium-emphasis mb-3">{{ narrativeFor(a.status).body }}</p>
+                <p class="text-body-2 text-medium-emphasis mb-3">
+                  {{ a.locked
+                    ? `Closed because you accepted your offer from ${a.locked.by_department || 'another team'}. This team has been told.`
+                    : narrativeFor(a.status).body }}
+                </p>
 
                 <!-- Compact per-department progress. The full timeline below is
                      hidden for multi-department applicants, since one stepper
@@ -96,8 +100,19 @@
                   </template>
                 </div>
 
+                <!-- Offer from this department -->
+                <template v-if="a.status === 'offered' && !a.locked">
+                  <v-divider class="my-3" />
+                  <OfferActions
+                    :offer="a.offer"
+                    :department-name="a.department?.name"
+                    :other-open-count="openOthers(a).length"
+                    @respond="openOfferDialog(a, $event)"
+                  />
+                </template>
+
                 <!-- Case study for this department -->
-                <template v-if="a.case && !a.case.submitted_at">
+                <template v-if="a.case && !a.case.submitted_at && !a.locked">
                   <v-divider class="my-3" />
                   <div class="d-flex align-center justify-space-between flex-wrap ga-2 mb-2">
                     <span class="text-subtitle-2 font-weight-bold">Case study</span>
@@ -126,7 +141,7 @@
                 </template>
 
                 <!-- Interview for this department -->
-                <template v-if="a.interview">
+                <template v-if="a.interview && !a.locked">
                   <v-divider class="my-3" />
                   <div class="d-flex align-center ga-2">
                     <v-icon color="purple" size="small">mdi-calendar-check</v-icon>
@@ -136,7 +151,7 @@
                     Join the call
                   </v-btn>
                 </template>
-                <template v-else-if="a.status === 'interview'">
+                <template v-else-if="a.status === 'interview' && !a.locked">
                   <v-divider class="my-3" />
                   <v-btn
                     v-if="a.department?.calendly_link"
@@ -158,6 +173,18 @@
           </template>
 
           <!-- ── Action cards ──────────────────────────────────────────── -->
+
+          <!-- Offer awaiting an answer (single application; with several, it
+               sits on that department's card above) -->
+          <v-card v-if="!isMultiApplication && application.status === 'offered'" class="mb-4" variant="outlined">
+            <v-card-text class="pa-4 pa-sm-5">
+              <OfferActions
+                :offer="application.offer"
+                :department-name="appliedDepartment?.name"
+                @respond="openOfferDialog(apps[0], $event)"
+              />
+            </v-card-text>
+          </v-card>
 
           <!-- Marketing case: brief + deadline -->
           <v-card v-if="!isMultiApplication && application.case && !application.case.submitted_at" class="mb-4" variant="outlined">
@@ -202,6 +229,77 @@
           </v-card>
 
           <!-- Submit response -->
+          <!-- Accept / decline an offer. Accepting spells out what it closes. -->
+          <v-dialog v-model="offerDialog" :max-width="$vuetify.display.mobile ? '92vw' : '520px'" :persistent="responding">
+            <v-card v-if="offerTarget">
+              <v-card-title class="pt-4">
+                {{ offerDecision === 'accept' ? 'Accept' : 'Decline' }} {{ offerTarget.department?.name }}'s offer?
+              </v-card-title>
+              <v-card-text>
+                <template v-if="offerDecision === 'accept'">
+                  <v-alert
+                    v-if="offerTargetOthers.inProgress.length"
+                    type="warning"
+                    variant="tonal"
+                    density="compact"
+                    class="mb-3"
+                  >
+                    <div class="font-weight-bold mb-1">
+                      You still have {{ offerTargetOthers.inProgress.length }}
+                      application{{ offerTargetOthers.inProgress.length === 1 ? '' : 's' }} in progress
+                    </div>
+                    <ul class="pl-4">
+                      <li v-for="o in offerTargetOthers.inProgress" :key="o.id">
+                        {{ o.department?.name }}: <em>{{ progressLabel(o) }}</em>
+                      </li>
+                    </ul>
+                  </v-alert>
+                  <v-alert
+                    v-if="offerTargetOthers.offers.length"
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                    class="mb-3"
+                  >
+                    You also have an open offer from
+                    <strong>{{ offerTargetOthers.offers.map((o) => o.department?.name).join(' and ') }}</strong>.
+                    Accepting {{ offerTarget.department?.name }} closes
+                    {{ offerTargetOthers.offers.length === 1 ? 'it' : 'them' }}.
+                  </v-alert>
+                  <p v-if="offerTargetOthers.all.length" class="text-body-2 mb-2">
+                    Accepting will <strong>close these applications</strong>, and those teams will be told.
+                    You can't undo this.
+                  </p>
+                  <p v-if="offerTargetOthers.all.length && offerTarget.offer?.expires_at && !offerTarget.offer?.overdue" class="text-body-2 text-medium-emphasis mb-0">
+                    If you'd rather hear back from them first, this offer stays open until
+                    <strong>{{ formatDateTime(offerTarget.offer.expires_at) }}</strong>.
+                  </p>
+                  <p v-if="!offerTargetOthers.all.length" class="text-body-2 mb-0">
+                    You're about to join {{ offerTarget.department?.name }}. You can't undo this.
+                  </p>
+                </template>
+                <p v-else class="text-body-2 mb-0">
+                  You're turning down this offer. You can't undo this.
+                  <template v-if="openOthers(offerTarget).length">Your other applications carry on as normal.</template>
+                </p>
+              </v-card-text>
+              <v-card-actions>
+                <v-spacer />
+                <v-btn variant="text" :disabled="responding" @click="offerDialog = false">
+                  {{ offerDecision === 'accept' && offerTargetOthers.all.length ? 'Wait for now' : 'Cancel' }}
+                </v-btn>
+                <v-btn
+                  :color="offerDecision === 'accept' ? 'success' : 'error'"
+                  variant="flat"
+                  :loading="responding"
+                  @click="respondToOffer"
+                >
+                  {{ offerConfirmLabel }}
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+
           <v-dialog v-model="submitDialog" :max-width="$vuetify.display.mobile ? '92vw' : '520px'" persistent>
             <v-card>
               <v-card-title class="text-h6 pt-4">Submit your case response</v-card-title>
@@ -299,20 +397,22 @@
           </v-card>
 
           <!-- Accepted -->
-          <v-card v-if="application.status === 'accepted'" class="mb-4" color="success" variant="tonal">
+          <!-- Driven by all applications, not the one holding the link: the
+               accepted offer may be from any of them. -->
+          <v-card v-if="acceptedApp" class="mb-4" color="success" variant="tonal">
             <v-card-text class="pa-4 pa-sm-5">
               <div class="d-flex align-center mb-2">
                 <v-icon class="mr-2">mdi-party-popper</v-icon>
-                <span class="text-subtitle-1 font-weight-bold">Welcome to {{ appliedDepartment?.name }}!</span>
+                <span class="text-subtitle-1 font-weight-bold">Welcome to {{ acceptedApp.department?.name }}!</span>
               </div>
               <p class="text-body-2 mb-0">
-                Check your inbox for your offer and onboarding details. We can't wait to have you on the team.
+                You've accepted your offer. We'll be in touch with onboarding details - we can't wait to have you on the team.
               </p>
             </v-card-text>
           </v-card>
 
           <!-- Rejected -->
-          <v-card v-if="application.status === 'rejected'" class="mb-4" variant="outlined">
+          <v-card v-if="allRejected" class="mb-4" variant="outlined">
             <v-card-text class="pa-4 pa-sm-5">
               <div class="text-subtitle-2 font-weight-bold mb-1">A note on your application</div>
               <p class="text-body-2 text-medium-emphasis mb-2">
@@ -446,6 +546,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { RecruitmentService } from '@/services/RecruitmentService.js';
 import { statusMeta } from '@/data/recruitmentMock.js';
+import OfferActions from '@/components/recruitment/OfferActions.vue';
 import { ACCEPTED_UPLOAD_MIME, ACCEPTED_UPLOAD_LABEL, MAX_UPLOAD_MB } from '@/utils/uploadTypes.js';
 
 const route = useRoute();
@@ -470,6 +571,76 @@ const allDepartmentNames = computed(
 
 function narrativeFor(status) {
   return NARRATIVES[status] || NARRATIVES.applied;
+}
+
+// ── Offers ────────────────────────────────────────────────────────────────
+// A single-department candidate still gets a one-entry list, so everything
+// below works for both layouts.
+const apps = computed(() => application.value?.applications || []);
+const CLOSED = ['accepted', 'offer_declined', 'rejected', 'withdrawn'];
+
+// The candidate's other applications that accepting `a` would close.
+function openOthers(a) {
+  return apps.value.filter((o) => o.id !== a?.id && !o.locked && !CLOSED.includes(o.status));
+}
+const acceptedApp = computed(() => apps.value.find((a) => a.status === 'accepted') || null);
+const allRejected = computed(() => apps.value.length > 0 && apps.value.every((a) => a.status === 'rejected'));
+
+const LOCKED_META = { title: 'Closed', color: 'grey', icon: 'mdi-lock-outline' };
+function cardMeta(a) {
+  return a.locked ? LOCKED_META : statusMeta(a.status);
+}
+
+// Where an application stands, in words, for the accept warning.
+function progressLabel(a) {
+  if (a.status === 'offered') return 'Offer waiting for your answer';
+  if (a.interview) return `Interview booked, ${formatDate(a.interview.starts_at)}`;
+  if (a.status === 'case_submitted') return 'Case study submitted';
+  if (a.status === 'case_sent') return 'Case study to complete';
+  return statusMeta(a.status).title;
+}
+
+const offerDialog = ref(false);
+const offerTarget = ref(null);
+const offerDecision = ref('accept');
+const responding = ref(false);
+
+const offerTargetOthers = computed(() => {
+  const all = openOthers(offerTarget.value);
+  return {
+    all,
+    inProgress: all.filter((o) => o.status !== 'offered'),
+    offers: all.filter((o) => o.status === 'offered'),
+  };
+});
+const offerConfirmLabel = computed(() => {
+  const name = offerTarget.value?.department?.name || 'offer';
+  if (offerDecision.value === 'decline') return 'Decline offer';
+  const n = offerTargetOthers.value.all.length;
+  return n ? `Accept ${name} & close ${n} other${n === 1 ? '' : 's'}` : `Accept ${name}`;
+});
+
+function openOfferDialog(a, decision) {
+  offerTarget.value = a;
+  offerDecision.value = decision;
+  offerDialog.value = true;
+}
+
+async function respondToOffer() {
+  responding.value = true;
+  try {
+    application.value = await RecruitmentService.respondToOffer(route.params.token, {
+      application_id: offerTarget.value.id,
+      decision: offerDecision.value,
+    });
+    offerDialog.value = false;
+    notify(offerDecision.value === 'accept' ? 'Offer accepted - welcome aboard!' : 'Offer declined');
+  } catch (err) {
+    console.error('Failed to respond to offer:', err);
+    notify(err.response?.data?.detail || 'Could not record your answer. Please try again.', 'error');
+  } finally {
+    responding.value = false;
+  }
 }
 function isOverdue(caseBlock) {
   return !!caseBlock?.deadline_at && new Date(caseBlock.deadline_at) < new Date();
@@ -552,7 +723,9 @@ const NARRATIVES = {
   case_submitted: { tone: 'indigo', icon: 'mdi-briefcase-check-outline', title: 'Case received', body: 'Thanks - we\'ve got your case submission. The team is reviewing it and will be in touch about interviews.', hint: '' },
   interview: { tone: 'purple', icon: 'mdi-account-voice', title: 'You\'re through to interviews', body: 'Great news - we\'d love to meet you. Book a time using the link below.', hint: '' },
   decision: { tone: 'amber-darken-2', icon: 'mdi-scale-balance', title: 'Final decision in progress', body: 'Interviews are wrapped up and the team is making their final call. You\'ll hear from us very soon.', hint: '' },
-  accepted: { tone: 'success', icon: 'mdi-check-decagram', title: 'You\'re in!', body: 'Congratulations - your application was successful. Details are below.', hint: '' },
+  offered: { tone: 'teal', icon: 'mdi-email-seal-outline', title: 'You\'ve got an offer!', body: 'Congratulations - the team would love to have you. Accept or decline below.', hint: '' },
+  accepted: { tone: 'success', icon: 'mdi-check-decagram', title: 'You\'re in!', body: 'You accepted this offer. Welcome to the team!', hint: '' },
+  offer_declined: { tone: 'grey', icon: 'mdi-hand-back-left-outline', title: 'Offer declined', body: 'You turned down this offer. Thanks for letting the team know.', hint: '' },
   rejected: { tone: 'grey', icon: 'mdi-emoticon-sad-outline', title: 'Application closed', body: 'Thank you for taking the time to apply. See the note below.', hint: '' },
   withdrawn: { tone: 'grey', icon: 'mdi-account-off-outline', title: 'Application withdrawn', body: 'This application has been withdrawn. If that\'s a mistake, get in touch and we\'ll sort it out.', hint: '' },
 };
@@ -583,6 +756,8 @@ const STAGE_DESC = {
   decision: 'Final call and outcome email.',
 };
 
+const OUTCOME_STATUSES = ['offered', 'accepted', 'offer_declined', 'rejected'];
+
 // Stage list for one application, used by the compact per-department strip.
 function stagesFor(a) {
   const journey = [
@@ -594,7 +769,7 @@ function stagesFor(a) {
   ];
   const order = journey.map((st) => st.value);
   let reachedIdx;
-  if (['accepted', 'rejected'].includes(a.status)) reachedIdx = order.indexOf('decision');
+  if (OUTCOME_STATUSES.includes(a.status)) reachedIdx = order.indexOf('decision');
   else if (['case_sent', 'case_submitted'].includes(a.status)) reachedIdx = order.indexOf('case');
   else reachedIdx = order.indexOf(a.status);
   return journey.map((st, idx) => ({ ...st, reached: idx <= reachedIdx, current: idx === reachedIdx }));
@@ -612,7 +787,7 @@ const stages = computed(() => {
   const order = journey.map((s) => s.value);
   const status = application.value?.status;
   let reachedIdx;
-  if (['accepted', 'rejected'].includes(status)) reachedIdx = order.indexOf('decision');
+  if (OUTCOME_STATUSES.includes(status)) reachedIdx = order.indexOf('decision');
   else if (['case_sent', 'case_submitted'].includes(status)) reachedIdx = order.indexOf('case');
   else reachedIdx = order.indexOf(status);
   return journey.map((s, idx) => ({

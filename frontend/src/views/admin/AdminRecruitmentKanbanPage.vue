@@ -166,7 +166,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth.store';
 import { RecruitmentService } from '@/services/RecruitmentService.js';
-import { statusMeta, APPLICATION_STATUSES } from '@/data/recruitmentMock.js';
+import { statusMeta, APPLICATION_STATUSES, CANDIDATE_ONLY_STATUSES } from '@/data/recruitmentMock.js';
 import { loadPrefs, savePrefs, getCalendlyLink } from '@/utils/recruitmentPrefs.js';
 import KanbanBoard from '@/components/recruitment/KanbanBoard.vue';
 import ApplicantList from '@/components/recruitment/ApplicantList.vue';
@@ -283,6 +283,10 @@ async function load() {
 function requestStatusChange({ id, to }) {
   const app = applications.value.find((a) => a.id === id);
   if (!app) return;
+  if (CANDIDATE_ONLY_STATUSES.includes(to)) {
+    notify('Only the candidate can accept or decline an offer. Move them to Offered to send one.', 'warning');
+    return;
+  }
   pendingApp.value = app;
   pendingStatus.value = to;
   pendingCalendly.value = getCalendlyLink(userId.value, app.final_department_id || app.answers.department_applied_id, app.final_department?.calendly_link || '');
@@ -305,20 +309,21 @@ async function applyStatusChange(payload) {
   }
 }
 
-async function runStatusChange(app, { status, calendlyLink, brief_url, brief_s3_key, brief_filename }) {
+async function runStatusChange(app, { status, calendlyLink, offerDays, brief_url, brief_s3_key, brief_filename }) {
   if (status === 'case_sent') {
     await RecruitmentService.sendMarketingCase(app.id, { brief_url, brief_s3_key, brief_filename });
     app.status = 'case_sent';
     notify(`Case brief sent to ${app.candidate.full_name} · 48h to submit`);
   } else {
     // The invite is sent server-side as part of the move to interview.
-    await RecruitmentService.updateStatus(app.id, status, calendlyLink || null);
+    const updated = await RecruitmentService.updateStatus(app.id, status, calendlyLink || null, offerDays);
     app.status = status;
     if (status === 'interview') {
       app.interview_invite_sent = true;
       notify(`Moved to Interview · invite sent to ${app.candidate.full_name}`);
-    } else if (status === 'accepted') {
-      notify(`${app.candidate.full_name} accepted · offer email sent`);
+    } else if (status === 'offered') {
+      app.offer = updated?.offer ?? null;
+      notify(`Offer sent to ${app.candidate.full_name} · awaiting their answer`);
     } else if (status === 'rejected') {
       notify(`${app.candidate.full_name} rejected · outcome email sent`, 'warning');
     } else {

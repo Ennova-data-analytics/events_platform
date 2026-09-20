@@ -50,6 +50,8 @@ def run_interview_reminders() -> int:
             app = db.query(models.Application).filter(models.Application.application_id == iv.application_id).first()
             if not app or not app.candidate:
                 continue
+            if app.locked_at:  # accepted an offer elsewhere; this interview is moot
+                continue
             if _has_recent_event(db, app.application_id, "Interview reminder (24h)", within_hours=48):
                 continue
             dept = app.final_department or app.applied_department
@@ -86,6 +88,7 @@ def run_booking_nudges() -> int:
             .filter(
                 models.Application.status == "interview",
                 models.Application.interview_invite_sent.is_(True),
+                models.Application.locked_at.is_(None),
             )
             .all()
         )
