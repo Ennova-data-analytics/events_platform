@@ -1,6 +1,12 @@
 <template>
   <div>
-    <v-card v-for="app in applications" :key="app.id" variant="outlined" class="mb-3">
+    <v-card
+      v-for="app in applications"
+      :key="app.id"
+      variant="outlined"
+      class="mb-3"
+      :class="{ 'applicant--beyond-top': isBeyondTopChoices(app) }"
+    >
       <v-card-text class="pa-4">
         <div class="d-flex flex-wrap align-center ga-3">
           <v-avatar size="40" color="primary" variant="tonal">
@@ -155,7 +161,9 @@
 </template>
 
 <script setup>
-import { statusMeta, choiceMeta } from '@/data/recruitmentMock.js';
+import {
+  statusMeta, choiceMeta, isBeyondTopChoices,
+} from '@/data/recruitmentMock.js';
 import { RecruitmentService } from '@/services/RecruitmentService.js';
 import { useDocumentOpener } from '@/composables/useDocumentOpener.js';
 
@@ -199,6 +207,9 @@ function caseCountdown(app) {
 </script>
 
 <style scoped>
+.applicant--beyond-top {
+  border: 2px solid rgb(var(--v-theme-error));
+}
 .text-truncate-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;

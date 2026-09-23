@@ -1,7 +1,8 @@
 import secrets
 import logging
 from datetime import datetime, timezone, timedelta
-from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from sqlalchemy.orm import Session, contains_eager
 from fastapi import HTTPException, status
 
 from domain import models, schemas
@@ -14,6 +15,11 @@ OFFER_DAYS_DEFAULT = 7
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def department_accepting(cd: models.CycleDepartment) -> bool:
+    """Whether a cohort department still takes applications (the SQL twin is _cycle_department_rows)."""
+    return cd.is_open and (cd.closes_at is None or cd.closes_at > _now())
 
 
 def presign_or_502(s3_key: str, what: str) -> str:
@@ -277,22 +283,38 @@ class ApplicationUseCases:
     # ── Public reads ────────────────────────────────────────────────────────
     @staticmethod
     def get_active_positions(db: Session) -> list[models.Department]:
-        """Departments that are open in the active cohort."""
+        """Departments still taking applications in the active cohort."""
+        return [cd.department for cd in ApplicationUseCases.get_active_position_rows(db)]
+
+    @staticmethod
+    def get_active_position_rows(db: Session, include_closed: bool = False) -> list[models.CycleDepartment]:
+        """
+        The active cohort's department memberships, department loaded.
+        Excludes departments that are paused or past their own close date
+        unless include_closed - recruiters still work through those.
+        """
         cycle = db.query(models.RecruitmentCycle).filter(models.RecruitmentCycle.is_active.is_(True)).first()
         if not cycle:
             return []
-        rows = (
-            db.query(models.Department)
-            .join(models.CycleDepartment, models.CycleDepartment.department_id == models.Department.department_id)
+        return ApplicationUseCases._cycle_department_rows(db, cycle, include_closed)
+
+    @staticmethod
+    def _cycle_department_rows(db: Session, cycle: models.RecruitmentCycle, include_closed: bool) -> list[models.CycleDepartment]:
+        q = (
+            db.query(models.CycleDepartment)
+            .join(models.CycleDepartment.department)
+            .options(contains_eager(models.CycleDepartment.department))
             .filter(
                 models.CycleDepartment.cycle_id == cycle.cycle_id,
-                models.CycleDepartment.is_open.is_(True),
                 models.Department.is_active.is_(True),
             )
-            .order_by(models.Department.name)
-            .all()
         )
-        return rows
+        if not include_closed:
+            q = q.filter(
+                models.CycleDepartment.is_open.is_(True),
+                or_(models.CycleDepartment.closes_at.is_(None), models.CycleDepartment.closes_at > _now()),
+            )
+        return q.order_by(models.Department.name).all()
 
     # ── Idempotent submission ───────────────────────────────────────────────
     @staticmethod
@@ -358,6 +380,31 @@ class ApplicationUseCases:
             db.query(models.Department).filter(models.Department.department_id.in_(ordered_ids)).all()
         }
         ordered_ids = [d for d in ordered_ids if d in known] or [data.department_applied_id]
+
+        # The form only lists departments still accepting, but it can sit open
+        # past a department's early close (or a pause). Reject rather than
+        # drop the choice, so the candidate knows and can re-rank.
+        accepting = {
+            cd.department_id for cd in
+            ApplicationUseCases._cycle_department_rows(db, cycle, include_closed=False)
+        }
+        closed_ids = [d for d in ordered_ids if d not in accepting]
+        if closed_ids:
+            closed_names = [
+                n for (n,) in
+                db.query(models.Department.name).filter(models.Department.department_id.in_(closed_ids)).all()
+            ] or ["one of your chosen departments"]
+            logger.info(
+                "Rejected application from %s: departments %s no longer accepting in cycle %s",
+                email, closed_ids, cycle.cycle_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Applications for {', '.join(closed_names)} have closed. "
+                    f"Remove {'it' if len(closed_names) == 1 else 'them'} from your choices and submit again."
+                ),
+            )
 
         answers = data.answers or {}
         # custom_answers arrives keyed by department id; each application keeps

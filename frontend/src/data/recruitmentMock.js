@@ -54,14 +54,31 @@ export function choiceMeta(app) {
   const idx = ranked.findIndex((d) => d.id === own);
   if (idx < 0) return null;
   const ordinal = ['1st', '2nd', '3rd'][idx] || `${idx + 1}th`;
+  const beyond = idx >= TOP_CHOICE_LIMIT;
   return {
     text: `${ordinal} choice of ${ranked.length}`,
     title: `Ranked this department ${ordinal} of ${ranked.length}: ${ranked.map((d) => d.name).join(' › ')}`,
     icon: idx === 0 ? 'mdi-star' : 'mdi-star-outline',
-    color: idx === 0 ? 'amber-darken-2' : 'grey',
+    color: idx === 0 ? 'amber-darken-2' : beyond ? 'error' : 'grey',
     first: idx === 0,
   };
 }
+
+// Candidates may rank any number of departments, but only their top three are
+// treated as real preferences. Applications ranked below that are flagged red
+// to recruiters: someone applying to 5 teams has 2 flagged applications.
+export const TOP_CHOICE_LIMIT = 3;
+
+export function isBeyondTopChoices(app) {
+  const ranked = app?.ranked_departments || [];
+  const own = app?.department_applied_id ?? app?.answers?.department_applied_id;
+  if (ranked.length <= TOP_CHOICE_LIMIT || !own) return false;
+  return ranked.findIndex((d) => d.id === own) >= TOP_CHOICE_LIMIT;
+}
+
+export const BEYOND_TOP_CHOICES_HINT =
+  `Red border: the candidate applied to more than ${TOP_CHOICE_LIMIT} departments `
+  + `and ranked this one ${TOP_CHOICE_LIMIT + 1}th or lower.`;
 
 // Esade academic context (used in the application form selects).
 // Current Esade programmes (verified against esade.edu, 2026 intake).

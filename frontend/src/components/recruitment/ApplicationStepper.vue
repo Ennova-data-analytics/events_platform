@@ -122,6 +122,11 @@
                       <span class="text-subtitle-2 font-weight-bold">{{ dep.name }}</span>
                       <v-chip v-if="dep.has_case_stage" size="x-small" color="deep-purple" variant="tonal" class="ml-2">Case study</v-chip>
                     </div>
+                    <!-- This team stops taking applications before the rest of the cohort. -->
+                    <v-chip v-if="dep.closes_at" size="x-small" color="warning" variant="tonal" class="mb-2">
+                      <v-icon start size="x-small">mdi-clock-alert-outline</v-icon>
+                      Closes early · {{ formatCloseDate(dep.closes_at) }}
+                    </v-chip>
                     <div class="text-caption text-medium-emphasis mb-2">{{ dep.description }}</div>
                     <v-chip
                       v-for="skill in dep.skills_sought.slice(0, 4)"
@@ -721,6 +726,10 @@ async function onCvSelected(file) {
   } finally {
     parsing.value = false;
   }
+}
+
+function formatCloseDate(iso) {
+  return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 async function handleSubmit() {

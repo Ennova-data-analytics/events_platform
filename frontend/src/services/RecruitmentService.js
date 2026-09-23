@@ -34,15 +34,19 @@ const cycleFromApi = (c) => ({
   cycle_departments: (c.cycle_departments || []).map((cd) => ({
     department_id: cd.department_id,
     is_open: cd.is_open,
+    closes_at: cd.closes_at || null,
     department: cd.department ? deptFromApi(cd.department) : null,
   })),
 });
 
 export const RecruitmentService = {
   // ── Public (candidate-facing) ───────────────────────────────────────────
-  getOpenPositions() {
+  // Departments taking applications in the active cohort. Recruiter views pass
+  // includeClosed so paused / early-closed departments stay filterable.
+  getOpenPositions({ includeClosed = false } = {}) {
     if (USE_MOCK) return delay().then(() => clone(mockDepartments.filter((d) => d.is_active)));
-    return ApiClient.get('/recruitment/positions').then((r) => r.data);
+    return ApiClient.get('/recruitment/positions', { params: includeClosed ? { include_closed: true } : {} })
+      .then((r) => r.data);
   },
 
   getActiveCycle() {
@@ -489,6 +493,7 @@ export const RecruitmentService = {
           cycle_departments: (payload.departments || []).map((d) => ({
             department_id: d.department_id,
             is_open: d.is_open,
+            closes_at: d.closes_at || null,
             department: mockDepartments.find((x) => x.id === d.department_id) || null,
           })),
         };
@@ -515,6 +520,7 @@ export const RecruitmentService = {
           cycle.cycle_departments = payload.departments.map((d) => ({
             department_id: d.department_id,
             is_open: d.is_open,
+            closes_at: d.closes_at || null,
             department: mockDepartments.find((x) => x.id === d.department_id) || null,
           }));
         }

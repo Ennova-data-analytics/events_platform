@@ -817,7 +817,7 @@ onMounted(async () => {
   try {
     [app.value, departments.value] = await Promise.all([
       RecruitmentService.getApplication(route.params.id),
-      RecruitmentService.getOpenPositions(),
+      RecruitmentService.getOpenPositions({ includeClosed: true }),
     ]);
     finalDepartmentId.value = app.value.final_department_id || app.value.suggested_department_id;
     const deptId = app.value.final_department_id || app.value.answers.department_applied_id;

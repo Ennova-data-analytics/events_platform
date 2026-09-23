@@ -713,6 +713,9 @@ class CycleDepartment(Base):
     cycle_id = Column(Integer, ForeignKey('recruitment_cycles.cycle_id', ondelete="CASCADE"), primary_key=True)
     department_id = Column(Integer, ForeignKey('departments.department_id', ondelete="CASCADE"), primary_key=True)
     is_open = Column(Boolean, default=True, nullable=False)
+    # Optional early close for this department only; the rest of the cohort
+    # keeps recruiting. Null means it closes with the cohort.
+    closes_at = Column(TIMESTAMP(timezone=True))
 
     cycle = relationship("RecruitmentCycle", back_populates="cycle_departments")
     department = relationship("Department")

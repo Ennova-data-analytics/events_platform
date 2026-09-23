@@ -88,6 +88,17 @@
             <v-icon start size="x-small">mdi-account-multiple-outline</v-icon>
             {{ uniqueCandidateCount }} {{ uniqueCandidateCount === 1 ? 'person' : 'people' }}
           </v-chip>
+          <!-- Legend for the red border on cards, list tiles and table rows. -->
+          <v-chip
+            v-if="beyondTopChoicesCount"
+            size="small"
+            variant="outlined"
+            color="error"
+            :title="BEYOND_TOP_CHOICES_HINT"
+          >
+            <v-icon start size="x-small">mdi-information-outline</v-icon>
+            {{ beyondTopChoicesCount }} ranked below top {{ TOP_CHOICE_LIMIT }}
+          </v-chip>
           <span v-if="listForced" class="text-caption text-medium-emphasis">Filtered - showing detailed list.</span>
           <span v-else-if="showCaseStages" class="text-caption text-medium-emphasis">Case stages shown for this department.</span>
           <v-spacer />
@@ -123,6 +134,7 @@
           :items="filtered"
           :loading="isLoading"
           item-key="id"
+          :row-props="({ item }) => (isBeyondTopChoices(item) ? { class: 'row--beyond-top' } : {})"
           @click:row="(_, { item }) => openCandidate(item.id)"
         >
           <template #item.candidate="{ item }">
@@ -166,7 +178,10 @@ import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth.store';
 import { RecruitmentService } from '@/services/RecruitmentService.js';
-import { statusMeta, APPLICATION_STATUSES, CANDIDATE_ONLY_STATUSES } from '@/data/recruitmentMock.js';
+import {
+  statusMeta, APPLICATION_STATUSES, CANDIDATE_ONLY_STATUSES,
+  isBeyondTopChoices, TOP_CHOICE_LIMIT, BEYOND_TOP_CHOICES_HINT,
+} from '@/data/recruitmentMock.js';
 import { loadPrefs, savePrefs, getCalendlyLink } from '@/utils/recruitmentPrefs.js';
 import KanbanBoard from '@/components/recruitment/KanbanBoard.vue';
 import ApplicantList from '@/components/recruitment/ApplicantList.vue';
@@ -233,6 +248,8 @@ const filtered = computed(() =>
 const uniqueCandidateCount = computed(
   () => new Set(filtered.value.map((a) => a.candidate?.email).filter(Boolean)).size
 );
+
+const beyondTopChoicesCount = computed(() => filtered.value.filter(isBeyondTopChoices).length);
 
 const anyFilterActive = computed(() => !!(filters.department_id || filters.stage || filters.search));
 // When filtering, the rich list is the most useful view (spec: show list format).
@@ -349,8 +366,15 @@ onMounted(async () => {
   viewMode.value = prefs.viewMode || 'kanban';
   [cycles.value, departments.value] = await Promise.all([
     RecruitmentService.getCycles(),
-    RecruitmentService.getOpenPositions(),
+    RecruitmentService.getOpenPositions({ includeClosed: true }),
   ]);
   await load();
 });
 </script>
+
+<style scoped>
+/* Inset shadow rather than a border: table cells collapse borders. */
+:deep(.row--beyond-top) > td:first-child {
+  box-shadow: inset 3px 0 0 rgb(var(--v-theme-error));
+}
+</style>

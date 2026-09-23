@@ -12,7 +12,7 @@ from datetime import datetime
 
 from domain import schemas, models
 from domain.use_cases.db_applications import (
-    ApplicationUseCases, serialize_department, run_matching_task, send_confirmation_task,
+    ApplicationUseCases, serialize_department, department_accepting, run_matching_task, send_confirmation_task,
     book_interview_from_calendly, cancel_interview_from_calendly, presign_or_502,
 )
 from core import s3_service
@@ -69,9 +69,20 @@ def get_active_cycle(db: Session = Depends(deps.get_db)):
 
 
 @router.get("/positions")
-def get_positions(db: Session = Depends(deps.get_db)):
-    """Departments open in the active cohort (no scoring rubric exposed)."""
-    return [serialize_department(d) for d in ApplicationUseCases.get_active_positions(db)]
+def get_positions(include_closed: bool = False, db: Session = Depends(deps.get_db)):
+    """
+    Departments accepting applications in the active cohort (no scoring rubric
+    exposed). include_closed adds paused and early-closed ones, for recruiter
+    views that still need to filter and place candidates by them.
+    """
+    return [
+        {
+            **serialize_department(cd.department),
+            "closes_at": cd.closes_at,
+            "accepting": department_accepting(cd),
+        }
+        for cd in ApplicationUseCases.get_active_position_rows(db, include_closed=include_closed)
+    ]
 
 
 # ── CV / cover-letter / material upload (server-proxied to S3) ──────────────

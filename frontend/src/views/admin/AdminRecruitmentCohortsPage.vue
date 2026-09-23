@@ -33,11 +33,11 @@
                   v-for="cd in c.cycle_departments"
                   :key="cd.department_id"
                   size="x-small"
-                  :color="cd.is_open ? 'primary' : undefined"
-                  :variant="cd.is_open ? 'tonal' : 'outlined'"
+                  :color="departmentState(cd).accepting ? 'primary' : undefined"
+                  :variant="departmentState(cd).accepting ? 'tonal' : 'outlined'"
                 >
                   {{ cd.department?.name || 'Department' }}
-                  <span v-if="!cd.is_open" class="ml-1 text-medium-emphasis">(closed)</span>
+                  <span v-if="departmentState(cd).note" class="ml-1 text-medium-emphasis">({{ departmentState(cd).note }})</span>
                 </v-chip>
                 <span v-if="!c.cycle_departments?.length" class="text-caption text-medium-emphasis">No departments yet</span>
               </div>
@@ -118,7 +118,10 @@
           </v-row>
 
           <div class="text-subtitle-2 font-weight-bold mt-2 mb-1">Departments recruiting</div>
-          <p class="text-caption text-medium-emphasis mb-2">Tick the teams taking part. Untick "open" to keep a team in the cohort but paused.</p>
+          <p class="text-caption text-medium-emphasis mb-2">
+            Tick the teams taking part. Untick "open" to keep a team in the cohort but paused.
+            Set a close date to stop one team taking applications early while the rest keep recruiting.
+          </p>
           <v-card variant="outlined">
             <v-list density="compact">
               <v-list-item v-for="d in departments" :key="d.id" class="px-2">
@@ -126,6 +129,20 @@
                   <v-checkbox-btn :model-value="isSelected(d.id)" color="primary" @update:model-value="toggleSelected(d.id, $event)" />
                 </template>
                 <v-list-item-title class="text-body-2">{{ d.name }}</v-list-item-title>
+                <DateTimeField
+                  v-if="isSelected(d.id) && isOpen(d.id)"
+                  :model-value="draft.closes[d.id] || null"
+                  label="Closes early (optional)"
+                  density="compact"
+                  hide-details
+                  class="mt-2 mb-1"
+                  prepend-inner-icon="mdi-calendar-end"
+                  :min-date="draft.opens_at || null"
+                  :max-date="draft.closes_at || null"
+                  :start-date="draft.opens_at || null"
+                  :default-time="{ hours: 23, minutes: 59 }"
+                  @update:model-value="setCloses(d.id, $event)"
+                />
                 <template #append>
                   <v-switch
                     v-if="isSelected(d.id)"
@@ -212,10 +229,21 @@ const toDelete = ref(null);
 
 const toast = reactive({ show: false, text: '', color: 'success' });
 // draft.selection: { [department_id]: is_open }
-const draft = reactive({ name: '', opens_at: '', closes_at: '', selection: {} });
+// draft.closes:    { [department_id]: local datetime string } - early close, optional
+const draft = reactive({ name: '', opens_at: '', closes_at: '', selection: {}, closes: {} });
 const deptDraft = reactive({ name: '', description: '', has_case_stage: false });
 
 function notify(text, color = 'success') { toast.text = text; toast.color = color; toast.show = true; }
+
+// A cohort department's state for its chip: paused, closed early, or closing early.
+function departmentState(cd) {
+  if (!cd.is_open) return { accepting: false, note: 'paused' };
+  if (!cd.closes_at) return { accepting: true, note: null };
+  const past = new Date(cd.closes_at).getTime() <= Date.now();
+  return past
+    ? { accepting: false, note: `closed ${formatDate(cd.closes_at)}` }
+    : { accepting: true, note: `closes ${formatDate(cd.closes_at)}` };
+}
 
 function formatDate(iso) {
   if (!iso) return '—';
@@ -237,15 +265,23 @@ const isSelected = (id) => id in draft.selection;
 const isOpen = (id) => !!draft.selection[id];
 function toggleSelected(id, on) {
   if (on) draft.selection[id] = true;
-  else delete draft.selection[id];
+  else {
+    delete draft.selection[id];
+    delete draft.closes[id];
+  }
 }
 function setOpen(id, on) { draft.selection[id] = on; }
+function setCloses(id, local) {
+  if (local) draft.closes[id] = local;
+  else delete draft.closes[id];
+}
 
 function resetDraft() {
   draft.name = '';
   draft.opens_at = '';
   draft.closes_at = '';
   draft.selection = {};
+  draft.closes = {};
 }
 
 function openCreate() {
@@ -262,7 +298,11 @@ function openEdit(cycle) {
   draft.opens_at = toLocalInput(cycle.opens_at);
   draft.closes_at = toLocalInput(cycle.closes_at);
   draft.selection = {};
-  (cycle.cycle_departments || []).forEach((cd) => { draft.selection[cd.department_id] = cd.is_open; });
+  draft.closes = {};
+  (cycle.cycle_departments || []).forEach((cd) => {
+    draft.selection[cd.department_id] = cd.is_open;
+    if (cd.closes_at) draft.closes[cd.department_id] = toLocalInput(cd.closes_at);
+  });
   dialog.value = true;
 }
 
@@ -271,7 +311,11 @@ function buildPayload() {
     name: draft.name.trim(),
     opens_at: toIso(draft.opens_at),
     closes_at: toIso(draft.closes_at),
-    departments: Object.entries(draft.selection).map(([id, open]) => ({ department_id: Number(id), is_open: open })),
+    departments: Object.entries(draft.selection).map(([id, open]) => ({
+      department_id: Number(id),
+      is_open: open,
+      closes_at: toIso(draft.closes[id]),
+    })),
   };
 }
 
@@ -290,6 +334,12 @@ async function save() {
       notify('Cohort created');
     }
     dialog.value = false;
+  } catch (err) {
+    console.error('Failed to save cohort:', err);
+    // Dialog stays open so the edits aren't lost; the server names the
+    // offending department when a close date falls outside the cohort.
+    const detail = err.response?.data?.detail;
+    notify(typeof detail === 'string' ? detail : 'Could not save the cohort', 'error');
   } finally {
     saving.value = false;
   }

@@ -1106,11 +1106,13 @@ class DepartmentQuestionsUpdate(BaseModel):
 class CycleDepartmentIn(BaseModel):
     department_id: int
     is_open: bool = True
+    closes_at: datetime | None = None   # early close; None = with the cohort
 
 
 class CycleDepartmentOut(BaseModel):
     department_id: int
     is_open: bool
+    closes_at: datetime | None = None
     department: Department | None = None
     model_config = ConfigDict(from_attributes=True)
 

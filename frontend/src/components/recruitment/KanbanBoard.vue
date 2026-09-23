@@ -22,7 +22,7 @@
             :key="app.id"
             variant="outlined"
             class="mb-2 kanban-card"
-            :class="{ 'kanban-card--locked': isFrozen(app) }"
+            :class="{ 'kanban-card--locked': isFrozen(app), 'kanban-card--beyond-top': isBeyondTopChoices(app) }"
             :draggable="!isFrozen(app)"
             @dragstart="onDragStart(app)"
             @dragend="dragging = null"
@@ -117,7 +117,9 @@
 
 <script setup>
 import { ref } from 'vue';
-import { APPLICATION_STATUSES, choiceMeta } from '@/data/recruitmentMock.js';
+import {
+  APPLICATION_STATUSES, choiceMeta, isBeyondTopChoices,
+} from '@/data/recruitmentMock.js';
 
 import { computed } from 'vue';
 
@@ -230,6 +232,9 @@ function caseCountdown(app) {
 }
 .kanban-card:active {
   cursor: grabbing;
+}
+.kanban-card--beyond-top {
+  border: 2px solid rgb(var(--v-theme-error));
 }
 .kanban-card--locked {
   cursor: pointer;

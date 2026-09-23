@@ -142,18 +142,41 @@ class RecruitmentUseCases:
 
     @staticmethod
     def _sync_cycle_departments(db: Session, cycle: models.RecruitmentCycle, departments: list[schemas.CycleDepartmentIn]) -> None:
-        wanted = {d.department_id: d.is_open for d in departments}
+        RecruitmentUseCases._validate_department_close_dates(db, cycle, departments)
+        wanted = {d.department_id: d for d in departments}
         existing = {cd.department_id: cd for cd in cycle.cycle_departments}
         # Remove memberships no longer wanted.
         for dep_id, cd in list(existing.items()):
             if dep_id not in wanted:
                 db.delete(cd)
         # Add / update the rest.
-        for dep_id, is_open in wanted.items():
+        for dep_id, d in wanted.items():
             if dep_id in existing:
-                existing[dep_id].is_open = is_open
+                existing[dep_id].is_open = d.is_open
+                existing[dep_id].closes_at = d.closes_at
             else:
-                db.add(models.CycleDepartment(cycle_id=cycle.cycle_id, department_id=dep_id, is_open=is_open))
+                db.add(models.CycleDepartment(
+                    cycle_id=cycle.cycle_id, department_id=dep_id, is_open=d.is_open, closes_at=d.closes_at))
+
+    @staticmethod
+    def _validate_department_close_dates(db: Session, cycle: models.RecruitmentCycle, departments: list[schemas.CycleDepartmentIn]) -> None:
+        """An early close has to fall inside the cohort; a later one would never apply."""
+        problems = []
+        for d in departments:
+            if not d.closes_at:
+                continue
+            if cycle.closes_at and d.closes_at > cycle.closes_at:
+                problems.append((d.department_id, "is after the cohort closes"))
+            elif cycle.opens_at and d.closes_at <= cycle.opens_at:
+                problems.append((d.department_id, "is before the cohort opens"))
+        if not problems:
+            return
+        names = {
+            dep.department_id: dep.name for dep in
+            db.query(models.Department).filter(models.Department.department_id.in_([p[0] for p in problems])).all()
+        }
+        detail = "; ".join(f"{names.get(dep_id, f'Department {dep_id}')}'s close date {why}" for dep_id, why in problems)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{detail}.")
 
     # ── Recruiter → department scoping ──────────────────────────────────────
     @staticmethod
