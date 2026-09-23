@@ -123,19 +123,36 @@
             Set a close date to stop one team taking applications early while the rest keep recruiting.
           </p>
           <v-card variant="outlined">
-            <v-list density="compact">
-              <v-list-item v-for="d in departments" :key="d.id" class="px-2">
-                <template #prepend>
-                  <v-checkbox-btn :model-value="isSelected(d.id)" color="primary" @update:model-value="toggleSelected(d.id, $event)" />
-                </template>
-                <v-list-item-title class="text-body-2">{{ d.name }}</v-list-item-title>
+            <template v-for="(d, i) in departments" :key="d.id">
+              <v-divider v-if="i" />
+              <div class="dept-row">
+                <div class="d-flex align-center ga-2">
+                  <v-checkbox-btn
+                    :model-value="isSelected(d.id)"
+                    color="primary"
+                    class="flex-grow-0"
+                    @update:model-value="toggleSelected(d.id, $event)"
+                  />
+                  <span class="text-body-2 flex-grow-1">{{ d.name }}</span>
+                  <v-switch
+                    v-if="isSelected(d.id)"
+                    :model-value="isOpen(d.id)"
+                    color="primary"
+                    density="compact"
+                    hide-details
+                    class="flex-grow-0"
+                    :label="isOpen(d.id) ? 'Open' : 'Paused'"
+                    @update:model-value="setOpen(d.id, $event)"
+                  />
+                </div>
+                <!-- Indented under the name so it reads as this team's setting. -->
                 <DateTimeField
                   v-if="isSelected(d.id) && isOpen(d.id)"
                   :model-value="draft.closes[d.id] || null"
                   label="Closes early (optional)"
                   density="compact"
                   hide-details
-                  class="mt-2 mb-1"
+                  class="dept-row__close"
                   prepend-inner-icon="mdi-calendar-end"
                   :min-date="draft.opens_at || null"
                   :max-date="draft.closes_at || null"
@@ -143,19 +160,8 @@
                   :default-time="{ hours: 23, minutes: 59 }"
                   @update:model-value="setCloses(d.id, $event)"
                 />
-                <template #append>
-                  <v-switch
-                    v-if="isSelected(d.id)"
-                    :model-value="isOpen(d.id)"
-                    color="primary"
-                    density="compact"
-                    hide-details
-                    :label="isOpen(d.id) ? 'Open' : 'Paused'"
-                    @update:model-value="setOpen(d.id, $event)"
-                  />
-                </template>
-              </v-list-item>
-            </v-list>
+              </div>
+            </template>
           </v-card>
           <v-alert v-if="!departments.length" type="warning" variant="tonal" density="compact" class="mt-2">
             Add a department first (in the catalog below) before creating a cohort.
@@ -430,3 +436,13 @@ onMounted(async () => {
   }
 });
 </script>
+
+<style scoped>
+.dept-row {
+  padding: 8px 12px;
+}
+.dept-row__close {
+  /* Line up with the department name, past the checkbox. */
+  margin: 4px 0 8px 48px;
+}
+</style>

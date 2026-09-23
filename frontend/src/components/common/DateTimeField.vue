@@ -34,6 +34,7 @@
       nowBtnLabel: 'Now',
     }"
     :ui="{ menu: 'dtf-menu' }"
+    :input-attrs="{ clearable: false }"
     teleport="body"
     :auto-apply="false"
   >
