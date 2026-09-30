@@ -17,6 +17,16 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def cycle_closed_reason(cycle: models.RecruitmentCycle) -> str | None:
+    """Why the cohort isn't taking applications right now, or None if it is."""
+    now = _now()
+    if cycle.opens_at and cycle.opens_at > now:
+        return f"Applications for {cycle.name} open on {cycle.opens_at:%d %B %Y}"
+    if cycle.closes_at and cycle.closes_at < now:
+        return "This recruitment cohort has closed"
+    return None
+
+
 def department_accepting(cd: models.CycleDepartment) -> bool:
     """Whether a cohort department still takes applications (the SQL twin is _cycle_department_rows)."""
     return cd.is_open and (cd.closes_at is None or cd.closes_at > _now())
@@ -296,6 +306,10 @@ class ApplicationUseCases:
         cycle = db.query(models.RecruitmentCycle).filter(models.RecruitmentCycle.is_active.is_(True)).first()
         if not cycle:
             return []
+        # Outside the cohort's dates nothing is accepting, whatever each
+        # department's own setting says.
+        if not include_closed and cycle_closed_reason(cycle):
+            return []
         return ApplicationUseCases._cycle_department_rows(db, cycle, include_closed)
 
     @staticmethod
@@ -326,8 +340,9 @@ class ApplicationUseCases:
         cycle = db.query(models.RecruitmentCycle).filter(models.RecruitmentCycle.is_active.is_(True)).first()
         if not cycle:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Recruitment is not currently open")
-        if cycle.closes_at and cycle.closes_at < _now():
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This recruitment cohort has closed")
+        closed_reason = cycle_closed_reason(cycle)
+        if closed_reason:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=closed_reason)
 
         # Candidate is de-duplicated by email (talent pool persists across cycles).
         email = data.email.lower().strip()

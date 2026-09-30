@@ -35,6 +35,22 @@
           </v-btn>
         </v-card>
 
+        <!-- Couldn't load the cohort: say so rather than show an empty form -->
+        <v-card v-else-if="loadError" class="pa-6 pa-sm-8 text-center">
+          <v-icon icon="mdi-alert-circle-outline" color="error" size="64" class="mb-4" />
+          <h2 class="text-h5 mb-3">We couldn't load the application form</h2>
+          <p class="text-body-1 mb-6">{{ loadError }}</p>
+          <v-btn color="primary" variant="flat" prepend-icon="mdi-refresh" @click="load">Try again</v-btn>
+        </v-card>
+
+        <!-- Closed: no cohort, outside its dates, or every department closed -->
+        <v-card v-else-if="closedState" class="pa-6 pa-sm-8 text-center">
+          <v-icon :icon="closedState.icon" color="medium-emphasis" size="64" class="mb-4" />
+          <h2 class="text-h5 mb-3">{{ closedState.title }}</h2>
+          <p class="text-body-1 mb-6">{{ closedState.text }}</p>
+          <v-btn color="primary" variant="flat" to="/">See upcoming events</v-btn>
+        </v-card>
+
         <!-- Form -->
         <template v-else>
           <div class="text-center mb-5 mb-sm-6">
@@ -56,7 +72,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { RecruitmentService } from '@/services/RecruitmentService.js';
 import ApplicationStepper from '@/components/recruitment/ApplicationStepper.vue';
 
@@ -64,6 +80,43 @@ const isLoading = ref(true);
 const departments = ref([]);
 const cycle = ref(null);
 const submission = ref(null);
+const loadError = ref(null);
+
+// The server rejects out-of-window submissions too, but only at the final
+// step - checking here spares candidates filling in a form they can't send.
+const closedState = computed(() => {
+  const c = cycle.value;
+  if (!c) {
+    return {
+      icon: 'mdi-calendar-remove-outline',
+      title: "Recruitment isn't open right now",
+      text: "There's no intake running at the moment. Keep an eye on our events - we announce new intakes there.",
+    };
+  }
+  const now = Date.now();
+  if (c.opens_at && new Date(c.opens_at).getTime() > now) {
+    return {
+      icon: 'mdi-calendar-clock-outline',
+      title: `Applications open ${formatDate(c.opens_at)}`,
+      text: `The ${c.name} hasn't opened yet. Come back on ${formatDate(c.opens_at)} to apply.`,
+    };
+  }
+  if (c.closes_at && new Date(c.closes_at).getTime() < now) {
+    return {
+      icon: 'mdi-calendar-remove-outline',
+      title: 'Applications are closed',
+      text: `The ${c.name} closed on ${formatDate(c.closes_at)}. Thanks for your interest - keep an eye on our events for the next intake.`,
+    };
+  }
+  if (!departments.value.length) {
+    return {
+      icon: 'mdi-calendar-remove-outline',
+      title: 'Applications are closed',
+      text: `No teams are taking applications for the ${c.name} any more. Keep an eye on our events for the next intake.`,
+    };
+  }
+  return null;
+});
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -75,7 +128,9 @@ function onSubmit(result) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-onMounted(async () => {
+async function load() {
+  isLoading.value = true;
+  loadError.value = null;
   try {
     const [deps, activeCycle] = await Promise.all([
       RecruitmentService.getOpenPositions(),
@@ -83,8 +138,15 @@ onMounted(async () => {
     ]);
     departments.value = deps;
     cycle.value = activeCycle;
+  } catch (err) {
+    console.error('Failed to load application form:', err.response?.status, err.response?.data, err);
+    loadError.value = err.response
+      ? 'Something went wrong on our side. Please try again in a moment.'
+      : "We couldn't reach the server. Check your connection and try again.";
   } finally {
     isLoading.value = false;
   }
-});
+}
+
+onMounted(load);
 </script>
