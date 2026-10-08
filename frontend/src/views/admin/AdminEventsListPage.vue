@@ -29,9 +29,33 @@
           </template>
 
           <template v-slot:item.status="{ item }">
-            <v-chip :color="statusColor(item.status)" variant="tonal" size="small" label>
-              {{ item.status }}
-            </v-chip>
+            <v-menu>
+              <template v-slot:activator="{ props }">
+                <v-chip
+                  v-bind="props"
+                  :color="statusColor(item.status)"
+                  :disabled="statusUpdatingId === item.event_id"
+                  variant="tonal"
+                  size="small"
+                  label
+                  append-icon="mdi-menu-down"
+                  title="Change status"
+                >
+                  {{ item.status }}
+                </v-chip>
+              </template>
+              <v-list density="compact">
+                <v-list-item
+                  v-for="option in EVENT_STATUSES"
+                  :key="option"
+                  :active="option === item.status"
+                  :disabled="option === item.status"
+                  @click="changeStatus(item, option)"
+                >
+                  <v-list-item-title>{{ option }}</v-list-item-title>
+                </v-list-item>
+              </v-list>
+            </v-menu>
           </template>
 
           <template v-slot:item.actions="{ item }">
@@ -133,7 +157,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import { useDisplay } from 'vuetify';
 import { useRouter } from 'vue-router';
 import { useEventStore } from '@/stores/events.store.js';
-import { statusColor } from '@/utils/eventStatus.js';
+import { statusColor, EVENT_STATUSES } from '@/utils/eventStatus.js';
 import DateTimeField from '@/components/common/DateTimeField.vue';
 
 const eventStore = useEventStore();
@@ -180,6 +204,24 @@ async function confirmDelete() {
     snackbar.color = 'error';
     snackbar.show = true;
   }
+}
+
+// ── Status ────────────────────────────────────────────────────────────────
+const statusUpdatingId = ref(null);
+
+async function changeStatus(event, status) {
+  statusUpdatingId.value = event.event_id;
+  try {
+    await eventStore.setEventStatus(event.event_id, status);
+    snackbar.text = `"${event.event_name}" is now ${status}`;
+    snackbar.color = 'success';
+  } catch {
+    snackbar.text = eventStore.error || 'Could not update the event status';
+    snackbar.color = 'error';
+  } finally {
+    statusUpdatingId.value = null;
+  }
+  snackbar.show = true;
 }
 
 // ── Duplicate ─────────────────────────────────────────────────────────────
