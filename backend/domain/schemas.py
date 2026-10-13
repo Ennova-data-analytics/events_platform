@@ -2,7 +2,7 @@ from pydantic import BaseModel, EmailStr, ConfigDict, field_serializer, Field, f
 from core import s3_service
 import uuid
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 from decimal import Decimal
 
 class UserBase(BaseModel):
@@ -30,6 +30,8 @@ class EventSummary(BaseModel):
     event_id: int 
     event_name: str
     event_date_start: datetime
+    is_charitable: bool = False
+    charity_name: str | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -46,6 +48,7 @@ class Registration(BaseModel):
     discount_code_id: int | None = None
     discount_amount_euros: Decimal | None = None
     final_amount_euros: Decimal | None = None
+    donation_amount_euros: Decimal | None = None
     member_discount_applied: bool | None = None
     paid_by_team_leader: bool = False
     ticket_type_id: int | None = None
@@ -176,6 +179,9 @@ class EventBase(BaseModel):
     event_photos: list[EventPhoto] = []
     attachments: list[EventAttachment] = []
     is_free_for_members: bool = False
+    is_charitable: bool = False
+    charity_name: str | None = Field(None, max_length=255)
+    charity_description: str | None = None
     teams_enabled: bool = False
     team_max_members: int | None = None
 
@@ -203,6 +209,9 @@ class EventUpdate(BaseModel):
     email_template_payment_id: int | None = None
     feedback_template_id: int | None = None
     is_free_for_members: bool | None = None
+    is_charitable: bool | None = None
+    charity_name: str | None = Field(None, max_length=255)
+    charity_description: str | None = None
     teams_enabled: bool | None = None
     team_max_members: int | None = None
     status: EventStatus | None = None
@@ -246,9 +255,15 @@ class Event(EventBase):
 class RegistrationWithUser(Registration):
     user: User
 
+# Optional extra donation on a charity event. Capped so a mistyped amount can't
+# reach Stripe as a five-figure charge.
+MAX_DONATION_EUROS = 10000
+DonationAmount = Annotated[Decimal, Field(ge=0, le=MAX_DONATION_EUROS, decimal_places=2)] | None
+
 class RegistrationCreate(BaseModel):
     ticket_type_id: int | None = Field(None, description="Required if event has ticket types")
     form_responses: dict | None = None
+    donation_amount_euros: DonationAmount = None
     discount_code: str | None = Field(None, description="Optional discount code")
     referral_code: str | None = Field(None, description="Optional referral link code")
     team_selection: Optional["TeamSelectionRequest"] = Field(None, description="Required if ticket type requires teams")
@@ -270,6 +285,7 @@ class RegisterAndCreateAccountRequest(BaseModel):
     study_year: str | None = None
     ticket_type_id: int | None = Field(None, description="Required if event has ticket types")
     form_responses: dict | None = None
+    donation_amount_euros: DonationAmount = None
     discount_code: str | None = Field(None, description="Optional discount code")
     referral_code: str | None = Field(None, description="Optional referral link code")
     team_selection: Optional["TeamSelectionRequest"] = Field(None, description="Required if ticket type requires teams")
@@ -284,6 +300,14 @@ class RegisterAndCreateAccountResponse(BaseModel):
 
 class RegistrationApprove(BaseModel):
     custom_amount_euros: float | None = None
+
+class CheckoutSessionRequest(BaseModel):
+    """
+    Body for paying an already-created registration. Omitting
+    donation_amount_euros keeps whatever was chosen at registration; sending it
+    (including 0) replaces it.
+    """
+    donation_amount_euros: DonationAmount = None
 
 class FormField(BaseModel):
     name: str

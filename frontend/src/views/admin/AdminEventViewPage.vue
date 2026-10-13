@@ -1102,12 +1102,27 @@ const attendeeHeaders = ref([
 const pendingHeaders = ref([...attendeeHeaders.value.filter(h => h.key !== 'checked_in' && h.key !== 'checked_in_at'), { title: 'Actions', key: 'actions', sortable: false, align: 'end' }]);
 const attendeeHeadersWithRevert = ref([...attendeeHeaders.value, { title: 'Actions', key: 'actions', sortable: false, align: 'end' }]);
 
+// Charity events get a Donation column next to Payment in every attendee table.
+const donationHeader = {
+  title: 'Donation',
+  key: 'donation_amount_euros',
+  value: item => item.donation_amount_euros > 0 ? `€${Number(item.donation_amount_euros).toFixed(2)}` : '—',
+};
+function showDonationColumn() {
+  for (const headers of [attendeeHeaders, pendingHeaders, attendeeHeadersWithRevert]) {
+    if (headers.value.some(h => h.key === donationHeader.key)) continue;
+    const paymentIndex = headers.value.findIndex(h => h.key === 'paid_by_team_leader');
+    headers.value.splice(paymentIndex + 1, 0, donationHeader);
+  }
+}
+
 async function fetchEventDetails() {
   const eventIdValue = route.params.id;
   try {
     const response = await EventService.getEventById(eventIdValue);
     eventTitle.value = response.data.event_name;
     eventPrice.value = response.data.price_euros;
+    if (response.data.is_charitable) showDonationColumn();
     signupsEnabled.value = response.data.signups_enabled ?? true;
     hasFeedbackTemplate.value = !!response.data.feedback_template_id;
     eventTicketTypes.value = response.data.ticket_types || [];

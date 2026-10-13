@@ -161,6 +161,17 @@
               />
             </div>
 
+            <CharityDonationCard
+              v-if="event.is_charitable"
+              v-model="donationAmount"
+              :charity-name="event.charity_name"
+              :charity-description="event.charity_description"
+              :ticket-price="payableAmount"
+              :allow-donation="payableAmount > 0"
+              class="mt-4"
+              @update:valid="isDonationValid = $event"
+            />
+
             <!-- Login prompt for guests -->
             <div v-if="!authStore.isAuthenticated" class="text-center mt-4 mb-2">
               <span class="text-body-2 text-grey-darken-1">
@@ -203,6 +214,7 @@ import { EventService } from '@/services/EventService.js';
 import TicketTypeSelector from '@/components/events/TicketTypeSelector.vue';
 import TeamSelector from '@/components/events/TeamSelector.vue';
 import DiscountCodeInput from '@/components/DiscountCodeInput.vue';
+import CharityDonationCard from '@/components/events/CharityDonationCard.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -232,7 +244,10 @@ const customForm = ref({ fields: [] });
 const formResponses = ref({});
 const formFiles = ref({});
 const appliedDiscountCode = ref(null);
+const discountedPrice = ref(null);
 const referralCode = ref(null);
+const donationAmount = ref(0);
+const isDonationValid = ref(true);
 
 // UI state
 const isSubmitting = ref(false);
@@ -249,6 +264,35 @@ const shouldShowDiscountInput = computed(() => {
   }
   if (!hasTicketTypes.value && event.value?.price_euros > 0) return true;
   return false;
+});
+
+// What this registration will be charged for the ticket itself, mirroring
+// create_registration on the backend. Drives the charity card: a donation is
+// only offered when there is a ticket payment for it to ride on.
+const payableAmount = computed(() => {
+  if (!event.value) return 0;
+  const isMember = !!authStore.user?.is_ennova_member;
+  let price;
+
+  if (hasTicketTypes.value) {
+    const ticket = selectedTicketType.value;
+    if (!ticket) return 0;
+    if (ticket.is_free_for_members && isMember) return 0;
+
+    price = parseFloat(ticket.price_euros) || 0;
+    if (ticket.group_payment_mode === 'leader' && ticket.group_size && ticket.group_price_euros != null) {
+      if (teamSelection.value?.action === 'create') price = parseFloat(ticket.group_price_euros) || 0;
+      else if (teamSelection.value?.action === 'join') return 0;
+    }
+  } else {
+    if (event.value.is_free_for_members && isMember) return 0;
+    price = parseFloat(event.value.price_euros) || 0;
+  }
+
+  if (appliedDiscountCode.value && discountedPrice.value !== null) {
+    return discountedPrice.value;
+  }
+  return price;
 });
 
 const registrationStatus = computed(() => {
@@ -341,10 +385,13 @@ function handleTeamSelection(selection) {
 
 function handleDiscountApplied(data) {
   appliedDiscountCode.value = data.code;
+  const finalPrice = parseFloat(data.discountInfo?.final_price);
+  discountedPrice.value = Number.isFinite(finalPrice) ? finalPrice : null;
 }
 
 function handleDiscountRemoved() {
   appliedDiscountCode.value = null;
+  discountedPrice.value = null;
 }
 
 function validate() {
@@ -391,6 +438,10 @@ function validate() {
       }
     }
   }
+  if (!isDonationValid.value) {
+    errorMessage.value = 'Please enter a valid donation amount, or choose "No thanks".';
+    return false;
+  }
   return true;
 }
 
@@ -416,6 +467,10 @@ async function submitRegistration() {
   isSubmitting.value = true;
   errorMessage.value = '';
 
+  const donation = event.value.is_charitable && payableAmount.value > 0 && donationAmount.value > 0
+    ? donationAmount.value
+    : null;
+
   try {
     let result;
 
@@ -428,7 +483,8 @@ async function submitRegistration() {
         discount_code: appliedDiscountCode.value,
         referral_code: referralCode.value,
         ticket_type_id: selectedTicketTypeId.value,
-        team_selection: teamSelection.value
+        team_selection: teamSelection.value,
+        donation_amount_euros: donation
       };
 
       result = await eventStore.registerForEvent(event.value.event_id, registrationData);
@@ -444,7 +500,8 @@ async function submitRegistration() {
         form_responses: { ...formResponses.value },
         discount_code: appliedDiscountCode.value,
         referral_code: referralCode.value,
-        team_selection: teamSelection.value
+        team_selection: teamSelection.value,
+        donation_amount_euros: donation
       };
 
       const response = await AuthService.registerAndApply(event.value.event_id, payload);

@@ -179,14 +179,20 @@ def send_payment_confirmed_notification(
         else:
             price = event.price_euros
 
+        # The checkout charged ticket + donation, so that is the amount paid.
+        donation = registration.donation_amount_euros or 0
+        amount_paid = (price or 0) + donation
+
         html_content, text_content = email_templates.render_payment_confirmed_email(
             user_name=user.full_name or user.email.split("@")[0],
             event_name=event.event_name,
             event_date=event_date,
             event_location=event.location or "TBD",
-            price=float(price) if price else None,
+            price=float(amount_paid) if amount_paid else None,
             event_url=event_url,
-            custom_template=custom_template
+            custom_template=custom_template,
+            donation=float(donation) if donation else None,
+            charity_name=(event.charity_name or "charity") if event.is_charitable else None
         )
 
         subject = f"Payment Confirmed: {event.event_name}"

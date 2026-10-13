@@ -381,6 +381,40 @@
                 </v-card-text>
               </v-card>
 
+              <v-card variant="outlined">
+                <v-card-text class="py-3">
+                  <div class="d-flex align-center justify-space-between">
+                    <div>
+                      <div class="text-subtitle-2 font-weight-medium">Charity Event</div>
+                      <div class="text-caption text-medium-emphasis">Attendees are told their ticket price goes to charity and can add a donation when they pay.</div>
+                    </div>
+                    <v-switch v-model="form.is_charitable" color="pink-darken-1" hide-details class="ml-4 flex-shrink-0" />
+                  </div>
+                  <template v-if="form.is_charitable">
+                    <v-text-field
+                      v-model="form.charity_name"
+                      label="Charity name"
+                      variant="outlined"
+                      density="comfortable"
+                      class="mt-3"
+                      hint="Shown to attendees and on the Stripe checkout, e.g. &quot;Red Cross&quot;."
+                      persistent-hint
+                    />
+                    <v-textarea
+                      v-model="form.charity_description"
+                      label="Message to attendees (optional)"
+                      variant="outlined"
+                      density="comfortable"
+                      rows="2"
+                      auto-grow
+                      class="mt-3"
+                      hint="A sentence or two about the cause and what donations fund."
+                      persistent-hint
+                    />
+                  </template>
+                </v-card-text>
+              </v-card>
+
               <v-card v-if="pricingModel !== 'tickets'" variant="outlined">
                 <v-card-text class="py-3">
                   <div class="d-flex align-center justify-space-between">
@@ -553,6 +587,7 @@
               </template>
               <v-list-item title="Requires Approval" :subtitle="form.requires_approval ? 'Yes' : 'No'" />
               <v-list-item v-if="pricingModel === 'fixed'" title="Free for Members" :subtitle="form.is_free_for_members ? 'Yes' : 'No'" />
+              <v-list-item title="Charity Event" :subtitle="form.is_charitable ? (form.charity_name || 'Yes') : 'No'" />
               <v-list-item v-if="pricingModel !== 'tickets'" title="Team Registration" :subtitle="form.teams_enabled ? 'Enabled' : 'Disabled'" />
             </v-list>
 
@@ -635,6 +670,9 @@ const form = ref({
   capacity: null,
   requires_approval: true,
   is_free_for_members: false,
+  is_charitable: false,
+  charity_name: null,
+  charity_description: null,
   teams_enabled: false,
   team_max_members: null,
   form_template_id: null,
@@ -770,6 +808,10 @@ function buildPayload() {
     payload.latitude = null
     payload.longitude = null
   }
+
+  // Clean up charity details
+  payload.charity_name = payload.is_charitable ? (payload.charity_name?.trim() || null) : null
+  payload.charity_description = payload.is_charitable ? (payload.charity_description?.trim() || null) : null
 
   return payload
 }

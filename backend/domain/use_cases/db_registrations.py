@@ -7,11 +7,42 @@ from domain.use_cases.db_ticket_types import TicketTypeUseCases
 from domain.use_cases.db_referral_links import ReferralLinkUseCases
 from domain.use_cases import db_teams
 from domain.schemas import DiscountCodeValidation, TeamSelectionRequest
+from decimal import Decimal
 import uuid
 import secrets
 import logging
 
 logger = logging.getLogger(__name__)
+
+def resolve_donation(
+    event: models.Event,
+    donation_amount_euros: Decimal | None,
+    payable_amount_euros,
+) -> Decimal | None:
+    """
+    Validate an optional donation against the event and the ticket it rides on.
+
+    Returns the amount to store, or None for no donation. A donation is charged
+    as an extra line on the ticket's checkout, so it needs both a charity event
+    and something to pay for - there is no donation-only checkout.
+    """
+    if donation_amount_euros is None or donation_amount_euros <= 0:
+        return None
+
+    if not event.is_charitable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This event does not accept donations"
+        )
+
+    if not payable_amount_euros or payable_amount_euros <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A donation can only be added to a paid ticket"
+        )
+
+    return donation_amount_euros
+
 
 def create_registration(
     db: Session,
@@ -21,7 +52,8 @@ def create_registration(
     discount_code: str | None = None,
     ticket_type_id: int | None = None,
     team_selection: TeamSelectionRequest | None = None,
-    referral_code: str | None = None
+    referral_code: str | None = None,
+    donation_amount_euros: Decimal | None = None
 ):
     """Handles db operations for creating a new registration with ticket type support"""
     existing_registration = db.query(models.Registration).filter(
@@ -194,15 +226,20 @@ def create_registration(
             discount_code_id = validation_result.discount_code_id
             discount_amount = validation_result.discount_amount
             final_amount = validation_result.final_price
-
-            DiscountCodeUseCases.increment_usage_count(db, discount_code_id)
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=validation_result.message
             )
 
- 
+    donation_amount = resolve_donation(event, donation_amount_euros, final_amount)
+
+    # Counted only once nothing above can still reject the registration, so a
+    # refused donation doesn't burn a use of the code.
+    if discount_code_id:
+        DiscountCodeUseCases.increment_usage_count(db, discount_code_id)
+
+
     referral_link_id = None
     if referral_code:
         referral_link_id = ReferralLinkUseCases.validate_referral_code(db, referral_code, event_id)
@@ -221,6 +258,7 @@ def create_registration(
         discount_code_id=discount_code_id,
         discount_amount_euros=discount_amount,
         final_amount_euros=final_amount,
+        donation_amount_euros=donation_amount,
         member_discount_applied=member_discount_applied,
         paid_by_team_leader=is_paid_by_leader,
         referral_link_id=referral_link_id,

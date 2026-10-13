@@ -1,5 +1,6 @@
 import stripe
 import secrets
+from decimal import Decimal, ROUND_HALF_UP
 from core.config import settings
 from domain import models
 from sqlalchemy.orm import Session
@@ -7,6 +8,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 stripe.api_key = settings.STRIPE_SECRET_KEY
+
+
+def _to_cents(amount_euros) -> int:
+    """Euros to whole cents, via Decimal so 19.99 doesn't truncate to 1998."""
+    return int((Decimal(str(amount_euros)) * 100).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+
 
 class StripeService:
     @staticmethod
@@ -23,7 +30,7 @@ class StripeService:
         else:
             price_euros = event.price_euros
 
-        amount_cents = int(float(price_euros) * 100)
+        amount_cents = _to_cents(price_euros)
 
         product_name = event.event_name
         product_description = f'Registration for {event.event_name}'
@@ -32,21 +39,46 @@ class StripeService:
             discount_code = registration.discount_code
             product_description = f'Registration for {event.event_name} (Discount code: {discount_code.code} applied)'
 
+        charity_label = event.charity_name or 'charity'
+        if event.is_charitable:
+            product_description = f'{product_description}. Your ticket price goes to {charity_label}.'
+
+        donation_cents = _to_cents(registration.donation_amount_euros) if registration.donation_amount_euros else 0
+
+        line_items = []
+        # Stripe rejects zero-amount lines, so a ticket an organiser has
+        # custom-priced to 0 is left off when only the donation is being charged.
+        if amount_cents > 0 or donation_cents == 0:
+            line_items.append({
+                'price_data': {
+                    'currency': 'eur',
+                    'unit_amount': amount_cents,
+                    'product_data': {
+                        'name': product_name,
+                        'description': product_description,
+                        'images': [event.image_url] if event.image_url and event.image_url.startswith('http') else [],
+                    },
+                },
+                'quantity': 1,
+            })
+
+        if donation_cents > 0:
+            line_items.append({
+                'price_data': {
+                    'currency': 'eur',
+                    'unit_amount': donation_cents,
+                    'product_data': {
+                        'name': f'Donation to {charity_label}',
+                        'description': f'Additional donation made with your registration for {event.event_name}',
+                    },
+                },
+                'quantity': 1,
+            })
+
         try:
             checkout_session = stripe.checkout.Session.create(
                 payment_method_types=['card'],
-                line_items=[{
-                    'price_data': {
-                        'currency': 'eur',
-                        'unit_amount': amount_cents,
-                        'product_data': {
-                            'name': product_name,
-                            'description': product_description,
-                            'images': [event.image_url] if event.image_url and event.image_url.startswith('http') else [],
-                        },
-                    },
-                    'quantity': 1,
-                }],
+                line_items=line_items,
                 mode='payment',
                 success_url=f"{settings.FRONTEND_URL}/event/{event.event_id}/registered?payment=success",
                 cancel_url=f"{settings.FRONTEND_URL}/event/{event.event_id}?payment=cancelled",
@@ -58,6 +90,7 @@ class StripeService:
                     'user_id': str(user.user_id),
                     'discount_code_id': str(registration.discount_code_id) if registration.discount_code_id else None,
                     'referral_link_id': str(registration.referral_link_id) if registration.referral_link_id else None,
+                    'donation_amount_euros': str(registration.donation_amount_euros) if donation_cents > 0 else None,
                 }
             )
 

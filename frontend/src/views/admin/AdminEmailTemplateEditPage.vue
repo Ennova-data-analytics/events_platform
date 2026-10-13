@@ -117,7 +117,7 @@ const templateVariables = {
   registration_approved: ['user_name', 'event_name', 'event_date', 'event_location', 'price', 'event_url', 'header_title'],
   registration_rejected: ['user_name', 'event_name', 'reason', 'header_title'],
   registration_received: ['user_name', 'event_name', 'event_date', 'header_title'],
-  payment_confirmed: ['user_name', 'event_name', 'event_date', 'event_location', 'price', 'event_url', 'header_title']
+  payment_confirmed: ['user_name', 'event_name', 'event_date', 'event_location', 'price', 'donation', 'charity_name', 'event_url', 'header_title']
 };
 
 const isEditMode = computed(() => !!route.params.id);

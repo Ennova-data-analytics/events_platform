@@ -174,6 +174,12 @@ class Event(Base):
     signups_enabled = Column(Boolean, default=True, nullable=False)
     is_free_for_members = Column(Boolean, default=False, nullable=False)
 
+    # Charity events: ticket proceeds go to charity_name, and attendees are
+    # offered an optional extra donation at checkout.
+    is_charitable = Column(Boolean, default=False, nullable=False)
+    charity_name = Column(String(255), nullable=True)
+    charity_description = Column(Text, nullable=True)
+
     requires_approval = Column(Boolean, default=True, nullable=False)
     teams_enabled = Column(Boolean, default=False, nullable=False)
     team_max_members = Column(Integer, nullable=True)
@@ -303,6 +309,8 @@ class Registration(Base):
     discount_code_id = Column(Integer, ForeignKey('discount_codes.code_id', ondelete='SET NULL'), nullable=True)
     discount_amount_euros = Column(DECIMAL(10, 2), nullable=True)
     final_amount_euros = Column(DECIMAL(10, 2), nullable=True)
+    # Optional extra donation on a charity event, charged on top of the ticket.
+    donation_amount_euros = Column(DECIMAL(10, 2), nullable=True)
     registration_date = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     member_discount_applied = Column(Boolean, default=False, nullable=False)
     paid_by_team_leader = Column(Boolean, default=False, nullable=False)
@@ -316,6 +324,13 @@ class Registration(Base):
     discount_code = relationship("DiscountCode", back_populates="registrations")
     ticket_type = relationship("TicketType", back_populates="registrations")
     referral_link = relationship("ReferralLink", back_populates="registrations")
+
+    __table_args__ = (
+        CheckConstraint(
+            "donation_amount_euros IS NULL OR donation_amount_euros >= 0",
+            name='check_registration_donation_non_negative'
+        ),
+    )
 
 
 class Feedback(Base):

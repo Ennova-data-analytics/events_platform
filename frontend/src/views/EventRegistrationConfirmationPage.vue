@@ -10,6 +10,16 @@
               </v-icon>
               <h1 class="form-title mb-2">{{ title }}</h1>
               <p class="form-subtitle mb-6">{{ subtitle }}</p>
+              <v-alert
+                v-if="charityMessage"
+                color="pink-darken-1"
+                variant="tonal"
+                icon="mdi-hand-heart"
+                density="compact"
+                class="mb-6 text-left"
+              >
+                {{ charityMessage }}
+              </v-alert>
               <v-btn color="primary" variant="flat" size="large" :to="`/event/${$route.params.id}`">
                 View Event Details
               </v-btn>
@@ -111,13 +121,14 @@ onMounted(async () => {
   }
 });
 
-const registrationStatus = computed(() => {
+const registration = computed(() => {
   const eventId = parseInt(route.params.id);
-  const registration = authStore.user?.registrations?.find(
+  return authStore.user?.registrations?.find(
     reg => reg.event.event_id === eventId
-  );
-  return registration?.status || null;
+  ) ?? null;
 });
+
+const registrationStatus = computed(() => registration.value?.status || null);
 
 const isPending = computed(() => registrationStatus.value === 'Pending Approval');
 const isPaidConfirmation = computed(() => route.query.payment === 'success');
@@ -126,6 +137,17 @@ const title = computed(() => {
   if (isPaidConfirmation.value) return "You're In!";
   if (isPending.value) return 'Application Submitted';
   return "You're In!";
+});
+
+// Shown once payment has gone through on a charity event.
+const charityMessage = computed(() => {
+  const reg = registration.value;
+  if (!isPaidConfirmation.value || !reg?.event.is_charitable) return '';
+  const charity = reg.event.charity_name || 'charity';
+  const donation = parseFloat(reg.donation_amount_euros) || 0;
+  return donation > 0
+    ? `Your ticket price goes to ${charity}, along with your extra donation of €${donation.toFixed(2)}. Thank you!`
+    : `Your ticket price goes to ${charity}. Thank you for your support!`;
 });
 
 const subtitle = computed(() => {

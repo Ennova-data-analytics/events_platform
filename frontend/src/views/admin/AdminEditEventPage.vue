@@ -245,6 +245,40 @@
                 </v-card-text>
               </v-card>
 
+              <v-card variant="outlined">
+                <v-card-text class="py-3">
+                  <div class="d-flex align-center justify-space-between">
+                    <div>
+                      <div class="text-subtitle-2 font-weight-medium">Charity Event</div>
+                      <div class="text-caption text-medium-emphasis">Attendees are told their ticket price goes to charity and can add a donation when they pay.</div>
+                    </div>
+                    <v-switch v-model="editableEvent.is_charitable" color="pink-darken-1" hide-details class="ml-4 flex-shrink-0" />
+                  </div>
+                  <template v-if="editableEvent.is_charitable">
+                    <v-text-field
+                      v-model="editableEvent.charity_name"
+                      label="Charity name"
+                      variant="outlined"
+                      density="comfortable"
+                      class="mt-3"
+                      hint="Shown to attendees and on the Stripe checkout, e.g. &quot;Red Cross&quot;."
+                      persistent-hint
+                    />
+                    <v-textarea
+                      v-model="editableEvent.charity_description"
+                      label="Message to attendees (optional)"
+                      variant="outlined"
+                      density="comfortable"
+                      rows="2"
+                      auto-grow
+                      class="mt-3"
+                      hint="A sentence or two about the cause and what donations fund."
+                      persistent-hint
+                    />
+                  </template>
+                </v-card-text>
+              </v-card>
+
               <v-card v-if="!hasTicketTypes" variant="outlined">
                 <v-card-text class="py-3">
                   <div class="d-flex align-center justify-space-between">
@@ -468,6 +502,8 @@ function buildEventPayload(data) {
   if (payload.event_date_start) payload.event_date_start = new Date(payload.event_date_start).toISOString()
   if (payload.event_date_end) payload.event_date_end = new Date(payload.event_date_end).toISOString()
   else delete payload.event_date_end
+  payload.charity_name = payload.is_charitable ? (payload.charity_name?.trim() || null) : null
+  payload.charity_description = payload.is_charitable ? (payload.charity_description?.trim() || null) : null
   return payload
 }
 

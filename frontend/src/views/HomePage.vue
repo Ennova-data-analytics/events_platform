@@ -41,6 +41,7 @@
           price_euros: ev.price_euros,
           ticket_types: ev.ticket_types,
           category: ev.category,
+          is_charitable: ev.is_charitable,
         }" />
       </v-col>
     </v-row>

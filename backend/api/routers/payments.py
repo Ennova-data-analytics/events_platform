@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
-from domain import models
+from domain import models, schemas
 from domain.services.stripe_service import stripe_service
+from domain.use_cases.db_registrations import resolve_donation
 from api import deps
 from core.config import settings
 import stripe
@@ -15,11 +16,15 @@ router = APIRouter()
 @router.post("/registrations/{registration_id}/create-checkout-session")
 def create_checkout_session(
     registration_id: int,
+    payload: schemas.CheckoutSessionRequest | None = None,
     db: Session = Depends(deps.get_db),
     current_user: models.User = Depends(deps.get_current_user)
 ):
     """
-    Create a Stripe Checkout Session for a registration payment
+    Create a Stripe Checkout Session for a registration payment.
+
+    On a charity event the body may carry donation_amount_euros to set or
+    change the optional donation before paying.
     """
 
     registration = db.query(models.Registration).filter(
@@ -62,6 +67,17 @@ def create_checkout_session(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This event is free, no payment required"
+        )
+
+    if payload is not None and 'donation_amount_euros' in payload.model_fields_set:
+        if registration.custom_amount_euros is not None:
+            ticket_amount = registration.custom_amount_euros
+        elif registration.final_amount_euros is not None:
+            ticket_amount = registration.final_amount_euros
+        else:
+            ticket_amount = event.price_euros
+        registration.donation_amount_euros = resolve_donation(
+            event, payload.donation_amount_euros, ticket_amount
         )
 
     try:

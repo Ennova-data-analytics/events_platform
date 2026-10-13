@@ -51,6 +51,19 @@
             </p>
           </div>
 
+          <v-alert
+            v-if="eventStore.currentEvent.is_charitable"
+            color="pink-darken-1"
+            variant="tonal"
+            icon="mdi-hand-heart"
+            density="compact"
+            class="mt-4"
+          >
+            <strong>Charity event.</strong>
+            Ticket proceeds go to {{ eventStore.currentEvent.charity_name || 'charity' }},
+            and you can add a donation when you pay.
+          </v-alert>
+
           <div v-if="hasTicketTypes && registrationStatus === 'not_registered'" class="mt-6 mb-2">
             <h3 class="text-subtitle-1 font-weight-bold text-grey-darken-1 mb-2">Available Tickets</h3>
             <v-card 
@@ -82,7 +95,7 @@
               Application Pending Review
             </v-chip>
 
-            <v-btn v-else-if="registrationStatus === 'Approved' && eventStore.currentEvent.price_euros > 0" color="warning" size="large" block @click="handlePayment">
+            <v-btn v-else-if="registrationStatus === 'Approved' && eventStore.currentEvent.price_euros > 0" color="warning" size="large" block :loading="isSubmitting" @click="startPayment">
               <v-icon start>mdi-credit-card-outline</v-icon>
               Pay Now to Confirm Spot
             </v-btn>
@@ -197,6 +210,36 @@
             </template>
           </v-alert>
 
+          <!-- Charity events: confirm where the money goes and offer a donation before Stripe -->
+          <v-dialog v-model="showDonationDialog" max-width="520">
+            <v-card>
+              <v-card-title class="text-h6 pt-5 px-6">Before you pay</v-card-title>
+              <v-card-text class="px-6">
+                <CharityDonationCard
+                  v-if="showDonationDialog"
+                  v-model="donationAmount"
+                  :charity-name="eventStore.currentEvent.charity_name"
+                  :charity-description="eventStore.currentEvent.charity_description"
+                  :ticket-price="ticketAmountDue"
+                  @update:valid="isDonationValid = $event"
+                />
+              </v-card-text>
+              <v-card-actions class="px-6 pb-5">
+                <v-spacer></v-spacer>
+                <v-btn variant="text" :disabled="isSubmitting" @click="showDonationDialog = false">Cancel</v-btn>
+                <v-btn
+                  color="primary"
+                  variant="flat"
+                  :loading="isSubmitting"
+                  :disabled="!isDonationValid"
+                  @click="handlePayment(donationAmount)"
+                >
+                  Continue to payment
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+
           <v-snackbar v-model="showSuccess" color="success" timeout="4000">
             {{ successMessage }}
           </v-snackbar>
@@ -282,6 +325,7 @@ import DOMPurify from 'dompurify';
 import SponsorLogos from '@/components/events/SponsorLogos.vue';
 import EventPhotos from '@/components/events/EventPhotos.vue';
 import EventLocationMap from '@/components/events/EventLocationMap.vue';
+import CharityDonationCard from '@/components/events/CharityDonationCard.vue';
 import { generateGoogleCalendarUrl, downloadIcsFile as downloadIcs } from '@/utils/calendarHelpers.js';
 
 // --- Markdown Config ---
@@ -297,6 +341,9 @@ const showSuccess = ref(false);
 const successMessage = ref('');
 const showError = ref(false);
 const isSubmitting = ref(false);
+const showDonationDialog = ref(false);
+const donationAmount = ref(0);
+const isDonationValid = ref(true);
 
 // --- Computed Properties ---
 
@@ -315,6 +362,13 @@ const userRegistration = computed(() => {
 const registrationStatus = computed(() => {
   if (!authStore.user || !eventStore.currentEvent) return 'loading';
   return userRegistration.value ? userRegistration.value.status : 'not_registered';
+});
+
+// Ticket amount the "Pay Now" checkout will charge, before any donation.
+const ticketAmountDue = computed(() => {
+  const reg = userRegistration.value;
+  const amount = reg?.custom_amount_euros ?? reg?.final_amount_euros ?? eventStore.currentEvent?.price_euros;
+  return parseFloat(amount) || 0;
 });
 
 // UX Helper: Check if tickets exist
@@ -373,7 +427,19 @@ async function handleUrlParams() {
   }
 }
 
-async function handlePayment() {
+function startPayment() {
+  if (eventStore.currentEvent.is_charitable && ticketAmountDue.value > 0) {
+    // Start from whatever they chose when registering.
+    donationAmount.value = parseFloat(userRegistration.value?.donation_amount_euros) || 0;
+    showDonationDialog.value = true;
+    return;
+  }
+  handlePayment();
+}
+
+// `donation` is only passed from the charity dialog; leaving it out keeps the
+// donation already stored on the registration.
+async function handlePayment(donation) {
   isSubmitting.value = true;
   try {
     const registration = authStore.user.registrations.find(
@@ -384,14 +450,18 @@ async function handlePayment() {
     }
 
     const response = await ApiClient.post(
-      `/payments/registrations/${registration.registration_id}/create-checkout-session`
+      `/payments/registrations/${registration.registration_id}/create-checkout-session`,
+      typeof donation === 'number' ? { donation_amount_euros: donation } : undefined
     );
 
     if (response.data.checkout_url) {
       window.location.href = response.data.checkout_url;
     }
   } catch (error) {
-    eventStore.error = 'Failed to initiate payment.';
+    console.error('Failed to initiate payment:', error);
+    const detail = error.response?.data?.detail;
+    eventStore.error = typeof detail === 'string' ? detail : 'Failed to initiate payment.';
+    showDonationDialog.value = false;
     showError.value = true;
   } finally {
     isSubmitting.value = false;

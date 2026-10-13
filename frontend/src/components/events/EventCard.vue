@@ -28,6 +28,18 @@
           >
             {{ event.category }}
           </v-chip>
+
+          <v-chip
+            v-if="event.is_charitable"
+            color="pink-darken-1"
+            variant="flat"
+            size="small"
+            class="charity-chip font-weight-bold"
+            prepend-icon="mdi-hand-heart"
+            label
+          >
+            Charity
+          </v-chip>
         </v-img>
 
         <div class="date-badge elevation-3 text-center rounded">
@@ -186,6 +198,13 @@ const priceDisplay = computed(() => {
   right: 16px;
   z-index: 2;
   opacity: 0.9;
+}
+
+.charity-chip {
+  position: absolute;
+  bottom: 12px;
+  left: 16px;
+  z-index: 2;
 }
 
 /* Hover Zoom Effect */

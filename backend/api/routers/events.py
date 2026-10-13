@@ -112,7 +112,8 @@ def register_user_for_event(event_id: int, registration_data: schemas.Registrati
         discount_code=registration_data.discount_code,
         ticket_type_id=registration_data.ticket_type_id,
         team_selection=registration_data.team_selection,
-        referral_code=registration_data.referral_code
+        referral_code=registration_data.referral_code,
+        donation_amount_euros=registration_data.donation_amount_euros
     )
 
     if not db_event.requires_approval and registration.final_amount_euros and registration.final_amount_euros > 0:
@@ -175,7 +176,8 @@ def register_and_create_account(event_id: int, payload: schemas.RegisterAndCreat
         discount_code=payload.discount_code,
         ticket_type_id=payload.ticket_type_id,
         team_selection=payload.team_selection,
-        referral_code=payload.referral_code
+        referral_code=payload.referral_code,
+        donation_amount_euros=payload.donation_amount_euros
     )
 
     if not db_event.requires_approval and registration.final_amount_euros and registration.final_amount_euros > 0:

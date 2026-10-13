@@ -285,10 +285,15 @@ def render_payment_confirmed_email(
     event_location: str,
     price: float,
     event_url: str = None,
-    custom_template: models.EmailTemplate = None
+    custom_template: models.EmailTemplate = None,
+    donation: float = None,
+    charity_name: str = None
 ) -> tuple[str, str]:
     """
-    Render payment confirmation email
+    Render payment confirmation email.
+
+    `price` is the total charged. On a charity event `charity_name` is set, and
+    `donation` is the part of the total the attendee added on top of the ticket.
     """
     if custom_template and custom_template.template_type == 'payment_confirmed':
         context = {
@@ -297,10 +302,22 @@ def render_payment_confirmed_email(
             'event_date': event_date,
             'event_location': event_location,
             'price': price,
+            'donation': donation,
+            'charity_name': charity_name,
             'event_url': event_url,
             'header_title': 'Payment Confirmed'
         }
         return render_custom_email(custom_template, context)
+
+    donation_line_html = f"<p><strong>Includes donation:</strong> €{donation:.2f}</p>" if donation else ""
+    donation_line_text = f"\n- Includes donation: €{donation:.2f}" if donation else ""
+    charity_note = ""
+    if charity_name:
+        charity_note = f"This is a charity event: your ticket price goes to {charity_name}."
+        if donation:
+            charity_note += f" Thank you for your additional donation of €{donation:.2f}!"
+    charity_note_html = f"<p>{charity_note}</p>" if charity_note else ""
+    charity_note_text = f"{charity_note}\n\n" if charity_note else ""
 
     content = f"""
         <h2>Payment Confirmed! 🎉</h2>
@@ -313,8 +330,10 @@ def render_payment_confirmed_email(
             <p><strong>Date:</strong> {event_date}</p>
             <p><strong>Location:</strong> {event_location}</p>
             <p><strong>Amount Paid:</strong> €{price:.2f}</p>
+            {donation_line_html}
         </div>
 
+        {charity_note_html}
         <p>Your spot is now confirmed! We look forward to seeing you there.</p>
 
         {f'<a href="{event_url}" class="button">View Event Details</a>' if event_url else ""}
@@ -339,9 +358,9 @@ Event Details:
 - Event: {event_name}
 - Date: {event_date}
 - Location: {event_location}
-- Amount Paid: €{price:.2f}
+- Amount Paid: €{price:.2f}{donation_line_text}
 
-Your spot is now confirmed! We look forward to seeing you there.
+{charity_note_text}Your spot is now confirmed! We look forward to seeing you there.
 
 {f"View event: {event_url}" if event_url else ""}
 
