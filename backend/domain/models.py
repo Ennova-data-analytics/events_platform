@@ -236,6 +236,7 @@ class Event(Base):
     ticket_types = relationship("TicketType", back_populates="event", cascade="all, delete-orphan", order_by="TicketType.display_order")
     teams = relationship("EventTeam", back_populates="event", cascade="all, delete-orphan", order_by="EventTeam.created_at")
     bulk_email_logs = relationship("BulkEmailLog", back_populates="event", cascade="all, delete-orphan", order_by="desc(BulkEmailLog.sent_at)")
+    donations = relationship("Donation", back_populates="event", cascade="all, delete-orphan", order_by="desc(Donation.created_at)")
 
 
 class TicketType(Base):
@@ -330,6 +331,38 @@ class Registration(Base):
             "donation_amount_euros IS NULL OR donation_amount_euros >= 0",
             name='check_registration_donation_non_negative'
         ),
+    )
+
+
+class Donation(Base):
+    """
+    A donation to a charity event made on its own, without a registration. The
+    donor may not have an account, so they are identified by email; user_id is
+    filled in only when they happened to be logged in.
+
+    Donations added on top of a ticket live on Registration.donation_amount_euros.
+    """
+    __tablename__ = "donations"
+
+    donation_id = Column(Integer, primary_key=True)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="SET NULL"), nullable=True)
+    email = Column(String(255), nullable=False)
+    amount_euros = Column(DECIMAL(10, 2), nullable=False)
+
+    # 'Pending' until Stripe confirms the checkout, then 'Paid'.
+    status = Column(String(20), nullable=False, default='Pending')
+    stripe_checkout_session_id = Column(String(255), unique=True, nullable=True)
+    stripe_payment_intent_id = Column(String(255), unique=True, nullable=True)
+
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+    paid_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    event = relationship("Event", back_populates="donations")
+
+    __table_args__ = (
+        CheckConstraint("amount_euros > 0", name='check_donation_amount_positive'),
+        CheckConstraint("status IN ('Pending', 'Paid')", name='check_donation_status_valid'),
     )
 
 

@@ -217,6 +217,30 @@ def send_payment_confirmed_notification(
         logger.error(f"Failed to send payment confirmation email to {user.email}: {str(e)}")
 
 
+def send_donation_thank_you_email(donation: models.Donation):
+    """
+    Thank the donor for a standalone donation. Email only: the donor may not
+    have an account, so there is no in-app notification to create.
+    """
+    event = donation.event
+    charity_name = event.charity_name or "charity"
+
+    html_content, text_content = email_templates.render_donation_thank_you_email(
+        event_name=event.event_name,
+        charity_name=charity_name,
+        amount=float(donation.amount_euros),
+        event_url=f"{settings.FRONTEND_URL}/event/{event.event_id}",
+    )
+
+    email_service.send_email(
+        to_email=donation.email,
+        to_name=donation.email.split("@")[0],
+        subject=f"Thank you for your donation to {charity_name}",
+        html_content=html_content,
+        text_content=text_content
+    )
+
+
 def send_team_invite_email(to_email: str, team_name: str, event: models.Event, invite_token: str):
     """Send a team invitation email to a prospective teammate."""
     try:

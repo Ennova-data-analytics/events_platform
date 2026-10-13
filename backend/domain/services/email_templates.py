@@ -370,6 +370,60 @@ If you have any questions, please contact us.
     return html_content, text_content
 
 
+def render_donation_thank_you_email(
+    event_name: str,
+    charity_name: str,
+    amount: float,
+    event_url: str = None
+) -> tuple[str, str]:
+    """
+    Render the thank-you email for a donation made without registering
+    """
+    content = f"""
+        <h2>Thank you for your donation! 💛</h2>
+        <p>Hi,</p>
+        <p>Your donation of <strong>€{amount:.2f}</strong> to <strong>{charity_name}</strong> has been successfully processed.</p>
+
+        <div class="event-details">
+            <h3>Donation Details</h3>
+            <p><strong>Charity:</strong> {charity_name}</p>
+            <p><strong>In support of:</strong> {event_name}</p>
+            <p><strong>Amount:</strong> €{amount:.2f}</p>
+        </div>
+
+        <p>This donation does not include a ticket to the event. If you would like to attend as well, you can register on the event page.</p>
+
+        {f'<a href="{event_url}" class="button">View Event</a>' if event_url else ""}
+
+        <p>If you have any questions, please contact us.</p>
+    """
+
+    base = Template(get_base_template())
+    html_content = base.render(
+        header_title="Thank You",
+        content=content
+    )
+
+    text_content = f"""
+Thank you for your donation!
+
+Your donation of €{amount:.2f} to {charity_name} has been successfully processed.
+
+Donation Details:
+- Charity: {charity_name}
+- In support of: {event_name}
+- Amount: €{amount:.2f}
+
+This donation does not include a ticket to the event. If you would like to attend as well, you can register on the event page.
+
+{f"View event: {event_url}" if event_url else ""}
+
+If you have any questions, please contact us.
+"""
+
+    return html_content, text_content
+
+
 def render_password_reset_email(
     user_name: str,
     reset_url: str

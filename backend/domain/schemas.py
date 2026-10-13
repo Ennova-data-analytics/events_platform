@@ -301,6 +301,30 @@ class RegisterAndCreateAccountResponse(BaseModel):
 class RegistrationApprove(BaseModel):
     custom_amount_euros: float | None = None
 
+# Standalone donations have nothing else on the checkout, so they need a floor
+# that clears Stripe's minimum charge.
+MIN_STANDALONE_DONATION_EUROS = 1
+
+class DonationCreate(BaseModel):
+    """A donation to a charity event without registering; no account needed."""
+    email: EmailStr
+    amount_euros: Decimal = Field(..., ge=MIN_STANDALONE_DONATION_EUROS, le=MAX_DONATION_EUROS, decimal_places=2)
+
+class DonationCheckoutResponse(BaseModel):
+    donation_id: int
+    checkout_url: str
+
+class Donation(BaseModel):
+    donation_id: int
+    event_id: int
+    email: str
+    amount_euros: Decimal
+    status: str
+    created_at: datetime
+    paid_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
 class CheckoutSessionRequest(BaseModel):
     """
     Body for paying an already-created registration. Omitting

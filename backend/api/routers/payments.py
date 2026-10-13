@@ -128,9 +128,24 @@ async def stripe_webhook(request: Request, db: Session = Depends(deps.get_db)):
         session = event['data']['object']
 
         registration_id = session.get('metadata', {}).get('registration_id')
+        donation_id = session.get('metadata', {}).get('donation_id')
         payment_intent_id = session.get('payment_intent')
 
-        if registration_id and payment_intent_id:
+        if donation_id:
+            # Standalone donation - no registration involved. A failure here
+            # returns 500 so Stripe retries rather than leaving money
+            # collected against a donation still marked Pending.
+            try:
+                stripe_service.handle_donation_payment_success(
+                    donation_id=int(donation_id),
+                    payment_intent_id=payment_intent_id,
+                    db=db
+                )
+            except Exception:
+                logger.exception(f"Error handling payment success for donation {donation_id}")
+                raise HTTPException(status_code=500, detail="Failed to record donation")
+
+        elif registration_id and payment_intent_id:
             try:
                 stripe_service.handle_payment_success(
                     payment_intent_id=payment_intent_id,

@@ -37,6 +37,15 @@ export const EventService = {
     return ApiClient.post(`/events/${eventId}/register`, registrationData);
   },
 
+  // Donate to a charity event without registering. Public - no account needed.
+  donateToEvent(eventId, { email, amountEuros }) {
+    return ApiClient.post(`/events/${eventId}/donate`, { email, amount_euros: amountEuros });
+  },
+
+  getEventDonations(eventId) {
+    return ApiClient.get(`/events/${eventId}/donations`);
+  },
+
   updateRegistrationFormResponses(eventId, formResponses) {
     return ApiClient.patch(`/events/${eventId}/registration/form-responses`, { form_responses: formResponses });
   },

@@ -7,7 +7,7 @@ import logging
 import os
 
 from domain import schemas, models
-from domain.use_cases import db_events, db_event_duplication, db_registrations, db_event_photos, db_event_attachments, users_uc
+from domain.use_cases import db_events, db_event_duplication, db_registrations, db_donations, db_event_photos, db_event_attachments, users_uc
 from domain.use_cases.calendar_export import GenerateEventCalendarUseCase
 from domain.exceptions import EventNotFoundException, RegistrationNotFoundException, UnauthorizedCalendarAccessException
 from api import deps
@@ -212,6 +212,48 @@ def register_and_create_account(event_id: int, payload: schemas.RegisterAndCreat
         "registration": registration,
         "requires_immediate_payment": False
     }
+
+@router.post("/{event_id}/donate", response_model=schemas.DonationCheckoutResponse, status_code=status.HTTP_201_CREATED)
+def donate_to_event(
+    event_id: int,
+    payload: schemas.DonationCreate,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User | None = Depends(deps.get_optional_current_user),
+):
+    """
+    Donate to a charity event without registering for it. Public: the donor only
+    gives an email, no account needed. Returns a Stripe checkout_url.
+    """
+    db_event = db_events.get_event(db, event_id=event_id)
+    if not db_event or (db_event.status != db_events.PUBLIC_STATUS and not _is_organiser(current_user)):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    donation = db_donations.create_donation(
+        db=db,
+        event=db_event,
+        email=payload.email,
+        amount_euros=payload.amount_euros,
+        user_id=current_user.user_id if current_user else None,
+    )
+
+    from domain.services.stripe_service import stripe_service
+    try:
+        session_data = stripe_service.create_donation_checkout_session(donation=donation, db=db)
+    except Exception:
+        logger.exception(f"Error creating checkout session for donation {donation.donation_id}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not start the payment. Please try again."
+        )
+
+    return {"donation_id": donation.donation_id, "checkout_url": session_data['checkout_url']}
+
+@router.get("/{event_id}/donations", response_model=list[schemas.Donation])
+def read_event_donations(event_id: int, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
+    """List the paid standalone donations for an event (organisers only)"""
+    if not db_events.get_event(db, event_id=event_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+    return db_donations.get_paid_donations_for_event(db, event_id=event_id)
 
 @router.patch("/{event_id}/registration/form-responses", response_model=schemas.Registration)
 def update_registration_form_responses(

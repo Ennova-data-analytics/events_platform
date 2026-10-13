@@ -61,6 +61,7 @@
       <v-tab value="email-history">Emails</v-tab>
       <v-tab value="guests">Guests</v-tab>
       <v-tab value="sessions">Sessions</v-tab>
+      <v-tab v-if="isCharitable" value="donations">Donations</v-tab>
     </v-tabs>
 
     <v-btn-toggle v-if="['pending', 'approved', 'paid', 'rejected'].includes(tab)" v-model="ennovaFilter" mandatory density="compact" class="mb-4">
@@ -348,6 +349,11 @@
         <!-- Guest Tickets Tab -->
         <v-window-item value="guests">
           <GuestTicketManager v-if="eventId" :event-id="parseInt(eventId)" />
+        </v-window-item>
+
+        <!-- Donations Tab (charity events) -->
+        <v-window-item v-if="isCharitable" value="donations">
+          <EventDonationsList v-if="eventId" :event-id="parseInt(eventId)" />
         </v-window-item>
 
         <!-- Sessions Tab -->
@@ -914,6 +920,7 @@ import FeedbackSection from '@/components/feedback/FeedbackSection.vue';
 import DiscountCodeManager from '@/components/admin/DiscountCodeManager.vue';
 import ReferralLinkManager from '@/components/admin/ReferralLinkManager.vue';
 import GuestTicketManager from '@/components/tickets/GuestTicketManager.vue';
+import EventDonationsList from '@/components/admin/EventDonationsList.vue';
 import { TicketService } from '@/services/TicketService';
 
 
@@ -923,6 +930,7 @@ const tab = ref('pending');
 const allAttendees = ref([]);
 const eventTitle = ref('');
 const eventPrice = ref(null);
+const isCharitable = ref(false);
 const customAmount = ref(null);
 const hasFeedbackTemplate = ref(false);
 const feedbackSectionKey = ref(0);
@@ -1122,7 +1130,8 @@ async function fetchEventDetails() {
     const response = await EventService.getEventById(eventIdValue);
     eventTitle.value = response.data.event_name;
     eventPrice.value = response.data.price_euros;
-    if (response.data.is_charitable) showDonationColumn();
+    isCharitable.value = !!response.data.is_charitable;
+    if (isCharitable.value) showDonationColumn();
     signupsEnabled.value = response.data.signups_enabled ?? true;
     hasFeedbackTemplate.value = !!response.data.feedback_template_id;
     eventTicketTypes.value = response.data.ticket_types || [];

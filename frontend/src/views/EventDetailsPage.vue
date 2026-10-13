@@ -62,6 +62,17 @@
             <strong>Charity event.</strong>
             Ticket proceeds go to {{ eventStore.currentEvent.charity_name || 'charity' }},
             and you can add a donation when you pay.
+            <div class="mt-2">
+              <v-btn
+                color="pink-darken-1"
+                variant="flat"
+                size="small"
+                prepend-icon="mdi-hand-heart"
+                @click="openDonateDialog"
+              >
+                Donate without attending
+              </v-btn>
+            </div>
           </v-alert>
 
           <div v-if="hasTicketTypes && registrationStatus === 'not_registered'" class="mt-6 mb-2">
@@ -240,6 +251,49 @@
             </v-card>
           </v-dialog>
 
+          <!-- Donate without registering: only an email is needed, no account -->
+          <v-dialog v-model="showDonateDialog" max-width="520">
+            <v-card>
+              <v-card-title class="text-h6 pt-5 px-6">Make a donation</v-card-title>
+              <v-card-text class="px-6">
+                <v-alert v-if="donateError" type="error" variant="tonal" density="compact" class="mb-4">
+                  {{ donateError }}
+                </v-alert>
+                <v-text-field
+                  v-model="donorEmail"
+                  label="Your email"
+                  type="email"
+                  placeholder="you@example.com"
+                  variant="outlined"
+                  hint="We'll send your donation confirmation here."
+                  persistent-hint
+                  class="mb-4"
+                ></v-text-field>
+                <CharityDonationCard
+                  v-if="showDonateDialog"
+                  v-model="standaloneDonation"
+                  donation-only
+                  :charity-name="eventStore.currentEvent.charity_name"
+                  :charity-description="eventStore.currentEvent.charity_description"
+                  @update:valid="isStandaloneDonationValid = $event"
+                />
+              </v-card-text>
+              <v-card-actions class="px-6 pb-5">
+                <v-spacer></v-spacer>
+                <v-btn variant="text" :disabled="isDonating" @click="showDonateDialog = false">Cancel</v-btn>
+                <v-btn
+                  color="primary"
+                  variant="flat"
+                  :loading="isDonating"
+                  :disabled="!isStandaloneDonationValid || !isDonorEmailValid"
+                  @click="submitDonation"
+                >
+                  Continue to payment
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+
           <v-snackbar v-model="showSuccess" color="success" timeout="4000">
             {{ successMessage }}
           </v-snackbar>
@@ -320,6 +374,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useEventStore } from '@/stores/events.store.js';
 import { useAuthStore } from '@/stores/auth.store.js';
 import ApiClient from '@/services/ApiClient.js';
+import { EventService } from '@/services/EventService.js';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import SponsorLogos from '@/components/events/SponsorLogos.vue';
@@ -345,7 +400,17 @@ const showDonationDialog = ref(false);
 const donationAmount = ref(0);
 const isDonationValid = ref(true);
 
+// Donating without registering
+const showDonateDialog = ref(false);
+const donorEmail = ref('');
+const standaloneDonation = ref(0);
+const isStandaloneDonationValid = ref(true);
+const isDonating = ref(false);
+const donateError = ref('');
+
 // --- Computed Properties ---
+
+const isDonorEmailValid = computed(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(donorEmail.value.trim()));
 
 const parsedDescription = computed(() => {
   if (!eventStore.currentEvent?.description) return '';
@@ -424,6 +489,43 @@ async function handleUrlParams() {
     showError.value = true;
     eventStore.error = 'Payment was cancelled. Please try again when ready.';
     window.history.replaceState({}, '', window.location.pathname);
+  }
+
+  // Returning from a donation-only checkout
+  const donationStatus = urlParams.get('donation');
+  if (donationStatus === 'success') {
+    const charity = eventStore.currentEvent?.charity_name || 'charity';
+    successMessage.value = `Thank you! Your donation to ${charity} was received. A confirmation email is on its way.`;
+    showSuccess.value = true;
+    window.history.replaceState({}, '', window.location.pathname);
+  } else if (donationStatus === 'cancelled') {
+    eventStore.error = 'Donation was cancelled. You have not been charged.';
+    showError.value = true;
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+}
+
+function openDonateDialog() {
+  donateError.value = '';
+  standaloneDonation.value = 0;
+  if (!donorEmail.value) donorEmail.value = authStore.user?.email || '';
+  showDonateDialog.value = true;
+}
+
+async function submitDonation() {
+  isDonating.value = true;
+  donateError.value = '';
+  try {
+    const response = await EventService.donateToEvent(eventStore.currentEvent.event_id, {
+      email: donorEmail.value.trim(),
+      amountEuros: standaloneDonation.value,
+    });
+    window.location.href = response.data.checkout_url;
+  } catch (error) {
+    console.error('Failed to start donation:', error);
+    const detail = error.response?.data?.detail;
+    donateError.value = typeof detail === 'string' ? detail : 'Could not start the donation. Please try again.';
+    isDonating.value = false;
   }
 }
 

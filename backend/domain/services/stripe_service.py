@@ -1,5 +1,6 @@
 import stripe
 import secrets
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from core.config import settings
 from domain import models
@@ -107,6 +108,79 @@ class StripeService:
         except stripe.error.StripeError as e:
             logger.error(f"Stripe error creating checkout session: {str(e)}")
             raise Exception(f"Failed to create payment session: {str(e)}")
+
+    @staticmethod
+    def create_donation_checkout_session(donation: models.Donation, db: Session) -> dict:
+        """Create a Stripe checkout session for a standalone donation to a charity event"""
+        event = donation.event
+        charity_label = event.charity_name or 'charity'
+
+        try:
+            checkout_session = stripe.checkout.Session.create(
+                payment_method_types=['card'],
+                line_items=[{
+                    'price_data': {
+                        'currency': 'eur',
+                        'unit_amount': _to_cents(donation.amount_euros),
+                        'product_data': {
+                            'name': f'Donation to {charity_label}',
+                            'description': f'Donation in support of {event.event_name}',
+                            'images': [event.image_url] if event.image_url and event.image_url.startswith('http') else [],
+                        },
+                    },
+                    'quantity': 1,
+                }],
+                mode='payment',
+                success_url=f"{settings.FRONTEND_URL}/event/{event.event_id}?donation=success",
+                cancel_url=f"{settings.FRONTEND_URL}/event/{event.event_id}?donation=cancelled",
+                client_reference_id=f"donation-{donation.donation_id}",
+                customer_email=donation.email,
+                metadata={
+                    'donation_id': donation.donation_id,
+                    'event_id': event.event_id,
+                }
+            )
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error creating donation checkout session: {str(e)}")
+            raise Exception(f"Failed to create payment session: {str(e)}")
+
+        donation.stripe_checkout_session_id = checkout_session.id
+        db.commit()
+
+        logger.info(f"Created Stripe checkout session {checkout_session.id} for donation {donation.donation_id}")
+
+        return {
+            'session_id': checkout_session.id,
+            'checkout_url': checkout_session.url
+        }
+
+    @staticmethod
+    def handle_donation_payment_success(donation_id: int, payment_intent_id: str | None, db: Session):
+        """Handle a paid standalone donation - mark it Paid and thank the donor"""
+        donation = db.query(models.Donation).filter(
+            models.Donation.donation_id == donation_id
+        ).first()
+
+        if not donation:
+            logger.error(f"Donation {donation_id} not found for payment intent {payment_intent_id}")
+            return
+
+        if donation.status == 'Paid':
+            logger.info(f"Donation {donation_id} already marked as paid")
+            return
+
+        donation.status = 'Paid'
+        donation.stripe_payment_intent_id = payment_intent_id
+        donation.paid_at = datetime.now(timezone.utc)
+        db.commit()
+
+        logger.info(f"Donation {donation_id} marked as paid")
+
+        from domain.services import notification_service
+        try:
+            notification_service.send_donation_thank_you_email(donation=donation)
+        except Exception as e:
+            logger.error(f"Failed to send donation thank-you email for donation {donation_id}: {str(e)}")
 
     @staticmethod
     def handle_payment_success(
