@@ -1,10 +1,22 @@
 from PIL import Image
-from rembg import remove
 import io
+from functools import lru_cache
 from typing import BinaryIO
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def get_rembg_session():
+    """
+    Import rembg (and onnxruntime) and load its model on first use rather than
+    at backend startup, and reuse the session afterwards - without one,
+    rembg.remove() reloads the model from disk on every call.
+    """
+    from rembg import new_session
+    logger.info("Loading background-removal model")
+    return new_session("u2net")
 
 class ImageProcessingService:
     @staticmethod
@@ -82,8 +94,10 @@ class ImageProcessingService:
             img_byte_arr.seek(0)
 
             logger.info("Removing background from sponsor logo...")
+            from rembg import remove
             output_data = remove(
                 img_byte_arr.read(),
+                session=get_rembg_session(),
                 alpha_matting=True,
                 alpha_matting_foreground_threshold=240,
                 alpha_matting_background_threshold=10,

@@ -7,12 +7,25 @@ from sqlalchemy.orm import Session
 from domain import models
 from core.config import settings
 from datetime import datetime
-from sentence_transformers import CrossEncoder
-import logging 
+from functools import lru_cache
+import logging
 
 
 logger = logging.getLogger(__name__)
-reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+
+
+@lru_cache(maxsize=1)
+def get_reranker():
+    """
+    Load the cross-encoder on first use rather than at import. Importing
+    sentence_transformers pulls in torch and loading the model can download it
+    from HuggingFace, which made every backend start take ~90s - and the site
+    returns 502 for that whole time. Only the chat needs it, so the first chat
+    message pays the cost once instead.
+    """
+    from sentence_transformers import CrossEncoder
+    logger.info("Loading reranker model")
+    return CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
 
 class ChatService:
     """
@@ -91,7 +104,7 @@ class ChatService:
                 [query, hit.payload["content"]] for hit in initial_results
             ]
 
-            scores = reranker.predict(cross_encoders_inputs)
+            scores = get_reranker().predict(cross_encoders_inputs)
 
             scored_results = []
             for idx, hit in enumerate(initial_results):

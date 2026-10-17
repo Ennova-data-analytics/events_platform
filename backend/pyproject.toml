@@ -31,7 +31,7 @@ python-multipart = "^0.0.9"
 stripe = "^7.0.0"
 resend = "^2.16.0"
 qrcode = {version = "8.0", extras = ["pil"]}
-pillow = "12.0.0"
+pillow = "^12.3.0"
 rembg = "^2.0.50"
 onnxruntime = "^1.16.0"
 jinja2 = "^3.1.0"
@@ -56,6 +56,26 @@ reportlab = "^4.4.10"
 
 pypdf = "^5.1.0"
 apscheduler = "^3.11.0"
+
+# Pulled in by sentence-transformers. Pinned to PyTorch's CPU-only index: the
+# default Linux wheel bundles CUDA (~15 nvidia-* packages, several GB) that the
+# GPU-less VPS never uses but still has to store and load on every start.
+# That index has no macOS wheels, so local Mac installs keep the PyPI build.
+torch = [
+    {version = "2.9.1", source = "pytorch-cpu", markers = "sys_platform == 'linux'"},
+    {version = "2.9.1", markers = "sys_platform != 'linux'"},
+]
+
+# Transitive dependencies, listed only to hold them on the major version the
+# stack is known to work with (onnxruntime and qdrant-client depend on
+# protobuf). The security fixes are available inside these ranges.
+protobuf = ">=6.33.5,<7"
+filelock = ">=3.20.3,<4"
+
+[[tool.poetry.source]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
 
 [tool.poetry.group.dev.dependencies]
 # Linters and formatters can be added here in the future

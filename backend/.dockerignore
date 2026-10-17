@@ -1,0 +1,8 @@
+# Packages are installed into the image by poetry; a local virtualenv (macOS
+# binaries, ~1.6 GB) is useless in the Linux image and only slows the build.
+venv/
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
