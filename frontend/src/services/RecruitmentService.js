@@ -12,15 +12,17 @@ import {
 // ---------------------------------------------------------------------------
 // Recruitment module service.
 //
-// This is the FRONT-END MOCKUP wiring. Every method is shaped like the real
-// endpoint it will call (see recruitment-module-spec.md §6: public routes under
-// /api/recruitment/*, protected under /api/hr/recruitment/*), but resolves
-// against local mock data so the UI can be reviewed before the backend lands.
+// Every method calls the real endpoint (public routes under /api/recruitment/*,
+// protected under /api/hr/recruitment/*). Each also has a branch that resolves
+// against local mock data, for working on the UI without a backend.
 //
-// To go live: set VITE_RECRUITMENT_LIVE=true in the frontend .env (the ApiClient
-// calls are already written). Defaults to mock so the app runs standalone.
+// The mock is opt-in: set VITE_RECRUITMENT_MOCK=true in frontend/.env for local
+// UI work. It used to be the default unless VITE_RECRUITMENT_LIVE=true was set,
+// so a production build made without that file (as CI builds are) shipped the
+// mock - the admin board showed fake applicants and the public form faked a
+// successful submission while sending nothing.
 // ---------------------------------------------------------------------------
-const USE_MOCK = import.meta.env.VITE_RECRUITMENT_LIVE !== 'true';
+const USE_MOCK = import.meta.env.VITE_RECRUITMENT_MOCK === 'true';
 
 const delay = (ms = 350) => new Promise((r) => setTimeout(r, ms));
 const clone = (v) => JSON.parse(JSON.stringify(v));
