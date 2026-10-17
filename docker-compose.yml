@@ -3,6 +3,9 @@ services:
     build:
       context: ./backend
       dockerfile: backend.Dockerfile
+    # Come back up after a VPS reboot or Docker restart; without this every
+    # container stays Exited until someone starts it by hand.
+    restart: unless-stopped
     env_file:
       - .env
     # --forwarded-allow-ips="*" makes uvicorn trust X-Forwarded-For, so
@@ -15,6 +18,12 @@ services:
     # X-Forwarded-For with $remote_addr, so a client can't inject a fake one.
     # Both conditions must hold - see the comment in nginx/nginx.conf.
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --forwarded-allow-ips="*"
+    # The chat reranker (HuggingFace) and logo background removal (rembg)
+    # download their models on first use. Keeping them in a volume means a
+    # deploy, which recreates this container, doesn't download them again.
+    volumes:
+      - model_cache:/root/.cache
+      - model_cache_rembg:/root/.u2net
     # Cap log growth. Note this only takes effect when the container is
     # recreated, and recreating it discards the existing log.
     logging:
@@ -25,6 +34,12 @@ services:
 
   nginx:
     image: nginx:1.21.3-alpine
+    restart: unless-stopped
+    # certbot renews the certificate on disk, but nginx only reads it at
+    # startup. Reload every 6h so a renewal is picked up long before the old
+    # certificate expires; without this HTTPS breaks ~30 days after a renewal
+    # unless nginx happens to be restarted.
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & exec nginx -g \"daemon off;\"'"
     ports:
       - "80:80"
       - "443:443"
@@ -38,6 +53,7 @@ services:
 
   certbot:
     image: certbot/certbot
+    restart: unless-stopped
     volumes:
       - certbot_conf:/etc/letsencrypt
       - certbot_www:/var/www/certbot
@@ -47,3 +63,5 @@ services:
 volumes:
   certbot_conf:
   certbot_www:
+  model_cache:
+  model_cache_rembg:
