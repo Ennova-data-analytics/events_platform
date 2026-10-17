@@ -54,7 +54,7 @@ langchain-text-splitters = "^0.3.0"
 icalendar = "^6.3.2"
 reportlab = "^4.4.10"
 
-pypdf = "^5.1.0"
+pypdf = ">=5.1,<7.0"
 apscheduler = "^3.11.0"
 
 [tool.poetry.group.dev.dependencies]
