@@ -62,18 +62,31 @@ jobs:
       - name: Deploy on server
         # The script is sent from this checkout, so the server always runs the
         # deploy steps of the commit being deployed. Arguments are expanded
-        # here, on purpose, and passed to it.
+        # here, on purpose, and passed to it. A zero exit code alone isn't
+        # trusted: the script must also have reached its final line.
+        shell: bash
         run: |
           # shellcheck disable=SC2029
-          ssh prod "bash -s -- '$APP_DIR' '${{ github.sha }}'" < deploy/remote-deploy.sh
+          ssh prod "bash -s -- '$APP_DIR' '${{ github.sha }}'" < deploy/remote-deploy.sh | tee deploy.log
+          if ! grep -qx "==> Deployed ${{ github.sha }}" deploy.log; then
+            echo "::error::The deploy script exited without finishing; see the log above for the last step it reached."
+            exit 1
+          fi
 
       - name: Check the public site
+        # The live index.html must be the one built in this run, which proves
+        # the new frontend is published (not just that the old site still
+        # answers), and the API must answer through nginx.
         run: |
-          for path in / /api/; do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE_URL$path")
-            echo "$SITE_URL$path -> $code"
-            if [ "$code" != 200 ]; then
-              echo "::error::$SITE_URL$path returned $code after deploy"
-              exit 1
-            fi
-          done
+          live=$(curl -sS --fail --max-time 20 "$SITE_URL/")
+          if [ "$live" != "$(cat dist/index.html)" ]; then
+            echo "::error::$SITE_URL/ is not serving the index.html built in this run"
+            exit 1
+          fi
+          echo "$SITE_URL/ serves this build"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE_URL/api/")
+          echo "$SITE_URL/api/ -> $code"
+          if [ "$code" != 200 ]; then
+            echo "::error::$SITE_URL/api/ returned $code after deploy"
+            exit 1
+          fi
