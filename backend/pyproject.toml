@@ -9,8 +9,8 @@ packages = [{include = "api"}, {include = "core"}, {include = "domain"}, {includ
 [tool.poetry.dependencies]
 python = ">=3.11,<3.14" 
 
-fastapi = "^0.111.0"
-uvicorn = {extras = ["standard"], version = "^0.29.0"}
+fastapi = ">=0.111,<0.144"
+uvicorn = {extras = ["standard"], version = ">=0.29,<0.55"}
 
 sqlalchemy = "^2.0.30"
 psycopg2-binary = "^2.9.9" # Binary version for easy installation
@@ -26,11 +26,11 @@ email-validator = "^2.1.1"
 
 boto3 = "^1.34.113"
 
-python-multipart = "^0.0.9"
+python-multipart = ">=0.0.9,<0.0.33"
 
 stripe = "^7.0.0"
 resend = "^2.16.0"
-qrcode = {version = "8.0", extras = ["pil"]}
+qrcode = {version = "8.2", extras = ["pil"]}
 pillow = "^12.3.0"
 rembg = "^2.0.50"
 onnxruntime = "^1.16.0"
