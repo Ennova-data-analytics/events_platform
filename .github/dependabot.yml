@@ -1,0 +1,39 @@
+# Weekly update PRs. Minor and patch bumps are grouped into one PR per
+# ecosystem so they can be reviewed and merged together; major versions come
+# as separate PRs because they can break things. Security fixes are raised
+# straight away regardless of this schedule (enable "Dependabot security
+# updates" in the repo settings).
+version: 2
+updates:
+  - package-ecosystem: pip   # reads backend/pyproject.toml + poetry.lock
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      backend-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      frontend-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: monthly

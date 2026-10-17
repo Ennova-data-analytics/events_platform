@@ -1,0 +1,79 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never run two deploys against the server at once; a newer push waits for the
+# running deploy to finish instead of cancelling it half way.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://ennova-events.com
+    env:
+      APP_DIR: /root/events_management_platform
+      SITE_URL: https://ennova-events.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist
+
+      - name: Configure SSH
+        # DEPLOY_KNOWN_HOSTS pins the server's host key, so the connection fails
+        # rather than trusting whatever answers at that address.
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host prod
+            HostName ${{ secrets.DEPLOY_HOST }}
+            User root
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 30
+          EOF
+
+      - name: Upload frontend build
+        # Staged next to the live build; the deploy script only swaps it in
+        # once the new backend is up.
+        run: rsync -az --delete dist/ "prod:$APP_DIR/frontend/dist-incoming/"
+
+      - name: Deploy on server
+        # The script is sent from this checkout, so the server always runs the
+        # deploy steps of the commit being deployed. Arguments are expanded
+        # here, on purpose, and passed to it.
+        run: |
+          # shellcheck disable=SC2029
+          ssh prod "bash -s -- '$APP_DIR' '${{ github.sha }}'" < deploy/remote-deploy.sh
+
+      - name: Check the public site
+        run: |
+          for path in / /api/; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE_URL$path")
+            echo "$SITE_URL$path -> $code"
+            if [ "$code" != 200 ]; then
+              echo "::error::$SITE_URL$path returned $code after deploy"
+              exit 1
+            fi
+          done

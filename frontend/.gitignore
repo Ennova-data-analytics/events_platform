@@ -28,3 +28,6 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+
+# Staging folder the deploy pipeline uploads the new build to
+dist-incoming

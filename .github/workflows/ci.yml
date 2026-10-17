@@ -1,0 +1,102 @@
+name: CI
+
+# Runs on pull requests (including Dependabot's), and on main via deploy.yml,
+# which calls this workflow before deploying. No push trigger: a branch with an
+# open PR would otherwise be checked twice for every push.
+on:
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Same as backend.Dockerfile.
+          python-version: "3.11"
+
+      - name: Cache pip downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('backend/poetry.lock') }}
+
+      - name: Install dependencies
+        run: |
+          pip install poetry
+          poetry config virtualenvs.create false
+          poetry check --lock
+          poetry install --no-interaction --no-ansi --no-root --only main
+
+      - name: Migrations have a single head
+        # Two migrations branching off the same parent would make
+        # `alembic upgrade head` fail on deploy.
+        run: |
+          heads=$(alembic heads | wc -l)
+          alembic heads
+          if [ "$heads" -ne 1 ]; then
+            echo "::error::Expected exactly one Alembic head, found $heads"
+            exit 1
+          fi
+
+      - name: App starts
+        # Imports every router and builds the app, which catches syntax errors,
+        # bad imports and missing dependencies. Settings only need to be present,
+        # not real: nothing here talks to the database or external services.
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost/ci
+          SECRET_KEY: ci
+          ALGORITHM: HS256
+          ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+          S3_ENDPOINT_URL: https://example.invalid
+          S3_BUCKET_NAME: ci
+          S3_ACCESS_KEY_ID: ci
+          S3_SECRET_ACCESS_KEY: ci
+          R2_API_TOKEN_VALUE: ci
+          ACCOUNT_ID: ci
+          R2_PUBLIC_DOMAIN: https://example.invalid
+          RESEND_API_KEY: ci
+          RESEND_FROM_EMAIL: ci@example.invalid
+          STRIPE_SECRET_KEY: ci
+          STRIPE_PUBLISHABLE_KEY: ci
+          STRIPE_WEBHOOK_SECRET: ci
+          OPENAI_API_KEY: ci
+          QDRANT_URL: https://example.invalid
+          QDRANT_API_KEY: ci
+          QDRANT_PORT: "443"
+          RECRUITMENT_SCHEDULER_ENABLED: "false"
+        run: python -c "from app_setup import create_app; app = create_app(); print(f'{len(app.routes)} routes')"
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
