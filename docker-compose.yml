@@ -33,7 +33,7 @@ services:
         max-file: "5"
 
   nginx:
-    image: nginx:1.21.3-alpine
+    image: nginx:1.31.0-alpine
     restart: unless-stopped
     # certbot renews the certificate on disk, but nginx only reads it at
     # startup. Reload every 6h so a renewal is picked up long before the old
