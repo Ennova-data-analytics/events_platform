@@ -62,22 +62,20 @@ def create_checkout_session(
                 detail=f"Registration is in '{registration.status}' and cannot be paid at this time"
             )
 
+    # Ticket-typed events keep their price on the ticket type, not the event,
+    # so what is owed comes from the registration.
     event = registration.event
-    if not event.price_euros or event.price_euros <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This event is free, no payment required"
-        )
+    ticket_amount = registration.ticket_amount_euros
 
     if payload is not None and 'donation_amount_euros' in payload.model_fields_set:
-        if registration.custom_amount_euros is not None:
-            ticket_amount = registration.custom_amount_euros
-        elif registration.final_amount_euros is not None:
-            ticket_amount = registration.final_amount_euros
-        else:
-            ticket_amount = event.price_euros
         registration.donation_amount_euros = resolve_donation(
             event, payload.donation_amount_euros, ticket_amount
+        )
+
+    if not ticket_amount > 0 and not registration.donation_amount_euros:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nothing to pay for this registration"
         )
 
     try:

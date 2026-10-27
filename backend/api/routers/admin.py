@@ -33,8 +33,8 @@ def approve_registration(
     if approval_data.custom_amount_euros is not None:
         reg.custom_amount_euros = approval_data.custom_amount_euros
 
-    # Generate ticket token for free-event approvals (no payment required)
-    if not reg.ticket_token and (reg.final_amount_euros == 0 or reg.final_amount_euros is None):
+    # Generate ticket token for approvals with nothing to pay (incl. a custom amount of 0)
+    if not reg.ticket_token and reg.has_valid_ticket:
         reg.ticket_token = secrets.token_urlsafe(32)
 
     db.commit()

@@ -106,7 +106,7 @@
               Application Pending Review
             </v-chip>
 
-            <v-btn v-else-if="registrationStatus === 'Approved' && eventStore.currentEvent.price_euros > 0" color="warning" size="large" block :loading="isSubmitting" @click="startPayment">
+            <v-btn v-else-if="awaitingPayment" color="warning" size="large" block :loading="isSubmitting" @click="startPayment">
               <v-icon start>mdi-credit-card-outline</v-icon>
               Pay Now to Confirm Spot
             </v-btn>
@@ -151,7 +151,7 @@
           </div>
 
           <div
-            v-if="(registrationStatus === 'Paid' || registrationStatus === 'Approved') && userRegistration"
+            v-if="hasTicket"
             class="mt-3"
           >
             <v-btn
@@ -382,6 +382,7 @@ import EventPhotos from '@/components/events/EventPhotos.vue';
 import EventLocationMap from '@/components/events/EventLocationMap.vue';
 import CharityDonationCard from '@/components/events/CharityDonationCard.vue';
 import { generateGoogleCalendarUrl, downloadIcsFile as downloadIcs } from '@/utils/calendarHelpers.js';
+import { ticketAmountDue as registrationAmountDue, isAwaitingPayment, hasValidTicket } from '@/utils/registrationStatus.js';
 
 // --- Markdown Config ---
 marked.setOptions({ breaks: true, gfm: true, headerIds: false });
@@ -430,11 +431,10 @@ const registrationStatus = computed(() => {
 });
 
 // Ticket amount the "Pay Now" checkout will charge, before any donation.
-const ticketAmountDue = computed(() => {
-  const reg = userRegistration.value;
-  const amount = reg?.custom_amount_euros ?? reg?.final_amount_euros ?? eventStore.currentEvent?.price_euros;
-  return parseFloat(amount) || 0;
-});
+const ticketAmountDue = computed(() => registrationAmountDue(userRegistration.value, eventStore.currentEvent));
+
+const awaitingPayment = computed(() => isAwaitingPayment(userRegistration.value, eventStore.currentEvent));
+const hasTicket = computed(() => hasValidTicket(userRegistration.value, eventStore.currentEvent));
 
 // UX Helper: Check if tickets exist
 const hasTicketTypes = computed(() => {

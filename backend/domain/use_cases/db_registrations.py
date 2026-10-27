@@ -244,9 +244,10 @@ def create_registration(
     if referral_code:
         referral_link_id = ReferralLinkUseCases.validate_referral_code(db, referral_code, event_id)
 
-    # Generate ticket token immediately for registrations that don't need payment
+    # Generate ticket token immediately for registrations that don't need payment.
+    # An auto-accepted paid registration gets its token once Stripe confirms payment.
     ticket_token = None
-    if initial_status in ('Paid', 'Approved'):
+    if initial_status == 'Paid' or (initial_status == 'Approved' and not final_amount):
         ticket_token = secrets.token_urlsafe(32)
 
     db_registration = models.Registration(

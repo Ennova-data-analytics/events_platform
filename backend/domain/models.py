@@ -333,6 +333,23 @@ class Registration(Base):
         ),
     )
 
+    @property
+    def ticket_amount_euros(self):
+        """What the ticket costs this registrant, before any donation."""
+        if self.custom_amount_euros is not None:
+            return self.custom_amount_euros
+        if self.final_amount_euros is not None:
+            return self.final_amount_euros
+        return self.event.price_euros or 0
+
+    @property
+    def has_valid_ticket(self) -> bool:
+        """Paid, or approved with nothing to pay. 'Approved' on a paid ticket
+        only means the spot is offered - the ticket is not valid until paid."""
+        if self.status == 'Paid':
+            return True
+        return self.status == 'Approved' and not self.ticket_amount_euros > 0
+
 
 class Donation(Base):
     """

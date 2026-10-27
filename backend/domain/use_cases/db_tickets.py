@@ -34,7 +34,7 @@ def get_registration_for_user(db: Session, registration_id: int, user_id) -> mod
     ).first()
     if not reg:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration not found")
-    if reg.status not in TICKET_STATUSES:
+    if not reg.has_valid_ticket:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Ticket not available — registration is not confirmed",
@@ -81,7 +81,7 @@ def get_ticket_by_token(db: Session, token: str) -> schemas.TicketInfo:
     """Resolve any token (registration or guest) to TicketInfo."""
     reg = get_registration_by_token(db, token)
     if reg:
-        if reg.status not in TICKET_STATUSES:
+        if not reg.has_valid_ticket:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ticket is not valid")
         return ticket_info_from_registration(reg)
 
@@ -98,7 +98,7 @@ def check_in_by_token(db: Session, token: str) -> schemas.TicketCheckInResponse:
     """Verify and check-in a ticket by token."""
     reg = get_registration_by_token(db, token)
     if reg:
-        if reg.status not in TICKET_STATUSES:
+        if not reg.has_valid_ticket:
             return schemas.TicketCheckInResponse(
                 valid=False,
                 already_checked_in=False,

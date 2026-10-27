@@ -23,15 +23,8 @@ class StripeService:
         event = registration.event
         user = registration.user
 
-       
-        if registration.custom_amount_euros is not None:
-            price_euros = registration.custom_amount_euros
-        elif registration.final_amount_euros is not None:
-            price_euros = registration.final_amount_euros
-        else:
-            price_euros = event.price_euros
 
-        amount_cents = _to_cents(price_euros)
+        amount_cents = _to_cents(registration.ticket_amount_euros)
 
         product_name = event.event_name
         product_description = f'Registration for {event.event_name}'

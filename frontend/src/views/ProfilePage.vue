@@ -84,10 +84,10 @@
                 :subtitle="new Date(registration.event.event_date_start).toLocaleDateString('en-GB')"
               >
                 <template v-slot:append>
-                   <v-chip v-if="registration.status === 'Approved'" color="warning" size="small">
+                   <v-chip v-if="isAwaitingPayment(registration)" color="warning" size="small">
                       Awaiting Payment
                    </v-chip>
-                   <div v-else-if="registration.status === 'Paid'" class="d-flex align-center gap-2">
+                   <div v-else-if="hasValidTicket(registration)" class="d-flex align-center gap-2">
                      <v-chip color="success" size="small">Confirmed</v-chip>
                      <v-btn
                        size="small"
@@ -210,6 +210,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { useAuthStore } from '@/stores/auth.store.js';
 import { EventService } from '@/services/EventService.js';
+import { isAwaitingPayment, hasValidTicket } from '@/utils/registrationStatus.js';
 
 const authStore = useAuthStore();
 const isLoading = ref(true);
