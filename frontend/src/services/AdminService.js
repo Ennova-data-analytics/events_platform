@@ -45,5 +45,8 @@ export const AdminService = {
     },
     sendTimeChangeEmail(eventId, data) {
         return ApiClient.post(`/admin/events/${eventId}/send-time-change-email`, data);
+    },
+    getRevenueOverview(fiscalYear = null) {
+        return ApiClient.get('/admin/revenue', { params: fiscalYear ? { fiscal_year: fiscalYear } : {} });
     }
 };

@@ -19,6 +19,7 @@
       <v-list density="compact" nav>
         <v-list-item v-if="authStore.isOrganiser" prepend-icon="mdi-view-dashboard" title="Dashboard" to="/admin" @click="closeDrawerOnMobile"></v-list-item>
         <v-list-item v-if="authStore.isOrganiser" prepend-icon="mdi-calendar-multiple" title="Manage Events" to="/admin/events" @click="closeDrawerOnMobile"></v-list-item>
+        <v-list-item v-if="authStore.isOrganiser" prepend-icon="mdi-finance" title="Revenue" to="/admin/revenue" @click="closeDrawerOnMobile"></v-list-item>
         <v-list-item v-if="authStore.isRecruiter" prepend-icon="mdi-account-tie" title="Recruitment" to="/admin/recruitment" @click="closeDrawerOnMobile"></v-list-item>
         <v-list-item v-if="authStore.isOrganiser" prepend-icon="mdi-account-group" title="Ennova Members" to="/admin/ennova-members" @click="closeDrawerOnMobile"></v-list-item>
         <v-list-item v-if="authStore.isOrganiser" prepend-icon="mdi-form-select" title="Form Templates" to="/admin/forms" @click="closeDrawerOnMobile"></v-list-item>

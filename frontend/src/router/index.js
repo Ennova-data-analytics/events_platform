@@ -195,6 +195,11 @@ const routes = [
         component: () => import('../views/admin/AdminEnnovaMembersPage.vue')
       },
       {
+        path: 'revenue',
+        name: 'admin-revenue',
+        component: () => import('../views/admin/AdminRevenuePage.vue')
+      },
+      {
         path: 'ai-documents',
         name: 'admin-ai-documents',
         component: () => import('../views/admin/AdminAIDocumentsPage.vue')

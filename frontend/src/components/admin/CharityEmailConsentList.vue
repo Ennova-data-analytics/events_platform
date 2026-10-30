@@ -13,7 +13,7 @@
         variant="tonal"
         prepend-icon="mdi-download"
         :disabled="consented.length === 0"
-        @click="downloadCsv"
+        @click="exportCsv"
       >
         Download CSV ({{ consented.length }})
       </v-btn>
@@ -30,6 +30,7 @@
 
 <script setup>
 import { computed } from 'vue';
+import { downloadCsv } from '@/utils/csv.js';
 
 const props = defineProps({
   eventId: { type: Number, required: true },
@@ -55,30 +56,10 @@ function formatConsentedAt(registration) {
     : '—';
 }
 
-// Names are typed by attendees, and Excel runs a cell starting with one of
-// these characters as a formula.
-function csvCell(value) {
-  const text = String(value ?? '');
-  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
-  return `"${safe.replace(/"/g, '""')}"`;
-}
-
-function downloadCsv() {
-  const rows = [
+function exportCsv() {
+  downloadCsv(`event-${props.eventId}-charity-emails.csv`, [
     ['Name', 'Email', 'Consented at'],
     ...consented.value.map(r => [r.user.full_name, r.user.email, formatConsentedAt(r)]),
-  ];
-  const csv = rows.map(row => row.map(csvCell).join(',')).join('\r\n');
-
-  // The BOM makes Excel read accented names as UTF-8.
-  const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
-  const downloadUrl = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = downloadUrl;
-  link.download = `event-${props.eventId}-charity-emails.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  window.URL.revokeObjectURL(downloadUrl);
+  ]);
 }
 </script>
