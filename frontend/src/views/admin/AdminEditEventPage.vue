@@ -275,6 +275,19 @@
                       hint="A sentence or two about the cause and what donations fund."
                       persistent-hint
                     />
+                    <div class="d-flex align-center justify-space-between mt-3">
+                      <div>
+                        <div class="text-subtitle-2 font-weight-medium">Ask for email consent</div>
+                        <div class="text-caption text-medium-emphasis">Attendees get an optional box at sign-up to share their email with the charity. Needs a charity name.</div>
+                      </div>
+                      <v-switch
+                        v-model="editableEvent.charity_email_consent_enabled"
+                        :disabled="!editableEvent.charity_name?.trim()"
+                        color="pink-darken-1"
+                        hide-details
+                        class="ml-4 flex-shrink-0"
+                      />
+                    </div>
                   </template>
                 </v-card-text>
               </v-card>
@@ -504,6 +517,7 @@ function buildEventPayload(data) {
   else delete payload.event_date_end
   payload.charity_name = payload.is_charitable ? (payload.charity_name?.trim() || null) : null
   payload.charity_description = payload.is_charitable ? (payload.charity_description?.trim() || null) : null
+  payload.charity_email_consent_enabled = !!(payload.charity_name && payload.charity_email_consent_enabled)
   return payload
 }
 

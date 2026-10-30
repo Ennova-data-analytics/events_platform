@@ -7,6 +7,7 @@ from domain.use_cases.db_ticket_types import TicketTypeUseCases
 from domain.use_cases.db_referral_links import ReferralLinkUseCases
 from domain.use_cases import db_teams
 from domain.schemas import DiscountCodeValidation, TeamSelectionRequest
+from datetime import datetime
 from decimal import Decimal
 import uuid
 import secrets
@@ -44,6 +45,15 @@ def resolve_donation(
     return donation_amount_euros
 
 
+def check_charity_email_consent(event: models.Event, consent: bool) -> None:
+    """Refuse an opt-in on an event that isn't asking for one. Saying no always passes."""
+    if consent and not event.collects_charity_email_consent:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This event is no longer asking for consent to charity emails. Please refresh the page."
+        )
+
+
 def create_registration(
     db: Session,
     event_id: int,
@@ -53,7 +63,8 @@ def create_registration(
     ticket_type_id: int | None = None,
     team_selection: TeamSelectionRequest | None = None,
     referral_code: str | None = None,
-    donation_amount_euros: Decimal | None = None
+    donation_amount_euros: Decimal | None = None,
+    charity_email_consent: bool = False
 ):
     """Handles db operations for creating a new registration with ticket type support"""
     existing_registration = db.query(models.Registration).filter(
@@ -82,7 +93,8 @@ def create_registration(
             detail="Signups are currently disabled for this event"
         )
 
-   
+    check_charity_email_consent(event, charity_email_consent)
+
     ticket_type = None
     price_euros = event.price_euros
     form_template_id = event.form_template_id
@@ -260,6 +272,8 @@ def create_registration(
         discount_amount_euros=discount_amount,
         final_amount_euros=final_amount,
         donation_amount_euros=donation_amount,
+        charity_email_consent=charity_email_consent,
+        charity_email_consent_at=datetime.utcnow() if charity_email_consent else None,
         member_discount_applied=member_discount_applied,
         paid_by_team_leader=is_paid_by_leader,
         referral_link_id=referral_link_id,
@@ -325,6 +339,31 @@ def create_registration(
         logger.error(f"Failed to create notification: {str(e)}")
 
     return db_registration
+
+
+def set_charity_email_consent(db: Session, event_id: int, user_id: uuid.UUID, consent: bool):
+    """Change an attendee's answer. Withdrawing works even if the event has stopped asking."""
+    registration = db.query(models.Registration).filter(
+        models.Registration.event_id == event_id,
+        models.Registration.user_id == user_id
+    ).first()
+
+    if not registration:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Registration not found"
+        )
+
+    check_charity_email_consent(registration.event, consent)
+
+    if registration.charity_email_consent != consent:
+        registration.charity_email_consent = consent
+        registration.charity_email_consent_at = datetime.utcnow()
+        db.commit()
+        db.refresh(registration)
+
+    return registration
+
 
 def _create_and_send_team_invites(db: Session, team, event, ticket_type, teammate_emails: list):
     """Create invite tokens for each teammate and send email invitations."""

@@ -113,7 +113,8 @@ def register_user_for_event(event_id: int, registration_data: schemas.Registrati
         ticket_type_id=registration_data.ticket_type_id,
         team_selection=registration_data.team_selection,
         referral_code=registration_data.referral_code,
-        donation_amount_euros=registration_data.donation_amount_euros
+        donation_amount_euros=registration_data.donation_amount_euros,
+        charity_email_consent=registration_data.charity_email_consent
     )
 
     if not db_event.requires_approval and registration.final_amount_euros and registration.final_amount_euros > 0:
@@ -150,6 +151,10 @@ def register_and_create_account(event_id: int, payload: schemas.RegisterAndCreat
     if not db_event.signups_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Signups are currently disabled for this event")
 
+    # Checked here too: failing inside create_registration would leave the new
+    # account behind, and the guest's retry would hit "email already registered".
+    db_registrations.check_charity_email_consent(db_event, payload.charity_email_consent)
+
     user_data = schemas.UserCreate(
         email=payload.email,
         full_name=payload.full_name,
@@ -177,7 +182,8 @@ def register_and_create_account(event_id: int, payload: schemas.RegisterAndCreat
         ticket_type_id=payload.ticket_type_id,
         team_selection=payload.team_selection,
         referral_code=payload.referral_code,
-        donation_amount_euros=payload.donation_amount_euros
+        donation_amount_euros=payload.donation_amount_euros,
+        charity_email_consent=payload.charity_email_consent
     )
 
     if not db_event.requires_approval and registration.final_amount_euros and registration.final_amount_euros > 0:
@@ -280,6 +286,21 @@ def update_registration_form_responses(
     db.commit()
     db.refresh(registration)
     return registration
+
+@router.patch("/{event_id}/registration/charity-email-consent", response_model=schemas.Registration)
+def update_registration_charity_email_consent(
+    event_id: int,
+    payload: schemas.RegistrationUpdateCharityEmailConsent,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User = Depends(deps.get_current_user)
+):
+    """Give or withdraw the current user's consent to emails from the event's charity."""
+    return db_registrations.set_charity_email_consent(
+        db=db,
+        event_id=event_id,
+        user_id=current_user.user_id,
+        consent=payload.charity_email_consent
+    )
 
 @router.get("/{event_id}/my-team")
 def get_my_team(

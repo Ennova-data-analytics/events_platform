@@ -49,6 +49,8 @@ class Registration(BaseModel):
     discount_amount_euros: Decimal | None = None
     final_amount_euros: Decimal | None = None
     donation_amount_euros: Decimal | None = None
+    charity_email_consent: bool = False
+    charity_email_consent_at: datetime | None = None
     member_discount_applied: bool | None = None
     paid_by_team_leader: bool = False
     ticket_type_id: int | None = None
@@ -182,6 +184,7 @@ class EventBase(BaseModel):
     is_charitable: bool = False
     charity_name: str | None = Field(None, max_length=255)
     charity_description: str | None = None
+    charity_email_consent_enabled: bool = False
     teams_enabled: bool = False
     team_max_members: int | None = None
 
@@ -212,6 +215,7 @@ class EventUpdate(BaseModel):
     is_charitable: bool | None = None
     charity_name: str | None = Field(None, max_length=255)
     charity_description: str | None = None
+    charity_email_consent_enabled: bool | None = None
     teams_enabled: bool | None = None
     team_max_members: int | None = None
     status: EventStatus | None = None
@@ -232,6 +236,7 @@ class Event(EventBase):
     event_id: int
     status: str
     ticket_types: list["TicketTypeResponse"] = []
+    collects_charity_email_consent: bool = False
 
     creator: "User" = None
     @field_serializer('image_url')
@@ -264,6 +269,7 @@ class RegistrationCreate(BaseModel):
     ticket_type_id: int | None = Field(None, description="Required if event has ticket types")
     form_responses: dict | None = None
     donation_amount_euros: DonationAmount = None
+    charity_email_consent: bool = False
     discount_code: str | None = Field(None, description="Optional discount code")
     referral_code: str | None = Field(None, description="Optional referral link code")
     team_selection: Optional["TeamSelectionRequest"] = Field(None, description="Required if ticket type requires teams")
@@ -276,6 +282,9 @@ class RegistrationResponse(BaseModel):
 class RegistrationUpdateFormResponses(BaseModel):
     form_responses: dict
 
+class RegistrationUpdateCharityEmailConsent(BaseModel):
+    charity_email_consent: bool
+
 class RegisterAndCreateAccountRequest(BaseModel):
     """Combined user registration + event registration for unauthenticated users"""
     email: EmailStr
@@ -286,6 +295,7 @@ class RegisterAndCreateAccountRequest(BaseModel):
     ticket_type_id: int | None = Field(None, description="Required if event has ticket types")
     form_responses: dict | None = None
     donation_amount_euros: DonationAmount = None
+    charity_email_consent: bool = False
     discount_code: str | None = Field(None, description="Optional discount code")
     referral_code: str | None = Field(None, description="Optional referral link code")
     team_selection: Optional["TeamSelectionRequest"] = Field(None, description="Required if ticket type requires teams")

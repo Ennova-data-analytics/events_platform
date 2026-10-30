@@ -50,6 +50,10 @@ export const EventService = {
     return ApiClient.patch(`/events/${eventId}/registration/form-responses`, { form_responses: formResponses });
   },
 
+  updateCharityEmailConsent(eventId, consent) {
+    return ApiClient.patch(`/events/${eventId}/registration/charity-email-consent`, { charity_email_consent: consent });
+  },
+
   getMyTeam(eventId) {
     return ApiClient.get(`/events/${eventId}/my-team`);
   },
