@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
 from sqlalchemy.orm import Session
 import pandas as pd
 from io import BytesIO
@@ -10,11 +10,22 @@ from domain import schemas, models
 from domain.services import notification_service, email_service, email_templates
 from core.config import settings
 from domain.use_cases.db_ticket_types import TicketTypeUseCases
+from domain.use_cases import db_revenue
 from api import deps
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+@router.get("/revenue", response_model=schemas.RevenueOverview)
+def read_revenue_overview(
+    fiscal_year: int | None = Query(None, ge=2000, le=2100, description="Calendar year the fiscal year starts in; defaults to the current one"),
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """Revenue across all events for one fiscal year (Organiser only)"""
+    return db_revenue.get_revenue_overview(db, fiscal_year)
+
 
 @router.post("/registrations/{registration_id}/approve", response_model=schemas.Registration)
 def approve_registration(

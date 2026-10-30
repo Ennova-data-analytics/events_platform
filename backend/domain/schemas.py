@@ -335,6 +335,57 @@ class Donation(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class RevenueFigures(BaseModel):
+    ticket_revenue: Decimal
+    charity_ticket_revenue: Decimal
+    donations: Decimal
+    raised_for_charity: Decimal
+    total_collected: Decimal
+    commission_owed: Decimal
+    net_revenue: Decimal
+    awaiting_payment: Decimal
+    discounts_given: Decimal
+    paid_tickets: int
+    free_tickets: int
+
+class RevenueTotals(RevenueFigures):
+    event_count: int
+
+class RevenueEvent(RevenueFigures):
+    event_id: int
+    event_name: str
+    event_date_start: datetime
+    is_charitable: bool
+    charity_name: str | None = None
+
+class RevenueMonth(BaseModel):
+    month: str
+    ticket_revenue: Decimal
+    charity_ticket_revenue: Decimal
+    donations: Decimal
+
+class RevenueComparison(BaseModel):
+    """Same point in both years while a fiscal year is running, full years once it's over."""
+    in_progress: bool
+    as_of: datetime | None = None
+    current: RevenueTotals
+    previous: RevenueTotals
+
+class RevenueFiscalYear(BaseModel):
+    fiscal_year: int
+    label: str
+
+class RevenueOverview(BaseModel):
+    fiscal_year: int
+    label: str
+    previous_label: str
+    available_years: list[RevenueFiscalYear]
+    totals: RevenueTotals
+    summer: RevenueTotals = Field(description="Events in the July and August after this fiscal year, which belong to no fiscal year")
+    months: list[RevenueMonth]
+    events: list[RevenueEvent]
+    comparison: RevenueComparison
+
 class CheckoutSessionRequest(BaseModel):
     """
     Body for paying an already-created registration. Omitting
