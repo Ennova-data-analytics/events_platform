@@ -200,6 +200,24 @@
             </v-menu>
           </div>
 
+          <v-card v-if="showCharityEmailConsent" variant="outlined" class="mt-4">
+            <v-card-text class="d-flex align-center justify-space-between py-3">
+              <div class="text-body-2">
+                Share my email address with {{ eventStore.currentEvent.charity_name || 'the charity' }}
+                so they can email me about their work.
+              </div>
+              <v-switch
+                v-model="charityEmailConsent"
+                :loading="isUpdatingCharityConsent"
+                :disabled="isUpdatingCharityConsent"
+                color="pink-darken-1"
+                hide-details
+                class="ml-4 flex-shrink-0"
+                @update:model-value="updateCharityEmailConsent"
+              />
+            </v-card-text>
+          </v-card>
+
           <v-alert
             v-if="registrationStatus === 'not_registered' && eventStore.currentEvent.signups_enabled && authStore.isAuthenticated"
             type="info"
@@ -369,7 +387,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useEventStore } from '@/stores/events.store.js';
 import { useAuthStore } from '@/stores/auth.store.js';
@@ -409,6 +427,9 @@ const isStandaloneDonationValid = ref(true);
 const isDonating = ref(false);
 const donateError = ref('');
 
+const charityEmailConsent = ref(false);
+const isUpdatingCharityConsent = ref(false);
+
 // --- Computed Properties ---
 
 const isDonorEmailValid = computed(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(donorEmail.value.trim()));
@@ -435,6 +456,19 @@ const ticketAmountDue = computed(() => registrationAmountDue(userRegistration.va
 
 const awaitingPayment = computed(() => isAwaitingPayment(userRegistration.value, eventStore.currentEvent));
 const hasTicket = computed(() => hasValidTicket(userRegistration.value, eventStore.currentEvent));
+
+// Stays visible for anyone who has opted in, so they can still withdraw after
+// the organiser stops asking.
+const showCharityEmailConsent = computed(() => {
+  if (!userRegistration.value) return false;
+  return eventStore.currentEvent.collects_charity_email_consent || userRegistration.value.charity_email_consent;
+});
+
+// A local copy, not the registration itself: the switch has to be moved back
+// when a save fails, or it stays out of step and ignores the next click.
+watch(() => userRegistration.value?.charity_email_consent, consent => {
+  charityEmailConsent.value = !!consent;
+}, { immediate: true });
 
 // UX Helper: Check if tickets exist
 const hasTicketTypes = computed(() => {
@@ -526,6 +560,24 @@ async function submitDonation() {
     const detail = error.response?.data?.detail;
     donateError.value = typeof detail === 'string' ? detail : 'Could not start the donation. Please try again.';
     isDonating.value = false;
+  }
+}
+
+async function updateCharityEmailConsent(consent) {
+  isUpdatingCharityConsent.value = true;
+  try {
+    const response = await EventService.updateCharityEmailConsent(eventStore.currentEvent.event_id, consent);
+    Object.assign(userRegistration.value, response.data);
+    successMessage.value = consent ? 'Thanks, your preference is saved.' : 'Your consent has been withdrawn.';
+    showSuccess.value = true;
+  } catch (error) {
+    console.error('Failed to update charity email consent:', error);
+    charityEmailConsent.value = !consent;
+    const detail = error.response?.data?.detail;
+    eventStore.error = typeof detail === 'string' ? detail : 'Could not save your preference. Please try again.';
+    showError.value = true;
+  } finally {
+    isUpdatingCharityConsent.value = false;
   }
 }
 

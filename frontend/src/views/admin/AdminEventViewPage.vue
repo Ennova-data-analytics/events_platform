@@ -62,6 +62,7 @@
       <v-tab value="guests">Guests</v-tab>
       <v-tab value="sessions">Sessions</v-tab>
       <v-tab v-if="isCharitable" value="donations">Donations</v-tab>
+      <v-tab v-if="isCharitable" value="charity-emails">Charity Emails</v-tab>
     </v-tabs>
 
     <v-btn-toggle v-if="['pending', 'approved', 'paid', 'rejected'].includes(tab)" v-model="ennovaFilter" mandatory density="compact" class="mb-4">
@@ -354,6 +355,11 @@
         <!-- Donations Tab (charity events) -->
         <v-window-item v-if="isCharitable" value="donations">
           <EventDonationsList v-if="eventId" :event-id="parseInt(eventId)" />
+        </v-window-item>
+
+        <!-- Charity Emails Tab (charity events) -->
+        <v-window-item v-if="isCharitable" value="charity-emails">
+          <CharityEmailConsentList v-if="eventId" :event-id="parseInt(eventId)" :registrations="allAttendees" />
         </v-window-item>
 
         <!-- Sessions Tab -->
@@ -921,6 +927,7 @@ import DiscountCodeManager from '@/components/admin/DiscountCodeManager.vue';
 import ReferralLinkManager from '@/components/admin/ReferralLinkManager.vue';
 import GuestTicketManager from '@/components/tickets/GuestTicketManager.vue';
 import EventDonationsList from '@/components/admin/EventDonationsList.vue';
+import CharityEmailConsentList from '@/components/admin/CharityEmailConsentList.vue';
 import { TicketService } from '@/services/TicketService';
 
 

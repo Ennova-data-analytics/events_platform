@@ -179,6 +179,8 @@ class Event(Base):
     is_charitable = Column(Boolean, default=False, nullable=False)
     charity_name = Column(String(255), nullable=True)
     charity_description = Column(Text, nullable=True)
+    # Offer attendees an optional tick box at sign-up to hear from the charity.
+    charity_email_consent_enabled = Column(Boolean, default=False, nullable=False)
 
     requires_approval = Column(Boolean, default=True, nullable=False)
     teams_enabled = Column(Boolean, default=False, nullable=False)
@@ -237,6 +239,11 @@ class Event(Base):
     teams = relationship("EventTeam", back_populates="event", cascade="all, delete-orphan", order_by="EventTeam.created_at")
     bulk_email_logs = relationship("BulkEmailLog", back_populates="event", cascade="all, delete-orphan", order_by="desc(BulkEmailLog.sent_at)")
     donations = relationship("Donation", back_populates="event", cascade="all, delete-orphan", order_by="desc(Donation.created_at)")
+
+    @property
+    def collects_charity_email_consent(self) -> bool:
+        """Consent has to name who it is for, so this needs a charity name too."""
+        return bool(self.is_charitable and self.charity_email_consent_enabled and self.charity_name)
 
 
 class TicketType(Base):
@@ -312,6 +319,10 @@ class Registration(Base):
     final_amount_euros = Column(DECIMAL(10, 2), nullable=True)
     # Optional extra donation on a charity event, charged on top of the ticket.
     donation_amount_euros = Column(DECIMAL(10, 2), nullable=True)
+    # Opt-in to emails from the event's charity. The timestamp is when the
+    # current answer was given, so it dates a withdrawal as well as a consent.
+    charity_email_consent = Column(Boolean, default=False, nullable=False)
+    charity_email_consent_at = Column(TIMESTAMP(timezone=True), nullable=True)
     registration_date = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     member_discount_applied = Column(Boolean, default=False, nullable=False)
     paid_by_team_leader = Column(Boolean, default=False, nullable=False)

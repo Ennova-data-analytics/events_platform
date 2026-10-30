@@ -411,6 +411,19 @@
                       hint="A sentence or two about the cause and what donations fund."
                       persistent-hint
                     />
+                    <div class="d-flex align-center justify-space-between mt-3">
+                      <div>
+                        <div class="text-subtitle-2 font-weight-medium">Ask for email consent</div>
+                        <div class="text-caption text-medium-emphasis">Attendees get an optional box at sign-up to share their email with the charity. Needs a charity name.</div>
+                      </div>
+                      <v-switch
+                        v-model="form.charity_email_consent_enabled"
+                        :disabled="!form.charity_name?.trim()"
+                        color="pink-darken-1"
+                        hide-details
+                        class="ml-4 flex-shrink-0"
+                      />
+                    </div>
                   </template>
                 </v-card-text>
               </v-card>
@@ -673,6 +686,7 @@ const form = ref({
   is_charitable: false,
   charity_name: null,
   charity_description: null,
+  charity_email_consent_enabled: false,
   teams_enabled: false,
   team_max_members: null,
   form_template_id: null,
@@ -812,6 +826,7 @@ function buildPayload() {
   // Clean up charity details
   payload.charity_name = payload.is_charitable ? (payload.charity_name?.trim() || null) : null
   payload.charity_description = payload.is_charitable ? (payload.charity_description?.trim() || null) : null
+  payload.charity_email_consent_enabled = !!(payload.charity_name && payload.charity_email_consent_enabled)
 
   return payload
 }

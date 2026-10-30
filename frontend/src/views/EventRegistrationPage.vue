@@ -172,6 +172,15 @@
               @update:valid="isDonationValid = $event"
             />
 
+            <v-checkbox
+              v-if="event.collects_charity_email_consent"
+              v-model="charityEmailConsent"
+              :label="`Optional: share my email address with ${event.charity_name} so they can email me about their work. You can change this at any time on the event page.`"
+              color="pink-darken-1"
+              hide-details
+              class="mt-4"
+            ></v-checkbox>
+
             <!-- Login prompt for guests -->
             <div v-if="!authStore.isAuthenticated" class="text-center mt-4 mb-2">
               <span class="text-body-2 text-grey-darken-1">
@@ -248,6 +257,7 @@ const discountedPrice = ref(null);
 const referralCode = ref(null);
 const donationAmount = ref(0);
 const isDonationValid = ref(true);
+const charityEmailConsent = ref(false);
 
 // UI state
 const isSubmitting = ref(false);
@@ -484,7 +494,8 @@ async function submitRegistration() {
         referral_code: referralCode.value,
         ticket_type_id: selectedTicketTypeId.value,
         team_selection: teamSelection.value,
-        donation_amount_euros: donation
+        donation_amount_euros: donation,
+        charity_email_consent: charityEmailConsent.value
       };
 
       result = await eventStore.registerForEvent(event.value.event_id, registrationData);
@@ -501,7 +512,8 @@ async function submitRegistration() {
         discount_code: appliedDiscountCode.value,
         referral_code: referralCode.value,
         team_selection: teamSelection.value,
-        donation_amount_euros: donation
+        donation_amount_euros: donation,
+        charity_email_consent: charityEmailConsent.value
       };
 
       const response = await AuthService.registerAndApply(event.value.event_id, payload);
