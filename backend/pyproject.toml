@@ -70,7 +70,7 @@ torch = [
 # stack is known to work with (onnxruntime and qdrant-client depend on
 # protobuf). The security fixes are available inside these ranges.
 protobuf = ">=6.33.5,<7"
-filelock = ">=3.20.3,<4"
+filelock = ">=3.20.3,<5"
 
 [[tool.poetry.source]]
 name = "pytorch-cpu"
