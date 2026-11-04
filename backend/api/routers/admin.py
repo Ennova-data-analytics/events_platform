@@ -10,7 +10,7 @@ from domain import schemas, models
 from domain.services import notification_service, email_service, email_templates
 from core.config import settings
 from domain.use_cases.db_ticket_types import TicketTypeUseCases
-from domain.use_cases import db_revenue
+from domain.use_cases import db_refunds, db_revenue
 from api import deps
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,44 @@ def read_revenue_overview(
 ):
     """Revenue across all events for one fiscal year (Organiser only)"""
     return db_revenue.get_revenue_overview(db, fiscal_year)
+
+
+@router.post("/events/{event_id}/refunds/preview", response_model=schemas.RefundPreviewResponse)
+def preview_refunds(
+    event_id: int,
+    request: schemas.RefundPreviewRequest,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """What a refund batch would give back to each person, without refunding anything (Organiser only)"""
+    return db_refunds.preview_refunds(db, event_id, request)
+
+
+@router.post("/events/{event_id}/refunds", response_model=schemas.RefundBatchResponse)
+def issue_refunds(
+    event_id: int,
+    request: schemas.RefundBatchRequest,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """
+    Partially refund paid tickets; everyone keeps their ticket (Organiser only).
+    Stripe payments are refunded to the card. Tickets marked paid by hand are
+    recorded as manual refunds for the organisers to pay back themselves.
+    Each person is emailed. Results are per person: some can fail while the
+    rest go through, and resubmitting the same batch_id never refunds twice.
+    """
+    return db_refunds.issue_refunds(db, event_id, request, current_organiser)
+
+
+@router.post("/refunds/{refund_id}/resend-email", response_model=schemas.RefundSummary)
+def resend_refund_email(
+    refund_id: int,
+    db: Session = Depends(deps.get_db),
+    current_organiser: models.User = Depends(deps.get_current_active_organiser)
+):
+    """Send the refund email again, e.g. after it failed the first time (Organiser only)"""
+    return db_refunds.resend_refund_email(db, refund_id)
 
 
 @router.post("/registrations/{registration_id}/approve", response_model=schemas.Registration)

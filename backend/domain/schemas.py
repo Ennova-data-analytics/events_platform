@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict, field_serializer, Field, field_validator
+from pydantic import BaseModel, EmailStr, ConfigDict, field_serializer, Field, field_validator, model_validator
 from core import s3_service
 import uuid
 from datetime import datetime
@@ -58,6 +58,8 @@ class Registration(BaseModel):
     referral_link_id: int | None = None
     checked_in: bool = False
     checked_in_at: datetime | None = None
+    refunded_amount_euros: Decimal = Decimal('0.00')
+    refunds: list["RefundSummary"] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -345,6 +347,7 @@ class RevenueFigures(BaseModel):
     net_revenue: Decimal
     awaiting_payment: Decimal
     discounts_given: Decimal
+    refunds_given: Decimal
     paid_tickets: int
     free_tickets: int
 
@@ -468,6 +471,7 @@ class TicketTypeResponse(TicketTypeBase):
     tickets_available: int | None = Field(None, description="Remaining tickets (null if unlimited)")
     created_at: datetime
     updated_at: datetime
+    deleted_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -494,6 +498,7 @@ class TicketTypeResponse(TicketTypeBase):
             "group_price_euros": ticket_type.group_price_euros,
             "created_at": ticket_type.created_at,
             "updated_at": ticket_type.updated_at,
+            "deleted_at": ticket_type.deleted_at,
         }
         return cls(**data)
 
@@ -502,6 +507,126 @@ class TicketTypeListResponse(BaseModel):
     """Response for listing ticket types"""
     ticket_types: list[TicketTypeResponse]
     total_count: int
+    deleted_ticket_types: list[TicketTypeResponse] = Field(
+        default_factory=list,
+        description="Deleted while people held them. Only filled for organisers who ask with include_deleted."
+    )
+
+
+class TicketTypeDeleteResponse(BaseModel):
+    ticket_type_id: int
+    outcome: Literal['deleted', 'hidden'] = Field(
+        description="'deleted': nobody had registered, the type is gone. "
+                    "'hidden': off sale and hidden; the people registered keep it."
+    )
+    holders: int = Field(description="Registrations that keep the ticket type")
+
+
+# ---------------------------------------------------------------------------
+# Refunds
+# ---------------------------------------------------------------------------
+
+class RefundSummary(BaseModel):
+    refund_id: int
+    amount_euros: Decimal
+    method: Literal['stripe', 'manual']
+    status: Literal['pending', 'succeeded', 'failed']
+    failure_reason: str | None = None
+    email_sent: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RefundBatchBase(BaseModel):
+    """
+    Who gets money back and how much. 'fixed' gives everyone amount_euros.
+    'corrected_price' gives each person the difference between what they paid
+    and what they would have paid at corrected_price_euros, their discount
+    code included.
+    """
+    registration_ids: list[int] = Field(min_length=1, max_length=500)
+    mode: Literal['fixed', 'corrected_price']
+    amount_euros: Decimal | None = Field(None, gt=0, max_digits=10, decimal_places=2)
+    corrected_price_euros: Decimal | None = Field(None, ge=0, max_digits=10, decimal_places=2)
+
+    @field_validator('registration_ids')
+    @classmethod
+    def no_duplicates(cls, ids: list[int]) -> list[int]:
+        if len(set(ids)) != len(ids):
+            raise ValueError('registration_ids contains duplicates')
+        return ids
+
+    @model_validator(mode='after')
+    def amount_matches_mode(self):
+        if self.mode == 'fixed' and self.amount_euros is None:
+            raise ValueError("amount_euros is required when mode is 'fixed'")
+        if self.mode == 'corrected_price' and self.corrected_price_euros is None:
+            raise ValueError("corrected_price_euros is required when mode is 'corrected_price'")
+        return self
+
+
+class RefundPreviewRequest(RefundBatchBase):
+    pass
+
+
+class RefundBatchRequest(RefundBatchBase):
+    batch_id: uuid.UUID = Field(description="Generated once per opening of the refund dialog, so a resubmit can't refund twice")
+    reason: str = Field(min_length=1, max_length=2000, description="Explanation sent to each person in the email")
+    update_ticket_type_price: bool = Field(
+        False, description="corrected_price only: also set the ticket type's price to the corrected price"
+    )
+
+    @model_validator(mode='after')
+    def price_update_needs_corrected_price(self):
+        if self.update_ticket_type_price and self.mode != 'corrected_price':
+            raise ValueError("update_ticket_type_price only applies when mode is 'corrected_price'")
+        if not self.reason.strip():
+            raise ValueError('reason must not be blank')
+        return self
+
+
+class RefundPreviewRow(BaseModel):
+    registration_id: int
+    full_name: str | None = None
+    email: str | None = None
+    paid_euros: Decimal = Field(description="What the ticket cost them, donation excluded")
+    already_refunded_euros: Decimal
+    refund_euros: Decimal = Field(description="What this batch would give back; 0 when skipped")
+    method: Literal['stripe', 'manual'] | None = None
+    skip_reason: str | None = None
+
+
+class RefundPreviewResponse(BaseModel):
+    rows: list[RefundPreviewRow]
+    total_refund_euros: Decimal
+    refundable_count: int
+    ticket_type_id: int | None = Field(None, description="The one ticket type the selection shares (corrected_price only)")
+    ticket_type_name: str | None = None
+    current_price_euros: Decimal | None = None
+
+
+class RefundResultRow(BaseModel):
+    registration_id: int
+    full_name: str | None = None
+    email: str | None = None
+    outcome: Literal['refunded', 'pending', 'failed', 'skipped']
+    amount_euros: Decimal = Decimal('0.00')
+    method: Literal['stripe', 'manual'] | None = None
+    refund_id: int | None = None
+    email_sent: bool = False
+    message: str | None = None
+
+
+class RefundBatchResponse(BaseModel):
+    batch_id: uuid.UUID
+    results: list[RefundResultRow]
+    refunded_count: int
+    failed_count: int
+    skipped_count: int
+    total_refunded_euros: Decimal
+    emails_failed: int
+    ticket_type_price_updated: bool = False
 
 
 TicketTypeResponse.model_rebuild()

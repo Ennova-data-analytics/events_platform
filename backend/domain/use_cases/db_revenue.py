@@ -6,9 +6,11 @@ association's, while tickets on a charity event and all donations pass through
 to the charity.
 
 Income is attributed to the event's date, because registrations don't record
-when they were paid. These are gross figures: Stripe fees aren't stored, and a
-refund only shows up as a registration that is no longer 'Paid'. Cancelled events
-are left out on the assumption that their tickets were refunded.
+when they were paid. Stripe fees aren't stored, so figures are before fees.
+Partial refunds on tickets people keep are netted out of ticket income (and
+shown as refunds_given); a full refund shows up as a registration that is no
+longer 'Paid'. Cancelled events are left out on the assumption that their
+tickets were refunded.
 """
 from collections import defaultdict
 from datetime import datetime
@@ -20,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from core.config import settings
 from domain import models
+from domain.use_cases.db_refunds import refunded_per_registration
 
 # The association's year follows the academic year: FY26/27 runs from September
 # 2026 to the end of June 2027. July and August belong to no fiscal year, so
@@ -33,7 +36,7 @@ CENTS = Decimal('0.01')
 FIGURES = (
     'ticket_revenue', 'charity_ticket_revenue', 'donations', 'raised_for_charity',
     'total_collected', 'commission_owed', 'net_revenue', 'awaiting_payment',
-    'discounts_given', 'paid_tickets', 'free_tickets',
+    'discounts_given', 'refunds_given', 'paid_tickets', 'free_tickets',
 )
 
 
@@ -90,6 +93,22 @@ def _registration_stats(db: Session, event_ids: list[int]) -> dict:
     return {row.event_id: row for row in rows}
 
 
+def _refunds_given(db: Session, event_ids: list[int]) -> dict:
+    """Partial refunds on tickets still 'Paid'. A ticket no longer paid isn't
+    counted as income at all, so its refunds aren't taken off again."""
+    rows = db.query(
+        models.Refund.event_id,
+        func.sum(models.Refund.amount_euros),
+    ).join(
+        models.Registration, models.Registration.registration_id == models.Refund.registration_id
+    ).filter(
+        models.Refund.event_id.in_(event_ids),
+        models.Refund.status.in_(models.Refund.COUNTED_STATUSES),
+        models.Registration.status == 'Paid',
+    ).group_by(models.Refund.event_id).all()
+    return dict(rows)
+
+
 def _standalone_donations(db: Session, event_ids: list[int]) -> dict:
     rows = db.query(
         models.Donation.event_id,
@@ -105,11 +124,14 @@ def _commissions_owed(db: Session, event_ids: list[int]) -> dict:
     """Same calculation as the Referrals tab, so the two pages agree to the cent."""
     link = models.ReferralLink
     reg = models.Registration
+    refunded = refunded_per_registration(db)
     rows = db.query(
         link.event_id,
         link.commission_percentage,
-        func.coalesce(func.sum(reg.final_amount_euros), 0).label('revenue'),
-    ).join(reg, reg.referral_link_id == link.link_id).filter(
+        func.coalesce(func.sum(reg.final_amount_euros - func.coalesce(refunded.c.refunded, 0)), 0).label('revenue'),
+    ).join(reg, reg.referral_link_id == link.link_id).outerjoin(
+        refunded, refunded.c.registration_id == reg.registration_id
+    ).filter(
         link.event_id.in_(event_ids),
         reg.status == 'Paid',
     ).group_by(link.link_id).all()
@@ -138,11 +160,13 @@ def _event_rows(db: Session, start: datetime, end: datetime, tz: ZoneInfo) -> li
     stats = _registration_stats(db, event_ids)
     standalone = _standalone_donations(db, event_ids)
     commissions = _commissions_owed(db, event_ids)
+    refunds = _refunds_given(db, event_ids)
 
     rows = []
     for event in events:
         reg = stats.get(event.event_id)
-        tickets = reg.tickets if reg else ZERO
+        refunds_given = refunds.get(event.event_id, ZERO)
+        tickets = (reg.tickets if reg else ZERO) - refunds_given
         ticket_revenue = ZERO if event.is_charitable else tickets
         charity_ticket_revenue = tickets if event.is_charitable else ZERO
         donations = (reg.donations if reg else ZERO) + standalone.get(event.event_id, ZERO)
@@ -164,6 +188,7 @@ def _event_rows(db: Session, start: datetime, end: datetime, tz: ZoneInfo) -> li
             'net_revenue': ticket_revenue - commission_owed,
             'awaiting_payment': reg.awaiting if reg else ZERO,
             'discounts_given': reg.discounts if reg else ZERO,
+            'refunds_given': refunds_given,
             'paid_tickets': reg.paid_tickets if reg else 0,
             'free_tickets': reg.free_tickets if reg else 0,
         }

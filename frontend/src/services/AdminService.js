@@ -46,6 +46,15 @@ export const AdminService = {
     sendTimeChangeEmail(eventId, data) {
         return ApiClient.post(`/admin/events/${eventId}/send-time-change-email`, data);
     },
+    previewRefunds(eventId, request) {
+        return ApiClient.post(`/admin/events/${eventId}/refunds/preview`, request);
+    },
+    issueRefunds(eventId, request) {
+        return ApiClient.post(`/admin/events/${eventId}/refunds`, request);
+    },
+    resendRefundEmail(refundId) {
+        return ApiClient.post(`/admin/refunds/${refundId}/resend-email`);
+    },
     getRevenueOverview(fiscalYear = null) {
         return ApiClient.get('/admin/revenue', { params: fiscalYear ? { fiscal_year: fiscalYear } : {} });
     }

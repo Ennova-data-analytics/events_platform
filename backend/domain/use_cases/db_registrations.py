@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from fastapi import HTTPException, status
 from domain import models
 from domain.services import notification_service
@@ -64,9 +64,14 @@ def create_registration(
     team_selection: TeamSelectionRequest | None = None,
     referral_code: str | None = None,
     donation_amount_euros: Decimal | None = None,
-    charity_email_consent: bool = False
+    charity_email_consent: bool = False,
+    claiming_team_invite: bool = False,
 ):
-    """Handles db operations for creating a new registration with ticket type support"""
+    """Handles db operations for creating a new registration with ticket type support.
+
+    claiming_team_invite: the seat was already paid for by a team leader, so the
+    invite can still be claimed after its ticket type was deleted.
+    """
     existing_registration = db.query(models.Registration).filter(
         models.Registration.event_id == event_id,
         models.Registration.user_id == user_id
@@ -102,10 +107,13 @@ def create_registration(
     is_paid_by_leader = False
 
     event_ticket_types = db.query(models.TicketType).filter(
-        models.TicketType.event_id == event_id
+        models.TicketType.event_id == event_id,
+        models.TicketType.deleted_at.is_(None),
     ).all()
+    # An invite's ticket type may be the event's only one and since deleted.
+    uses_ticket_types = bool(event_ticket_types) or (claiming_team_invite and ticket_type_id is not None)
 
-    if event_ticket_types:
+    if uses_ticket_types:
         if not ticket_type_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -121,6 +129,12 @@ def create_registration(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Invalid ticket type for this event"
+            )
+
+        if ticket_type.deleted_at is not None and not claiming_team_invite:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This ticket type is no longer available"
             )
 
         if not ticket_type.is_active:
@@ -401,7 +415,8 @@ def _create_and_send_team_invites(db: Session, team, event, ticket_type, teammat
 def get_registrations_for_event(db: Session, event_id: int):
     """Fetches all registrations for a specific event with ticket type data"""
     return db.query(models.Registration).options(
-        joinedload(models.Registration.ticket_type)
+        joinedload(models.Registration.ticket_type),
+        selectinload(models.Registration.refunds),
     ).filter(models.Registration.event_id == event_id).all()
 
 

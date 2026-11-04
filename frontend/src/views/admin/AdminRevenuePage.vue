@@ -117,6 +117,11 @@
                 <span class="font-weight-medium">{{ formatEuros(overview.totals.discounts_given) }}</span>
               </div>
               <div class="d-flex text-body-2 py-1">
+                <span>Partial refunds given</span>
+                <v-spacer />
+                <span class="font-weight-medium">{{ formatEuros(overview.totals.refunds_given) }}</span>
+              </div>
+              <div class="d-flex text-body-2 py-1">
                 <span>Approved, not yet paid</span>
                 <v-spacer />
                 <span class="font-weight-medium">{{ formatEuros(overview.totals.awaiting_payment) }}</span>
@@ -361,7 +366,7 @@ const eventHeaders = [
 
 const MONEY_COLUMNS = [
   'ticket_revenue', 'charity_ticket_revenue', 'donations', 'raised_for_charity',
-  'total_collected', 'commission_owed', 'net_revenue', 'awaiting_payment', 'discounts_given',
+  'total_collected', 'commission_owed', 'net_revenue', 'awaiting_payment', 'discounts_given', 'refunds_given',
 ];
 
 const eventRows = computed(() => overview.value.events.map(event => ({
@@ -379,7 +384,7 @@ function exportReport() {
   const { label, totals } = overview.value;
   downloadCsv(`revenue-${label.replace('/', '-')}.csv`, [
     ['Event', 'Date', 'Charity', 'Paid tickets', 'Free tickets', 'Ticket revenue', 'Charity tickets', 'Donations',
-      'Commission owed', 'Net of commissions', 'Total collected', 'Discounts given', 'Approved not yet paid'],
+      'Commission owed', 'Net of commissions', 'Total collected', 'Discounts given', 'Refunds given', 'Approved not yet paid'],
     ...eventRows.value.map(event => [
       event.event_name,
       new Date(event.event_date_start).toLocaleDateString('en-GB'),
@@ -393,12 +398,13 @@ function exportReport() {
       event.net_revenue,
       event.total_collected,
       event.discounts_given,
+      event.refunds_given,
       event.awaiting_payment,
     ]),
     [
       `Total ${label}`, '', '', totals.paid_tickets, totals.free_tickets,
       ...['ticket_revenue', 'charity_ticket_revenue', 'donations', 'commission_owed', 'net_revenue',
-        'total_collected', 'discounts_given', 'awaiting_payment'].map(key => Number(totals[key])),
+        'total_collected', 'discounts_given', 'refunds_given', 'awaiting_payment'].map(key => Number(totals[key])),
     ],
   ]);
 }

@@ -1,3 +1,5 @@
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -44,6 +46,8 @@ class Settings(BaseSettings):
     CALENDLY_WEBHOOK_SECRET: str = ""          # optional; verifies Calendly signatures
     RECRUITMENT_SCHEDULER_ENABLED: bool = True  # reminder/nudge/retention jobs
 
-    model_config = SettingsConfigDict(env_file=".env")
+    # The test suite sets APP_ENV=test so it never reads .env, which points at
+    # the live database and holds the real Stripe key.
+    model_config = SettingsConfigDict(env_file=None if os.getenv("APP_ENV") == "test" else ".env")
 
 settings = Settings()

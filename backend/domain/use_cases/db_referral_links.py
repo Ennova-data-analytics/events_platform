@@ -146,9 +146,17 @@ class ReferralLinkUseCases:
             Registration.referral_link_id == link.link_id
         ).scalar() or 0
 
+        # Revenue is net of partial refunds, as on the Revenue page.
+        from domain.use_cases.db_refunds import refunded_per_registration
+        refunded = refunded_per_registration(db)
         paid_stats = db.query(
             func.count(Registration.registration_id),
-            func.coalesce(func.sum(Registration.final_amount_euros), Decimal('0.00'))
+            func.coalesce(
+                func.sum(Registration.final_amount_euros - func.coalesce(refunded.c.refunded, 0)),
+                Decimal('0.00'),
+            )
+        ).outerjoin(
+            refunded, refunded.c.registration_id == Registration.registration_id
         ).filter(
             Registration.referral_link_id == link.link_id,
             Registration.status == 'Paid'

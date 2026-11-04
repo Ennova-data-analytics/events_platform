@@ -3,6 +3,7 @@ from sqlalchemy import func
 from fastapi import HTTPException, status
 from domain import models, schemas
 from typing import List
+from datetime import datetime, timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -27,10 +28,23 @@ class TicketTypeUseCases:
         return ticket_type
 
     @staticmethod
+    def get_live_ticket_type(db: Session, ticket_type_id: int) -> models.TicketType:
+        """A ticket type that hasn't been deleted. Deleted ones only live on for
+        the people who hold them, so to everything else they are not found."""
+        ticket_type = TicketTypeUseCases.get_ticket_type(db, ticket_type_id)
+        if ticket_type.deleted_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Ticket type not found"
+            )
+        return ticket_type
+
+    @staticmethod
     def get_ticket_types_for_event(db: Session, event_id: int) -> List[models.TicketType]:
-        """Get all ticket types for an event, ordered by display_order"""
+        """Get all ticket types for an event that haven't been deleted, ordered by display_order"""
         return db.query(models.TicketType).filter(
-            models.TicketType.event_id == event_id
+            models.TicketType.event_id == event_id,
+            models.TicketType.deleted_at.is_(None),
         ).order_by(models.TicketType.display_order).all()
 
     @staticmethod
@@ -38,8 +52,17 @@ class TicketTypeUseCases:
         """Get only active ticket types for an event"""
         return db.query(models.TicketType).filter(
             models.TicketType.event_id == event_id,
-            models.TicketType.is_active
+            models.TicketType.is_active,
+            models.TicketType.deleted_at.is_(None),
         ).order_by(models.TicketType.display_order).all()
+
+    @staticmethod
+    def get_deleted_ticket_types_for_event(db: Session, event_id: int) -> List[models.TicketType]:
+        """Ticket types deleted while people held them, most recently deleted first"""
+        return db.query(models.TicketType).filter(
+            models.TicketType.event_id == event_id,
+            models.TicketType.deleted_at.is_not(None),
+        ).order_by(models.TicketType.deleted_at.desc()).all()
 
     @staticmethod
     def create_ticket_type(
@@ -84,7 +107,7 @@ class TicketTypeUseCases:
         ticket_type_data: schemas.TicketTypeUpdate
     ) -> models.TicketType:
         """Update an existing ticket type"""
-        db_ticket_type = TicketTypeUseCases.get_ticket_type(db, ticket_type_id)
+        db_ticket_type = TicketTypeUseCases.get_live_ticket_type(db, ticket_type_id)
 
         if ticket_type_data.form_template_id is not None:
             form_template = db.query(models.FormTemplate).filter(
@@ -115,36 +138,39 @@ class TicketTypeUseCases:
         return db_ticket_type
 
     @staticmethod
-    def delete_ticket_type(db: Session, ticket_type_id: int) -> None:
-        """Delete a ticket type (only if no tickets sold)"""
-        db_ticket_type = TicketTypeUseCases.get_ticket_type(db, ticket_type_id)
-
-        if db_ticket_type.tickets_sold > 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot delete ticket type. {db_ticket_type.tickets_sold} tickets already sold. "
-                       "Consider deactivating instead."
-            )
+    def delete_ticket_type(db: Session, ticket_type_id: int) -> schemas.TicketTypeDeleteResponse:
+        """
+        Delete a ticket type. Nobody registered for it: the row goes. Anyone
+        registered (any status): it is taken off sale and hidden instead, so
+        their tickets keep their type and pending registrations can still be
+        approved and paid.
+        """
+        db_ticket_type = TicketTypeUseCases.get_live_ticket_type(db, ticket_type_id)
 
         registration_count = db.query(func.count(models.Registration.registration_id)).filter(
             models.Registration.ticket_type_id == ticket_type_id
         ).scalar()
 
-        if registration_count > 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot delete ticket type with existing registrations. Consider deactivating instead."
-            )
+        if registration_count == 0:
+            db.delete(db_ticket_type)
+            db.commit()
+            logger.info(f"Deleted ticket type {ticket_type_id}")
+            return schemas.TicketTypeDeleteResponse(ticket_type_id=ticket_type_id, outcome='deleted', holders=0)
 
-        db.delete(db_ticket_type)
+        db_ticket_type.deleted_at = datetime.now(timezone.utc)
         db.commit()
-
-        logger.info(f"Deleted ticket type {ticket_type_id}")
+        logger.info(
+            f"Ticket type {ticket_type_id} taken off sale and hidden; "
+            f"{registration_count} registration(s) keep it"
+        )
+        return schemas.TicketTypeDeleteResponse(
+            ticket_type_id=ticket_type_id, outcome='hidden', holders=registration_count
+        )
 
     @staticmethod
     def toggle_active(db: Session, ticket_type_id: int) -> models.TicketType:
         """Toggle the is_active status of a ticket type"""
-        db_ticket_type = TicketTypeUseCases.get_ticket_type(db, ticket_type_id)
+        db_ticket_type = TicketTypeUseCases.get_live_ticket_type(db, ticket_type_id)
 
         db_ticket_type.is_active = not db_ticket_type.is_active
         db.commit()
@@ -158,7 +184,8 @@ class TicketTypeUseCases:
         """Reorder ticket types for an event"""
         ticket_types = db.query(models.TicketType).filter(
             models.TicketType.event_id == event_id,
-            models.TicketType.ticket_type_id.in_(ticket_type_ids_in_order)
+            models.TicketType.ticket_type_id.in_(ticket_type_ids_in_order),
+            models.TicketType.deleted_at.is_(None),
         ).all()
 
         if len(ticket_types) != len(ticket_type_ids_in_order):
@@ -184,7 +211,7 @@ class TicketTypeUseCases:
         message = "Available"
         tickets_remaining = None
 
-        if not db_ticket_type.is_active:
+        if not db_ticket_type.is_active or db_ticket_type.deleted_at is not None:
             available = False
             message = "This ticket type is no longer available"
         elif db_ticket_type.capacity is not None:

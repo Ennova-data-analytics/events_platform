@@ -141,13 +141,32 @@
               </v-chip>
             </div>
 
+            <div v-if="status === 'paid'" class="d-flex flex-wrap align-center gap-2 px-4 pt-3">
+              <v-btn
+                color="primary"
+                variant="tonal"
+                size="small"
+                prepend-icon="mdi-cash-refund"
+                :disabled="!selectedForRefund.length"
+                @click="refundDialog = true"
+              >
+                Refund selected ({{ selectedForRefund.length }})
+              </v-btn>
+              <span class="text-caption text-medium-emphasis">
+                Tick the people to refund. They keep their tickets.
+              </span>
+            </div>
+
             <v-data-table
-                :headers="attendeeHeadersWithRevert"
+                :headers="status === 'paid' ? paidHeaders : attendeeHeadersWithRevert"
                 :items="status === 'approved' ? approvedAttendees : (status === 'paid' ? paidAttendees : rejectedAttendees)"
                 :loading="isLoading"
                 item-value="registration_id"
                 show-expand
                 v-model:expanded="expanded"
+                :show-select="status === 'paid'"
+                v-model="selectedForRefund"
+                :item-selectable="item => canRefund(item, eventPrice)"
             >
                 <template v-slot:expanded-row="{ columns, item }">
                     <tr>
@@ -174,6 +193,35 @@
                                 <div v-else>
                                     <p>No additional information was submitted for this application.</p>
                                 </div>
+
+                                <div v-if="item.refunds?.length" class="mt-4">
+                                    <h4 class="text-subtitle-1 font-weight-bold mb-2">Refunds</h4>
+                                    <div v-for="refund in item.refunds" :key="refund.refund_id" class="d-flex flex-wrap align-center gap-2 mb-1">
+                                        <v-chip size="small" variant="tonal" :color="REFUND_STATUS[refund.status].color">
+                                            {{ REFUND_STATUS[refund.status].label }}
+                                        </v-chip>
+                                        <strong>{{ formatEuros(refund.amount_euros) }}</strong>
+                                        <span class="text-caption">
+                                            {{ refund.method === 'stripe' ? 'to card' : 'paid back by organisers' }} ·
+                                            {{ new Date(refund.created_at).toLocaleDateString('en-GB') }}
+                                        </span>
+                                        <span v-if="refund.failure_reason" class="text-caption text-error">{{ refund.failure_reason }}</span>
+                                        <template v-if="refund.status !== 'failed'">
+                                            <v-chip v-if="refund.email_sent" size="x-small" variant="text" prepend-icon="mdi-email-check">Emailed</v-chip>
+                                            <v-btn
+                                                v-else
+                                                size="x-small"
+                                                variant="tonal"
+                                                color="warning"
+                                                prepend-icon="mdi-email-sync"
+                                                :loading="resendingRefundId === refund.refund_id"
+                                                @click="resendRefundEmail(refund)"
+                                            >
+                                                Email not sent: resend
+                                            </v-btn>
+                                        </template>
+                                    </div>
+                                </div>
                             </div>
                         </td>
                     </tr>
@@ -182,6 +230,20 @@
                 <template v-slot:item.user.is_ennova_member="{ item }">
                   <v-chip v-if="item.user?.is_ennova_member" color="success" size="small" variant="tonal">Yes</v-chip>
                   <v-chip v-else size="small" variant="tonal">No</v-chip>
+                </template>
+
+                <template v-slot:item.refunded_amount_euros="{ item }">
+                  <v-chip
+                    v-if="refundBadge(item)"
+                    :color="refundBadge(item).color"
+                    size="small"
+                    variant="tonal"
+                    :title="refundBadge(item).warning || ''"
+                  >
+                    <v-icon start size="13">{{ refundBadge(item).warning ? 'mdi-alert' : 'mdi-cash-refund' }}</v-icon>
+                    {{ refundBadge(item).text }}
+                  </v-chip>
+                  <span v-else class="text-caption text-grey">—</span>
                 </template>
 
                 <template v-slot:item.paid_by_team_leader="{ item }">
@@ -521,6 +583,14 @@
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000">
       {{ snackbar.text }}
     </v-snackbar>
+
+    <RefundDialog
+      v-if="eventId"
+      v-model="refundDialog"
+      :event-id="parseInt(eventId)"
+      :attendees="paidAttendees.filter(a => selectedForRefund.includes(a.registration_id))"
+      @refunded="onRefunded"
+    />
 
     <v-dialog v-model="confirmDialog.show" :max-width="$vuetify.display.mobile ? '90vw' : '500px'">
       <v-card>
@@ -928,6 +998,8 @@ import ReferralLinkManager from '@/components/admin/ReferralLinkManager.vue';
 import GuestTicketManager from '@/components/tickets/GuestTicketManager.vue';
 import EventDonationsList from '@/components/admin/EventDonationsList.vue';
 import CharityEmailConsentList from '@/components/admin/CharityEmailConsentList.vue';
+import RefundDialog from '@/components/admin/RefundDialog.vue';
+import { batchColor, canRefund, formatEuros, refundBadge, summarizeBatch } from '@/utils/refunds.js';
 import { TicketService } from '@/services/TicketService';
 
 
@@ -1087,7 +1159,45 @@ const teamHeaders = ref([
 
 watch(tab, () => {
   expanded.value = [];
+  selectedForRefund.value = [];
 });
+
+// Refunds (Paid tab)
+const selectedForRefund = ref([]);
+const refundDialog = ref(false);
+const resendingRefundId = ref(null);
+const REFUND_STATUS = {
+  succeeded: { label: 'Refunded', color: 'success' },
+  pending: { label: 'Pending', color: 'warning' },
+  failed: { label: 'Failed', color: 'error' },
+};
+const refundHeader = { title: 'Refunds', key: 'refunded_amount_euros', sortable: true };
+const paidHeaders = computed(() => {
+  const headers = [...attendeeHeadersWithRevert.value];
+  const paymentIndex = headers.findIndex(h => h.key === 'paid_by_team_leader');
+  headers.splice(paymentIndex + 1, 0, refundHeader);
+  return headers;
+});
+
+async function onRefunded(result) {
+  snackbar.value = { show: true, text: summarizeBatch(result), color: batchColor(result) };
+  selectedForRefund.value = [];
+  await fetchAttendees();
+}
+
+async function resendRefundEmail(refund) {
+  resendingRefundId.value = refund.refund_id;
+  try {
+    await AdminService.resendRefundEmail(refund.refund_id);
+    snackbar.value = { show: true, text: 'Refund email sent.', color: 'success' };
+    await fetchAttendees();
+  } catch (error) {
+    console.error('Failed to resend refund email:', error);
+    snackbar.value = { show: true, text: error.response?.data?.detail || 'Failed to resend the refund email.', color: 'error' };
+  } finally {
+    resendingRefundId.value = null;
+  }
+}
 
 const ennovaFilter = ref('all');
 

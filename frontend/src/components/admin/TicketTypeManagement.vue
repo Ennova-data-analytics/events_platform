@@ -131,18 +131,39 @@
                   variant="text"
                   @click="confirmDelete(ticketType)"
                   size="small"
-                  :disabled="ticketType.tickets_sold > 0"
                   icon
+                  data-test="delete-ticket-type"
                 >
                   <v-icon>mdi-delete</v-icon>
-                  <v-tooltip activator="parent">
-                    {{ ticketType.tickets_sold > 0 ? 'Cannot delete (tickets sold)' : 'Delete' }}
-                  </v-tooltip>
+                  <v-tooltip activator="parent">Delete</v-tooltip>
                 </v-btn>
           </template>
           <v-divider></v-divider>
         </v-list-item>
       </v-list>
+
+      <v-expansion-panels v-if="deletedTicketTypes.length" variant="accordion" class="mt-4" data-test="deleted-ticket-types">
+        <v-expansion-panel>
+          <v-expansion-panel-title>
+            <v-icon start size="small">mdi-delete-clock</v-icon>
+            Deleted ({{ deletedTicketTypes.length }})
+          </v-expansion-panel-title>
+          <v-expansion-panel-text>
+            <p class="text-caption text-medium-emphasis mb-2">
+              Off sale and hidden from the event page. Everyone who registered with these keeps their ticket.
+            </p>
+            <v-list density="compact">
+              <v-list-item v-for="ticketType in deletedTicketTypes" :key="ticketType.ticket_type_id">
+                <v-list-item-title>{{ ticketType.name }}</v-list-item-title>
+                <v-list-item-subtitle>
+                  €{{ ticketType.price_euros }} · {{ ticketType.tickets_sold }} sold ·
+                  deleted {{ new Date(ticketType.deleted_at).toLocaleDateString('en-GB') }}
+                </v-list-item-subtitle>
+              </v-list-item>
+            </v-list>
+          </v-expansion-panel-text>
+        </v-expansion-panel>
+      </v-expansion-panels>
     </v-card-text>
 
     <!-- Create/Edit Dialog -->
@@ -353,12 +374,19 @@
     </v-dialog>
 
     <!-- Delete Confirmation Dialog -->
-    <v-dialog v-model="deleteDialog" max-width="400px">
+    <v-dialog v-model="deleteDialog" max-width="440px">
       <v-card>
-        <v-card-title>Confirm Deletion</v-card-title>
-        <v-card-text>
-          Are you sure you want to delete the ticket type "{{ ticketTypeToDelete?.name }}"?
-          This action cannot be undone.
+        <v-card-title>Delete "{{ ticketTypeToDelete?.name }}"?</v-card-title>
+        <v-card-text data-test="delete-message">
+          <template v-if="ticketTypeToDelete?.tickets_sold > 0">
+            {{ ticketTypeToDelete.tickets_sold }}
+            {{ ticketTypeToDelete.tickets_sold === 1 ? 'person holds' : 'people hold' }} this ticket.
+            They keep it. It will be taken off sale and moved to the Deleted section below.
+          </template>
+          <template v-else>
+            It will no longer be on sale. Anyone who already registered with it (for example, awaiting
+            approval or payment) keeps it; otherwise it is removed for good.
+          </template>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
@@ -392,6 +420,7 @@ const props = defineProps({
 const emit = defineEmits(['ticket-types-updated']);
 
 const ticketTypes = ref([]);
+const deletedTicketTypes = ref([]);
 const formTemplates = ref([]);
 const dialog = ref(false);
 const deleteDialog = ref(false);
@@ -435,11 +464,9 @@ onMounted(async () => {
 
 async function loadTicketTypes() {
   try {
-    console.log('Loading ticket types for event:', props.eventId);
-    const response = await TicketTypeService.getTicketTypes(props.eventId);
-    console.log('Ticket types response:', response);
+    const response = await TicketTypeService.getTicketTypes(props.eventId, false, true);
     ticketTypes.value = response.ticket_types || [];
-    console.log('Loaded ticket types:', ticketTypes.value);
+    deletedTicketTypes.value = response.deleted_ticket_types || [];
   } catch (error) {
     console.error('Failed to load ticket types:', error);
     showSnackbar('Failed to load ticket types', 'error');
@@ -541,14 +568,19 @@ async function deleteTicketType() {
   deleting.value = true;
 
   try {
-    await TicketTypeService.deleteTicketType(
+    const result = await TicketTypeService.deleteTicketType(
       props.eventId,
       ticketTypeToDelete.value.ticket_type_id
     );
-    await loadTicketTypes();
-    emit('ticket-types-updated');
-    showSnackbar('Ticket type deleted successfully', 'success');
     deleteDialog.value = false;
+    showSnackbar(
+      result.outcome === 'hidden'
+        ? `Ticket type taken off sale. ${result.holders} ${result.holders === 1 ? 'registration keeps' : 'registrations keep'} it.`
+        : 'Ticket type deleted',
+      'success'
+    );
+    emit('ticket-types-updated');
+    await loadTicketTypes();
   } catch (error) {
     console.error('Failed to delete ticket type:', error);
     showSnackbar(error.response?.data?.detail || 'Failed to delete ticket type', 'error');

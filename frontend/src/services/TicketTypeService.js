@@ -8,11 +8,12 @@ class TicketTypeService {
    * Get all ticket types for an event
    * @param {number} eventId - Event ID
    * @param {boolean} activeOnly - Only return active ticket types
+   * @param {boolean} includeDeleted - Organisers: also return deleted_ticket_types
    * @returns {Promise} - Promise resolving to ticket types list
    */
-  async getTicketTypes(eventId, activeOnly = false) {
+  async getTicketTypes(eventId, activeOnly = false, includeDeleted = false) {
     const response = await apiClient.get(`/events/${eventId}/ticket-types`, {
-      params: { active_only: activeOnly }
+      params: { active_only: activeOnly, include_deleted: includeDeleted }
     });
     return response.data;
   }
@@ -52,13 +53,15 @@ class TicketTypeService {
   }
 
   /**
-   * Delete a ticket type
+   * Delete a ticket type. Removed if nobody registered for it; otherwise taken
+   * off sale and hidden, and the people registered keep it.
    * @param {number} eventId - Event ID
    * @param {number} ticketTypeId - Ticket type ID
-   * @returns {Promise}
+   * @returns {Promise<{ticket_type_id: number, outcome: 'deleted'|'hidden', holders: number}>}
    */
   async deleteTicketType(eventId, ticketTypeId) {
-    await apiClient.delete(`/events/${eventId}/ticket-types/${ticketTypeId}`);
+    const response = await apiClient.delete(`/events/${eventId}/ticket-types/${ticketTypeId}`);
+    return response.data;
   }
 
   /**

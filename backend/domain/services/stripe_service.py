@@ -217,4 +217,31 @@ class StripeService:
             logger.error(f"Failed to send payment confirmation notification: {str(e)}")
 
 
+    @staticmethod
+    def payment_was_collected(payment_intent_id: str) -> bool:
+        """
+        Whether Stripe actually took this payment. A registration can carry the
+        id of a checkout that was abandoned and then be marked paid by hand, in
+        which case there is nothing on Stripe to refund. Raises StripeError if
+        Stripe can't be asked.
+        """
+        intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+        return intent.status == 'succeeded'
+
+    @staticmethod
+    def create_refund(payment_intent_id: str, amount_euros, idempotency_key: str, metadata: dict):
+        """
+        Refund part of a card payment. The idempotency key makes a retried call
+        return the first refund instead of making a second one. Raises
+        StripeError; the caller records the failure.
+        """
+        return stripe.Refund.create(
+            payment_intent=payment_intent_id,
+            amount=_to_cents(amount_euros),
+            reason='requested_by_customer',
+            metadata=metadata,
+            idempotency_key=idempotency_key,
+        )
+
+
 stripe_service = StripeService()
