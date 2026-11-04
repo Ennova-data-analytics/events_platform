@@ -28,7 +28,7 @@ boto3 = "^1.34.113"
 
 python-multipart = "^0.0.9"
 
-stripe = "^7.0.0"
+stripe = ">=7,<17"
 resend = "^2.16.0"
 qrcode = {version = "8.0", extras = ["pil"]}
 pillow = "^12.3.0"
