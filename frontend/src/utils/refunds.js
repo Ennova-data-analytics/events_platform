@@ -17,6 +17,19 @@ export function ticketAmount(attendee, eventPrice = 0) {
   return Number(eventPrice || 0);
 }
 
+// Why someone paid a different amount than the list price, for the Paid
+// column. null when they paid the normal price.
+export function priceNote(attendee) {
+  if (attendee.custom_amount_euros !== null && attendee.custom_amount_euros !== undefined) {
+    return 'Custom price';
+  }
+  if (Number(attendee.discount_amount_euros) > 0) {
+    return `${formatEuros(attendee.discount_amount_euros)} off with code`;
+  }
+  if (attendee.member_discount_applied) return 'Free for members';
+  return null;
+}
+
 export function refundedAmount(attendee) {
   return Number(attendee.refunded_amount_euros || 0);
 }

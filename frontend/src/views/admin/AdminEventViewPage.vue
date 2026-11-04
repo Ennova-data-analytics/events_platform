@@ -232,6 +232,11 @@
                   <v-chip v-else size="small" variant="tonal">No</v-chip>
                 </template>
 
+                <template v-slot:item.amount_paid="{ item }">
+                  <div class="text-no-wrap">{{ formatEuros(ticketAmount(item, eventPrice)) }}</div>
+                  <div v-if="priceNote(item)" class="text-caption text-medium-emphasis text-no-wrap">{{ priceNote(item) }}</div>
+                </template>
+
                 <template v-slot:item.refunded_amount_euros="{ item }">
                   <v-chip
                     v-if="refundBadge(item)"
@@ -999,7 +1004,7 @@ import GuestTicketManager from '@/components/tickets/GuestTicketManager.vue';
 import EventDonationsList from '@/components/admin/EventDonationsList.vue';
 import CharityEmailConsentList from '@/components/admin/CharityEmailConsentList.vue';
 import RefundDialog from '@/components/admin/RefundDialog.vue';
-import { batchColor, canRefund, formatEuros, refundBadge, summarizeBatch } from '@/utils/refunds.js';
+import { batchColor, canRefund, formatEuros, priceNote, refundBadge, summarizeBatch, ticketAmount } from '@/utils/refunds.js';
 import { TicketService } from '@/services/TicketService';
 
 
@@ -1172,10 +1177,19 @@ const REFUND_STATUS = {
   failed: { label: 'Failed', color: 'error' },
 };
 const refundHeader = { title: 'Refunds', key: 'refunded_amount_euros', sortable: true };
+// What each person paid for the ticket (donation excluded), sortable so the
+// ones charged the wrong price group together.
+const amountPaidHeader = {
+  title: 'Paid',
+  key: 'amount_paid',
+  value: item => ticketAmount(item, eventPrice.value),
+  sortable: true,
+  align: 'end',
+};
 const paidHeaders = computed(() => {
   const headers = [...attendeeHeadersWithRevert.value];
   const paymentIndex = headers.findIndex(h => h.key === 'paid_by_team_leader');
-  headers.splice(paymentIndex + 1, 0, refundHeader);
+  headers.splice(paymentIndex + 1, 0, amountPaidHeader, refundHeader);
   return headers;
 });
 
