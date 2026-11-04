@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { batchColor, canRefund, newBatchId, refundBadge, summarizeBatch, ticketAmount } from './refunds.js';
+import { batchColor, canRefund, newBatchId, priceNote, refundBadge, summarizeBatch, ticketAmount } from './refunds.js';
 
 const paid = (fields = {}) => ({ status: 'Paid', final_amount_euros: '40.00', refunded_amount_euros: '0.00', refunds: [], ...fields });
 
@@ -12,6 +12,19 @@ describe('ticketAmount', () => {
 
   it('treats a custom amount of 0 as free, not missing', () => {
     expect(ticketAmount({ custom_amount_euros: 0, final_amount_euros: '40.00' })).toBe(0);
+  });
+});
+
+describe('priceNote', () => {
+  it('explains a price that differs from the list price', () => {
+    expect(priceNote(paid({ custom_amount_euros: 25 }))).toBe('Custom price');
+    expect(priceNote(paid({ discount_amount_euros: '10.00' }))).toBe('€10.00 off with code');
+    expect(priceNote(paid({ final_amount_euros: '0.00', member_discount_applied: true }))).toBe('Free for members');
+  });
+
+  it('says nothing for the normal price', () => {
+    expect(priceNote(paid())).toBeNull();
+    expect(priceNote(paid({ discount_amount_euros: '0.00' }))).toBeNull();
   });
 });
 
