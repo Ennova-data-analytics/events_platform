@@ -7,7 +7,7 @@ import logging
 import os
 
 from domain import schemas, models
-from domain.use_cases import db_events, db_event_duplication, db_registrations, db_donations, db_event_photos, db_event_attachments, users_uc
+from domain.use_cases import db_events, db_event_duplication, db_registrations, db_donations, db_event_photos, db_event_attachments, users_uc, db_friend_tickets
 from domain.use_cases.calendar_export import GenerateEventCalendarUseCase
 from domain.exceptions import EventNotFoundException, RegistrationNotFoundException, UnauthorizedCalendarAccessException
 from api import deps
@@ -114,7 +114,8 @@ def register_user_for_event(event_id: int, registration_data: schemas.Registrati
         team_selection=registration_data.team_selection,
         referral_code=registration_data.referral_code,
         donation_amount_euros=registration_data.donation_amount_euros,
-        charity_email_consent=registration_data.charity_email_consent
+        charity_email_consent=registration_data.charity_email_consent,
+        friend_email=registration_data.friend_email,
     )
 
     if not db_event.requires_approval and registration.final_amount_euros and registration.final_amount_euros > 0:
@@ -154,6 +155,13 @@ def register_and_create_account(event_id: int, payload: schemas.RegisterAndCreat
     # Checked here too: failing inside create_registration would leave the new
     # account behind, and the guest's retry would hit "email already registered".
     db_registrations.check_charity_email_consent(db_event, payload.charity_email_consent)
+    chosen_ticket_type = db.query(models.TicketType).filter(
+        models.TicketType.ticket_type_id == payload.ticket_type_id,
+        models.TicketType.event_id == event_id,
+    ).first() if payload.ticket_type_id else None
+    db_friend_tickets.check_bring_a_friend(
+        db, event_id, chosen_ticket_type, payload.email, payload.friend_email, payload.discount_code
+    )
 
     user_data = schemas.UserCreate(
         email=payload.email,
@@ -183,7 +191,8 @@ def register_and_create_account(event_id: int, payload: schemas.RegisterAndCreat
         team_selection=payload.team_selection,
         referral_code=payload.referral_code,
         donation_amount_euros=payload.donation_amount_euros,
-        charity_email_consent=payload.charity_email_consent
+        charity_email_consent=payload.charity_email_consent,
+        friend_email=payload.friend_email,
     )
 
     if not db_event.requires_approval and registration.final_amount_euros and registration.final_amount_euros > 0:
@@ -406,6 +415,14 @@ def claim_team_invite(
     if team.is_full:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This team is already full")
 
+    # The spot is free because the lead paid for it. No payment, no spot.
+    lead_registration = db_registrations.team_lead_registration(team)
+    if lead_registration is None or not lead_registration.has_valid_ticket:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Your team lead hasn't paid for the team yet. This invite will work as soon as they have."
+        )
+
     registration = db_registrations.create_registration(
         db=db,
         event_id=event_id,
@@ -420,6 +437,57 @@ def claim_team_invite(
     db.commit()
 
     return {"registration": registration, "requires_immediate_payment": False}
+
+
+# --- bring a friend ---------------------------------------------------------
+
+@router.get("/{event_id}/friend-ticket", response_model=schemas.FriendTicketPreview)
+def preview_friend_ticket(event_id: int, token: str, db: Session = Depends(deps.get_db)):
+    """Public: what the friend sees on opening their link, before logging in."""
+    return db_friend_tickets.preview(db, event_id, token)
+
+
+@router.post("/{event_id}/friend-ticket/claim", response_model=schemas.FriendTicketClaimResponse, status_code=status.HTTP_201_CREATED)
+def claim_friend_ticket(
+    event_id: int,
+    payload: schemas.FriendTicketClaim,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User = Depends(deps.get_current_user)
+):
+    """The friend, logged in with the email the ticket was sent to, takes it."""
+    registration = db_friend_tickets.claim(db, event_id, payload.token, current_user)
+    return {"registration_id": registration.registration_id}
+
+
+@router.get("/{event_id}/my-friend-ticket", response_model=schemas.MyFriendTicket)
+def read_my_friend_ticket(
+    event_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User = Depends(deps.get_current_user)
+):
+    """The buyer: where the ticket they bought for a friend has got to."""
+    return db_friend_tickets.get_mine(db, event_id, current_user)
+
+
+@router.put("/{event_id}/my-friend-ticket", response_model=schemas.MyFriendTicket)
+def change_my_friend_ticket(
+    event_id: int,
+    payload: schemas.FriendTicketChange,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User = Depends(deps.get_current_user)
+):
+    """The buyer sends the ticket to a different email. The old link stops working."""
+    return db_friend_tickets.change_friend(db, event_id, current_user, payload.friend_email)
+
+
+@router.post("/{event_id}/my-friend-ticket/resend", response_model=schemas.MyFriendTicket)
+def resend_my_friend_ticket(
+    event_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: models.User = Depends(deps.get_current_user)
+):
+    """The buyer emails their friend again."""
+    return db_friend_tickets.resend(db, event_id, current_user)
 
 
 @router.get("/{event_id}/registrations", response_model=list[schemas.RegistrationWithUser], tags=["Admin"])

@@ -185,3 +185,22 @@ def run_gdpr_retention() -> int:
         db.close()
     logger.info(f"GDPR retention purged: {purged}")
     return purged
+
+
+# ── "Bring a friend" reminders ───────────────────────────────────────────────
+def run_friend_ticket_reminders() -> int:
+    """Remind friends who haven't picked up the ticket bought for them."""
+    from db.session import SessionLocal
+    from domain.use_cases import db_friend_tickets
+
+    db = SessionLocal()
+    try:
+        sent = db_friend_tickets.send_reminders(db)
+        if sent:
+            logger.info(f"Sent {sent} friend ticket reminder(s)")
+        return sent
+    except Exception:
+        logger.exception("Friend ticket reminder job failed")
+        return 0
+    finally:
+        db.close()

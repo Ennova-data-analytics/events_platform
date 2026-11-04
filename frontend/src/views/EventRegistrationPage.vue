@@ -138,6 +138,14 @@
               class="mb-6"
             />
 
+            <BringAFriendField
+              v-if="isFriendDeal"
+              v-model="friendEmail"
+              :buyer-email="buyerEmail"
+              :show-errors="triedToSubmit"
+              class="mb-6"
+            />
+
             <v-form ref="customFormRef" v-if="customForm.fields.length > 0">
               <h3 class="text-subtitle-1 font-weight-bold mb-3">Additional Details</h3>
               <div v-for="field in customForm.fields" :key="field.name" class="mb-2">
@@ -224,6 +232,8 @@ import TicketTypeSelector from '@/components/events/TicketTypeSelector.vue';
 import TeamSelector from '@/components/events/TeamSelector.vue';
 import DiscountCodeInput from '@/components/DiscountCodeInput.vue';
 import CharityDonationCard from '@/components/events/CharityDonationCard.vue';
+import BringAFriendField from '@/components/events/BringAFriendField.vue';
+import { apiErrorMessage, friendEmailError, isBringAFriend } from '@/utils/friendTickets.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -258,6 +268,8 @@ const referralCode = ref(null);
 const donationAmount = ref(0);
 const isDonationValid = ref(true);
 const charityEmailConsent = ref(false);
+const friendEmail = ref('');
+const triedToSubmit = ref(false);
 
 // UI state
 const isSubmitting = ref(false);
@@ -265,11 +277,15 @@ const errorMessage = ref('');
 
 // Computed
 const hasTicketTypes = computed(() => event.value?.ticket_types?.length > 0);
+const isFriendDeal = computed(() => isBringAFriend(selectedTicketType.value));
+const buyerEmail = computed(() => (authStore.isAuthenticated ? authStore.user?.email : userForm.value.email) || '');
 
 const shouldShowDiscountInput = computed(() => {
   if (selectedTicketType.value) {
     // Leader-pays group tickets: no individual discount (fixed group price)
     if (selectedTicketType.value.group_payment_mode === 'leader') return false;
+    // Bring a friend: the deal is the discount
+    if (isBringAFriend(selectedTicketType.value)) return false;
     if (parseFloat(selectedTicketType.value.price_euros) > 0) return true;
   }
   if (!hasTicketTypes.value && event.value?.price_euros > 0) return true;
@@ -369,6 +385,8 @@ async function handleTicketTypeSelected(ticketType) {
   selectedTicketType.value = ticketType;
   selectedTicketTypeId.value = ticketType.ticket_type_id;
   teamSelection.value = null;
+  // A code applied to another ticket can't ride along on the deal.
+  if (isBringAFriend(ticketType)) handleDiscountRemoved();
 
   if (ticketType?.form_template_id) {
     try {
@@ -436,6 +454,13 @@ function validate() {
     errorMessage.value = 'Please join or create a team for this ticket type.';
     return false;
   }
+  if (isFriendDeal.value) {
+    const friendError = friendEmailError(friendEmail.value, buyerEmail.value);
+    if (friendError) {
+      errorMessage.value = friendError;
+      return false;
+    }
+  }
   for (const field of customForm.value.fields) {
     if (field.required) {
       const textResponse = formResponses.value[field.name];
@@ -472,6 +497,7 @@ function hasFiles() {
 }
 
 async function submitRegistration() {
+  triedToSubmit.value = true;
   if (!validate()) return;
 
   isSubmitting.value = true;
@@ -495,7 +521,8 @@ async function submitRegistration() {
         ticket_type_id: selectedTicketTypeId.value,
         team_selection: teamSelection.value,
         donation_amount_euros: donation,
-        charity_email_consent: charityEmailConsent.value
+        charity_email_consent: charityEmailConsent.value,
+        friend_email: isFriendDeal.value ? friendEmail.value.trim() : null
       };
 
       result = await eventStore.registerForEvent(event.value.event_id, registrationData);
@@ -513,7 +540,8 @@ async function submitRegistration() {
         referral_code: referralCode.value,
         team_selection: teamSelection.value,
         donation_amount_euros: donation,
-        charity_email_consent: charityEmailConsent.value
+        charity_email_consent: charityEmailConsent.value,
+        friend_email: isFriendDeal.value ? friendEmail.value.trim() : null
       };
 
       const response = await AuthService.registerAndApply(event.value.event_id, payload);
@@ -539,11 +567,7 @@ async function submitRegistration() {
 
   } catch (error) {
     console.error('Registration failed:', error);
-    if (error.response?.data?.detail) {
-      errorMessage.value = error.response.data.detail;
-    } else {
-      errorMessage.value = 'Something went wrong. Please try again.';
-    }
+    errorMessage.value = apiErrorMessage(error, 'Something went wrong. Please try again.');
   } finally {
     isSubmitting.value = false;
   }

@@ -216,6 +216,9 @@ class StripeService:
         except Exception as e:
             logger.error(f"Failed to send payment confirmation notification: {str(e)}")
 
+        from domain.use_cases.db_registrations import on_ticket_valid
+        on_ticket_valid(db, registration)
+
 
     @staticmethod
     def payment_was_collected(payment_intent_id: str) -> bool:

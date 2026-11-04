@@ -30,6 +30,12 @@ const routes = [
     component: () => import('../views/ClaimTeamInvitePage.vue')
   },
   {
+    // The link a "bring a friend" buyer's friend gets by email
+    path: '/event/:id/friend-ticket',
+    name: 'claim-friend-ticket',
+    component: () => import('../views/FriendTicketClaimPage.vue')
+  },
+  {
     path: '/login',
     name: 'login',
     component: () => import('../views/LoginPage.vue')

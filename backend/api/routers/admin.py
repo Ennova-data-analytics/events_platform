@@ -10,7 +10,8 @@ from domain import schemas, models
 from domain.services import notification_service, email_service, email_templates
 from core.config import settings
 from domain.use_cases.db_ticket_types import TicketTypeUseCases
-from domain.use_cases import db_refunds, db_revenue
+from domain.use_cases import db_refunds, db_revenue, db_friend_tickets
+from domain.use_cases.db_registrations import on_ticket_valid
 from api import deps
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,10 @@ def approve_registration(
     except Exception as e:
         logger.error(f"Failed to create notification for registration {registration_id}: {str(e)}")
 
+    # Approved with nothing to pay: the ticket is valid now.
+    on_ticket_valid(db, reg)
+    db.refresh(reg)
+
     return reg 
 
 @router.post("/registrations/{registration_id}/reject", response_model=schemas.Registration)
@@ -127,6 +132,9 @@ def revert_registration_to_pending(registration_id: int, db: Session = Depends(d
     # If reverting from Paid status, decrement tickets_sold counter
     if reg.status == 'Paid' and reg.ticket_type_id:
         TicketTypeUseCases.decrement_tickets_sold(db, reg.ticket_type_id)
+
+    # A friend's ticket that hasn't been claimed waits for the buyer again.
+    db_friend_tickets.unrelease(db, reg)
 
     reg.status = 'Pending Approval'
     db.commit()
@@ -166,6 +174,9 @@ def mark_registration_paid(
 
     logger.info(f"Registration {registration_id} marked as paid by organiser {current_organiser.email}")
 
+    on_ticket_valid(db, reg)
+    db.refresh(reg)
+
     return reg
 
 
@@ -196,6 +207,10 @@ def delete_registration(
     # If deleting a Paid registration, decrement tickets_sold counter
     if reg.status == 'Paid' and reg.ticket_type_id:
         TicketTypeUseCases.decrement_tickets_sold(db, reg.ticket_type_id)
+
+    # The unclaimed friend's seat goes with it. A friend who already has their
+    # ticket keeps it.
+    db_friend_tickets.unrelease(db, reg)
 
     # Delete associated team membership first (NOT NULL FK constraint)
     db.query(models.TeamMember).filter(

@@ -25,6 +25,14 @@
               </v-btn>
             </div>
 
+            <!-- Bring a friend: where the second ticket has got to -->
+            <FriendTicketCard
+              v-if="authStore.isAuthenticated"
+              :event-id="$route.params.id"
+              :buyer-email="authStore.user?.email || ''"
+              class="mt-6 text-left"
+            />
+
             <!-- Team progress (leader-pays group tickets) -->
             <template v-if="myTeam">
               <v-divider class="my-6"></v-divider>
@@ -104,6 +112,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth.store.js';
 import { EventService } from '@/services/EventService.js';
+import FriendTicketCard from '@/components/events/FriendTicketCard.vue';
 
 const route = useRoute();
 const authStore = useAuthStore();

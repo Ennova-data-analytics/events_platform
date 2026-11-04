@@ -177,7 +177,7 @@ Log in and forward events to the local backend:
 
 ```bash
 stripe login
-stripe listen --forward-to http://localhost:8000/webhooks/stripe
+stripe listen --forward-to http://localhost:8000/payments/webhook/stripe
 ```
 
 Copy the webhook signing secret printed by `stripe listen` and update `backend/.env`:

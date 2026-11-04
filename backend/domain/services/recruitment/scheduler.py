@@ -3,7 +3,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from core.config import settings
 from domain.services.recruitment.jobs import (
-    run_interview_reminders, run_booking_nudges, run_gdpr_retention,
+    run_interview_reminders, run_booking_nudges, run_gdpr_retention, run_friend_ticket_reminders,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,8 +28,10 @@ def start_scheduler() -> None:
     _scheduler.add_job(run_interview_reminders, "interval", hours=1, id="interview_reminders", replace_existing=True)
     _scheduler.add_job(run_booking_nudges, "interval", hours=6, id="booking_nudges", replace_existing=True)
     _scheduler.add_job(run_gdpr_retention, "cron", hour=3, minute=0, id="gdpr_retention", replace_existing=True)
+    # Not recruitment, but this is the app's only scheduler.
+    _scheduler.add_job(run_friend_ticket_reminders, "interval", hours=1, id="friend_ticket_reminders", replace_existing=True)
     _scheduler.start()
-    logger.info("Recruitment scheduler started (reminders hourly, nudges 6h, retention daily)")
+    logger.info("Background scheduler started (reminders hourly, nudges 6h, retention daily, friend ticket reminders hourly)")
 
 
 def shutdown_scheduler() -> None:

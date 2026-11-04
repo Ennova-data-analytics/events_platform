@@ -102,4 +102,45 @@ describe('TicketTypeManagement', () => {
 
     expect(document.body.textContent).toContain('Ticket type not found');
   });
+
+  describe('bring a friend', () => {
+    it('labels the deal with its price for two', async () => {
+      TicketTypeService.getTicketTypes.mockResolvedValue({
+        ticket_types: [ticketType({ name: 'Duo', price_euros: '20.00', bring_a_friend: true })],
+        deleted_ticket_types: [], total_count: 1,
+      });
+      await mountIt();
+
+      expect(byTest('bring-a-friend-chip').textContent).toContain('2 tickets for €20.00 (€10.00 each)');
+    });
+
+    it('turning it on clears team and member pricing', async () => {
+      TicketTypeService.getTicketTypes.mockResolvedValue({
+        ticket_types: [ticketType({
+          is_free_for_members: true, requires_team: true, group_payment_mode: 'leader', group_size: 2, group_price_euros: '30',
+        })],
+        deleted_ticket_types: [], total_count: 1,
+      });
+      await mountIt();
+      byTest('edit-ticket-type').click();
+      await flushPromises();
+      expect(document.body.textContent).toContain('Team Settings');
+
+      byTest('bring-a-friend-toggle').querySelector('input').click();
+      await flushPromises();
+
+      expect(document.body.textContent).not.toContain('Team Settings');
+      expect(document.body.textContent).not.toContain('Free for Ennova Members');
+      expect(document.body.textContent).toContain('Price for both tickets');
+    });
+
+    it("can't be switched once people have the ticket", async () => {
+      await mountIt();
+      byTest('edit-ticket-type').click();
+      await flushPromises();
+
+      expect(byTest('bring-a-friend-toggle').querySelector('input').disabled).toBe(true);
+      expect(byTest('bring-a-friend-toggle').textContent).toContain('Create a new ticket type instead');
+    });
+  });
 });

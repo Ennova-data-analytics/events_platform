@@ -21,7 +21,7 @@
           <template v-slot:item="{ props, item }">
             <v-list-item
               v-bind="props"
-              :disabled="!item.raw.is_active || (item.raw.capacity && item.raw.tickets_available <= 0)"
+              :disabled="!item.raw.is_active || (item.raw.capacity && item.raw.tickets_available < seatsNeeded(item.raw))"
             >
               <template v-slot:prepend>
                 <v-icon :color="getTicketTypeColor(item.raw)">
@@ -31,7 +31,10 @@
 
               <v-list-item-title>
                 {{ item.raw.name }} —
-                <template v-if="item.raw.group_payment_mode === 'leader' && item.raw.group_size && item.raw.group_price_euros != null">
+                <template v-if="isBringAFriend(item.raw)">
+                  {{ dealLabel(item.raw) }}
+                </template>
+                <template v-else-if="item.raw.group_payment_mode === 'leader' && item.raw.group_size && item.raw.group_price_euros != null">
                   €{{ item.raw.group_price_euros }} for {{ item.raw.group_size }} (team lead pays)
                 </template>
                 <template v-else>
@@ -84,8 +87,18 @@
               <div class="d-flex justify-space-between align-center">
                 <div>
                   <div class="text-caption text-grey-darken-1">Price</div>
+                  <!-- Bring a friend: one price for two -->
+                  <div v-if="isBringAFriend(selectedTicketType)" data-test="deal-price">
+                    <div class="text-h5 text-primary font-weight-bold">
+                      €{{ dealPrices(selectedTicketType).total }}
+                      <span class="text-body-2 font-weight-regular text-grey-darken-1">for 2</span>
+                    </div>
+                    <div class="text-caption text-grey-darken-1">
+                      (€{{ dealPrices(selectedTicketType).each }} each)
+                    </div>
+                  </div>
                   <!-- Group pricing: leader mode -->
-                  <div v-if="selectedTicketType.group_payment_mode === 'leader' && selectedTicketType.group_size && selectedTicketType.group_price_euros != null">
+                  <div v-else-if="selectedTicketType.group_payment_mode === 'leader' && selectedTicketType.group_size && selectedTicketType.group_price_euros != null">
                     <div class="text-h5 text-primary font-weight-bold">
                       €{{ selectedTicketType.group_price_euros }}
                       <span class="text-body-2 font-weight-regular text-grey-darken-1">for {{ selectedTicketType.group_size }}</span>
@@ -113,9 +126,21 @@
                 </div>
               </div>
 
+              <v-alert
+                v-if="isBringAFriend(selectedTicketType)"
+                type="info"
+                variant="tonal"
+                class="mt-3"
+                density="compact"
+                data-test="deal-banner"
+              >
+                <v-icon start>mdi-account-heart</v-icon>
+                {{ COPY.dealBanner }}
+              </v-alert>
+
               <!-- Group pricing info banners -->
               <v-alert
-                v-if="selectedTicketType.group_payment_mode === 'leader' && selectedTicketType.group_size"
+                v-else-if="selectedTicketType.group_payment_mode === 'leader' && selectedTicketType.group_size"
                 type="info"
                 variant="tonal"
                 class="mt-3"
@@ -169,6 +194,8 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { useAuthStore } from '@/stores/auth.store';
+import { BRING_A_FRIEND as COPY } from '@/content/bringAFriend.js';
+import { dealLabel, dealPrices, isBringAFriend } from '@/utils/friendTickets.js';
 
 const props = defineProps({
   ticketTypes: {
@@ -194,7 +221,7 @@ const availableTicketTypes = computed(() => {
     .filter(tt => tt.is_active)
     .map(tt => ({
       ...tt,
-      displayText: `${tt.name} - €${tt.price_euros}${tt.show_availability && tt.capacity ? ` (${tt.tickets_available} available)` : ''}`
+      displayText: `${tt.name} - ${isBringAFriend(tt) ? dealLabel(tt) : `€${tt.price_euros}`}${tt.show_availability && tt.capacity ? ` (${tt.tickets_available} available)` : ''}`
     }));
 });
 
@@ -212,16 +239,21 @@ function onTicketTypeChange(ticketTypeId) {
   emit('ticket-type-selected', selectedTicketType.value);
 }
 
+// A bring-a-friend purchase takes two seats.
+function seatsNeeded(ticketType) {
+  return isBringAFriend(ticketType) ? 2 : 1;
+}
+
 function getTicketTypeColor(ticketType) {
   if (!ticketType.is_active) return 'grey';
-  if (ticketType.capacity && ticketType.tickets_available <= 0) return 'error';
+  if (ticketType.capacity && ticketType.tickets_available < seatsNeeded(ticketType)) return 'error';
   if (ticketType.capacity && ticketType.tickets_available < 10) return 'warning';
   return 'success';
 }
 
 function getTicketTypeIcon(ticketType) {
   if (!ticketType.is_active) return 'mdi-ticket-outline';
-  if (ticketType.capacity && ticketType.tickets_available <= 0) return 'mdi-close-circle';
+  if (ticketType.capacity && ticketType.tickets_available < seatsNeeded(ticketType)) return 'mdi-close-circle';
   return 'mdi-ticket-confirmation';
 }
 

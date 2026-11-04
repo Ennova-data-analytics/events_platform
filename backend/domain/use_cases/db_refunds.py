@@ -124,7 +124,10 @@ def plan_refund(
     if registration.status != 'Paid':
         plan.skip_reason = f"Not paid (status: {registration.status})"
     elif registration.paid_by_team_leader:
-        plan.skip_reason = "Their team leader paid for this ticket. Refund the leader instead."
+        if registration.received_friend_ticket is not None:
+            plan.skip_reason = "A friend bought this ticket for them. Refund the buyer instead."
+        else:
+            plan.skip_reason = "Their team leader paid for this ticket. Refund the leader instead."
     elif paid <= ZERO:
         plan.skip_reason = "Paid nothing for the ticket"
     elif remaining <= ZERO:

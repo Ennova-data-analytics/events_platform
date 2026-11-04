@@ -64,6 +64,16 @@
                   Unlimited capacity
                 </v-chip>
                 <v-chip
+                  v-if="ticketType.bring_a_friend"
+                  size="small"
+                  color="pink"
+                  class="ml-2"
+                  data-test="bring-a-friend-chip"
+                >
+                  <v-icon start size="x-small">mdi-account-heart</v-icon>
+                  Bring a friend: {{ dealLabel(ticketType) }}
+                </v-chip>
+                <v-chip
                   v-if="ticketType.is_free_for_members"
                   size="small"
                   color="info"
@@ -118,6 +128,7 @@
                 <v-btn
                   color="primary"
                   variant="text"
+                  data-test="edit-ticket-type"
                   @click="openEditDialog(ticketType)"
                   size="small"
                   icon
@@ -193,9 +204,21 @@
               class="mb-2"
             ></v-textarea>
 
+            <v-checkbox
+              v-model="editedTicketType.bring_a_friend"
+              label="Bring a friend: this price buys 2 tickets"
+              :hint="bringAFriendHint"
+              persistent-hint
+              color="pink"
+              :disabled="bringAFriendLocked"
+              data-test="bring-a-friend-toggle"
+              class="mb-2"
+              @update:model-value="onBringAFriendChange"
+            ></v-checkbox>
+
             <v-text-field
               v-model.number="editedTicketType.price_euros"
-              label="Price (€) *"
+              :label="editedTicketType.bring_a_friend ? 'Price for both tickets (€) *' : 'Price (€) *'"
               type="number"
               min="0"
               step="0.01"
@@ -229,6 +252,7 @@
             ></v-select>
 
             <v-checkbox
+              v-if="!editedTicketType.bring_a_friend"
               v-model="editedTicketType.is_free_for_members"
               label="Free for Ennova Members"
               hint="Ennova members can register for free with this ticket type"
@@ -246,6 +270,7 @@
 
             <v-divider class="my-4"></v-divider>
 
+            <template v-if="!editedTicketType.bring_a_friend">
             <h3 class="text-subtitle-1 font-weight-bold mb-3">
               <v-icon left color="purple">mdi-account-group</v-icon>
               Team Settings
@@ -346,6 +371,7 @@
                 <strong>€{{ editedTicketType.price_euros }}</strong> individually (€{{ (editedTicketType.price_euros * editedTicketType.group_size).toFixed(2) }} total).
               </v-alert>
             </div>
+            </template>
 
             <v-divider class="my-4"></v-divider>
 
@@ -406,8 +432,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import TicketTypeService from '@/services/TicketTypeService.js';
+import { dealLabel } from '@/utils/friendTickets.js';
 import { FormTemplateService } from '@/services/FormTemplateService.js';
 
 const props = defineProps({
@@ -450,10 +477,34 @@ const defaultTicketType = {
   group_payment_mode: null,
   group_size: null,
   group_price_euros: null,
+  bring_a_friend: false,
   display_order: 0
 };
 
 const editedTicketType = ref({ ...defaultTicketType });
+
+// Switching a type to or from the deal after people bought it would change
+// what they paid for, so the backend refuses it; say so up front.
+const bringAFriendLocked = computed(() => isEditing.value && (editedTicketType.value.tickets_sold || 0) > 0);
+const bringAFriendHint = computed(() => {
+  if (bringAFriendLocked.value) return "People already have this ticket, so this can't be changed. Create a new ticket type instead.";
+  if (!editedTicketType.value.bring_a_friend) return 'The buyer pays once and names a friend, who gets their own ticket. Uses 2 seats.';
+  const price = Number(editedTicketType.value.price_euros) || 0;
+  return `Buyers pay €${price.toFixed(2)} for two (€${(price / 2).toFixed(2)} each). Discount codes and member pricing don't apply.`;
+});
+
+function onBringAFriendChange(on) {
+  if (!on) return;
+  // The deal doesn't mix with team or member pricing.
+  Object.assign(editedTicketType.value, {
+    is_free_for_members: false,
+    requires_team: false,
+    team_max_members: null,
+    group_payment_mode: null,
+    group_size: null,
+    group_price_euros: null,
+  });
+}
 const ticketTypeToDelete = ref(null);
 const form = ref(null);
 

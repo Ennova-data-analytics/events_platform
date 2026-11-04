@@ -241,8 +241,8 @@ def send_donation_thank_you_email(donation: models.Donation):
     )
 
 
-def send_team_invite_email(to_email: str, team_name: str, event: models.Event, invite_token: str):
-    """Send a team invitation email to a prospective teammate."""
+def send_team_invite_email(to_email: str, team_name: str, event: models.Event, invite_token: str) -> bool:
+    """Send a team invitation email to a prospective teammate. Returns whether it went out."""
     try:
         tz = ZoneInfo(settings.APP_TIMEZONE)
         event_date = event.event_date_start.astimezone(tz).strftime("%B %d, %Y at %I:%M %p") if event.event_date_start else "TBD"
@@ -255,15 +255,19 @@ def send_team_invite_email(to_email: str, team_name: str, event: models.Event, i
             invite_url=invite_url,
         )
 
-        email_service.send_email(
+        sent = email_service.send_email(
             to_email=to_email,
             to_name=to_email.split("@")[0],
             subject=f"You're invited to join team '{team_name}' — {event.event_name}",
             html_content=html_content,
             text_content=text_content,
         )
-    except Exception as e:
-        logger.error(f"Failed to send team invite email to {to_email}: {str(e)}")
+    except Exception:
+        logger.exception(f"Failed to send team invite email to {to_email}")
+        return False
+    if not sent:
+        logger.error(f"Team invite email to {to_email} was not sent")
+    return bool(sent)
 
 
 
