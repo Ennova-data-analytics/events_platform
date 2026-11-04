@@ -253,7 +253,16 @@
 
                 <template v-slot:item.paid_by_team_leader="{ item }">
                   <v-chip
-                    v-if="item.paid_by_team_leader"
+                    v-if="item.bought_by_name"
+                    color="pink"
+                    size="small"
+                    variant="tonal"
+                  >
+                    <v-icon start size="13">mdi-account-heart</v-icon>
+                    Bought by {{ item.bought_by_name }}
+                  </v-chip>
+                  <v-chip
+                    v-else-if="item.paid_by_team_leader"
                     color="deep-orange"
                     size="small"
                     variant="tonal"
@@ -270,6 +279,16 @@
                     <v-icon start size="13">mdi-star</v-icon>
                     Member
                   </v-chip>
+                  <span v-else class="text-caption text-grey">—</span>
+                </template>
+
+                <template v-slot:item.friend_ticket="{ item }">
+                  <div v-if="item.friend_ticket" class="text-no-wrap">
+                    <div class="text-body-2">{{ item.friend_ticket.friend_email }}</div>
+                    <v-chip :color="FRIEND_STATUS[item.friend_ticket.status].color" size="x-small" variant="tonal">
+                      {{ FRIEND_STATUS[item.friend_ticket.status].label }}
+                    </v-chip>
+                  </div>
                   <span v-else class="text-caption text-grey">—</span>
                 </template>
 
@@ -1273,12 +1292,29 @@ async function fetchEventDetails() {
   }
 }
 
+// "Bring a friend" events get a Friend column: who each buyer's second
+// ticket went to, and whether the friend has it yet.
+const friendHeader = { title: 'Friend', key: 'friend_ticket', sortable: false };
+const FRIEND_STATUS = {
+  awaiting_payment: { label: 'Not paid yet', color: 'grey' },
+  sent: { label: 'Link sent, not claimed', color: 'warning' },
+  claimed: { label: 'Has their ticket', color: 'success' },
+};
+function showFriendColumn() {
+  for (const headers of [attendeeHeaders, pendingHeaders, attendeeHeadersWithRevert]) {
+    if (headers.value.some(h => h.key === friendHeader.key)) continue;
+    const paymentIndex = headers.value.findIndex(h => h.key === 'paid_by_team_leader');
+    headers.value.splice(paymentIndex + 1, 0, friendHeader);
+  }
+}
+
 async function fetchAttendees() {
   isLoading.value = true;
   const eventId = route.params.id;
   try {
     const response = await EventService.getEventRegistrations(eventId);
     allAttendees.value = response.data;
+    if (response.data.some(a => a.friend_ticket)) showFriendColumn();
     expanded.value = [];
   } catch (error) {
     console.error("Failed to fetch attendees:", error);

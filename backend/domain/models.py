@@ -287,6 +287,11 @@ class TicketType(Base):
     group_size = Column(Integer, nullable=True)          # required group size for group pricing
     group_price_euros = Column(DECIMAL(10, 2), nullable=True)  # total price charged to leader
 
+    # "Bring a friend": price_euros buys two tickets. The buyer names a friend
+    # by email at checkout and the friend's ticket is created once the buyer
+    # has paid (see FriendTicket). Each purchase uses two seats of capacity.
+    bring_a_friend = Column(Boolean, default=False, nullable=False, server_default='false')
+
     # Set when an organiser deletes a ticket type that people already hold. It
     # is then off sale and hidden from listings, but the row stays so those
     # tickets keep their type. A type nobody registered for is deleted outright.
@@ -315,6 +320,10 @@ class TicketType(Base):
         CheckConstraint("group_size IS NULL OR group_size > 1", name='check_group_size_gt_one'),
         CheckConstraint("group_price_euros IS NULL OR group_price_euros >= 0", name='check_group_price_non_negative'),
         CheckConstraint("group_payment_mode IS NULL OR group_payment_mode IN ('leader', 'individual')", name='check_group_payment_mode_valid'),
+        CheckConstraint(
+            "NOT bring_a_friend OR (group_payment_mode IS NULL AND NOT requires_team AND NOT is_free_for_members)",
+            name='check_bring_a_friend_standalone'
+        ),
     )
 
 
@@ -385,6 +394,15 @@ class Registration(Base):
         if self.status == 'Paid':
             return True
         return self.status == 'Approved' and not self.ticket_amount_euros > 0
+
+    @property
+    def bought_by_name(self) -> str | None:
+        """Who paid for this ticket, when it came from a "bring a friend" purchase."""
+        gift = self.received_friend_ticket
+        if gift is None:
+            return None
+        buyer = gift.buyer_registration.user
+        return buyer.full_name or buyer.email
 
 
 class Donation(Base):
@@ -739,6 +757,9 @@ class TeamInvite(Base):
     token = Column(String(128), unique=True, nullable=False, index=True)
     claimed = Column(Boolean, default=False, nullable=False)
     claimed_by_user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="SET NULL"), nullable=True)
+    # When the invite email went out. Invites are created at checkout but only
+    # sent once the team lead has paid, so an abandoned checkout sends nothing.
+    sent_at = Column(TIMESTAMP(timezone=True), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
 
     team = relationship("EventTeam", back_populates="invites")
@@ -748,6 +769,74 @@ class TeamInvite(Base):
 
     def __repr__(self):
         return f"<TeamInvite(invite_id={self.invite_id}, team_id={self.team_id}, email='{self.invited_email}', claimed={self.claimed})>"
+
+
+class FriendTicket(Base):
+    """
+    The second ticket of a "bring a friend" purchase. The buyer pays for two
+    and names a friend by email. Nothing happens for the friend until the
+    buyer's own ticket is valid (paid, or approved with nothing to pay). Then
+    the friend's ticket goes straight into their account if the email has one,
+    or they get a link to sign up with that email and claim it.
+
+    status:
+      'awaiting_payment' - the buyer hasn't paid yet
+      'sent'             - released, waiting for the friend to sign up and claim
+      'claimed'          - the friend has their own registration
+
+    The friend's seat is held from checkout: it counts against the ticket
+    type's capacity while the buyer's registration isn't cancelled.
+    """
+    __tablename__ = "friend_tickets"
+
+    STATUSES = ('awaiting_payment', 'sent', 'claimed')
+
+    friend_ticket_id = Column(Integer, primary_key=True)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
+    buyer_registration_id = Column(
+        Integer, ForeignKey('registrations.registration_id', ondelete="CASCADE"),
+        nullable=False, unique=True
+    )
+    friend_email = Column(String(255), nullable=False)
+    # Changes whenever the buyer changes the email, so an old link stops working.
+    token = Column(String(128), unique=True, nullable=False, index=True)
+    status = Column(String(20), nullable=False, default='awaiting_payment')
+    friend_registration_id = Column(
+        Integer, ForeignKey('registrations.registration_id', ondelete="SET NULL"),
+        nullable=True, unique=True
+    )
+    released_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    # Last time an email reached the friend. Empty after a failed send, so the
+    # buyer is told and can resend.
+    last_emailed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    reminder_sent_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    claimed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    event = relationship("Event")
+    buyer_registration = relationship(
+        "Registration", foreign_keys=[buyer_registration_id],
+        backref=orm_backref("friend_ticket", uselist=False, cascade="all, delete-orphan", passive_deletes=True),
+    )
+    friend_registration = relationship(
+        "Registration", foreign_keys=[friend_registration_id],
+        backref=orm_backref("received_friend_ticket", uselist=False, passive_deletes=True),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('awaiting_payment', 'sent', 'claimed')",
+            name='check_friend_ticket_status_valid'
+        ),
+        CheckConstraint(
+            "(status = 'claimed') = (claimed_at IS NOT NULL)",
+            name='check_friend_ticket_claimed_at'
+        ),
+    )
+
+    def __repr__(self):
+        return f"<FriendTicket(id={self.friend_ticket_id}, buyer={self.buyer_registration_id}, status='{self.status}')>"
 
 
 class GuestTicket(Base):

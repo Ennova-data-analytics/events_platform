@@ -60,6 +60,8 @@ class Registration(BaseModel):
     checked_in_at: datetime | None = None
     refunded_amount_euros: Decimal = Decimal('0.00')
     refunds: list["RefundSummary"] = []
+    friend_ticket: Optional["FriendTicketSummary"] = None
+    bought_by_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -275,6 +277,7 @@ class RegistrationCreate(BaseModel):
     discount_code: str | None = Field(None, description="Optional discount code")
     referral_code: str | None = Field(None, description="Optional referral link code")
     team_selection: Optional["TeamSelectionRequest"] = Field(None, description="Required if ticket type requires teams")
+    friend_email: EmailStr | None = Field(None, description="Required for a 'bring a friend' ticket: who gets the second ticket")
 
 class RegistrationResponse(BaseModel):
     registration: Registration
@@ -301,6 +304,7 @@ class RegisterAndCreateAccountRequest(BaseModel):
     discount_code: str | None = Field(None, description="Optional discount code")
     referral_code: str | None = Field(None, description="Optional referral link code")
     team_selection: Optional["TeamSelectionRequest"] = Field(None, description="Required if ticket type requires teams")
+    friend_email: EmailStr | None = Field(None, description="Required for a 'bring a friend' ticket: who gets the second ticket")
 
 class RegisterAndCreateAccountResponse(BaseModel):
     access_token: str
@@ -438,11 +442,29 @@ class TicketTypeBase(BaseModel):
     group_payment_mode: str | None = Field(None, description="'leader' = team lead pays group_price_euros for all; 'individual' = each member pays price_euros")
     group_size: int | None = Field(None, gt=1, description="Number of people in the group for group pricing")
     group_price_euros: Decimal | None = Field(None, ge=0, description="Total price charged to team lead (only when group_payment_mode='leader')")
+    bring_a_friend: bool = Field(default=False, description="price_euros buys two tickets: one for the buyer, one for a friend they name at checkout")
+
+
+BRING_A_FRIEND_CONFLICT = (
+    "A 'bring a friend' ticket can't also be a team ticket, use group pricing, "
+    "or be free for members"
+)
+
+
+def bring_a_friend_conflicts(bring_a_friend, requires_team, group_payment_mode, is_free_for_members) -> bool:
+    """The deal is already the discount, and the friend's ticket is handled
+    on its own, so it doesn't mix with team or member pricing."""
+    return bool(bring_a_friend) and bool(requires_team or group_payment_mode or is_free_for_members)
 
 
 class TicketTypeCreate(TicketTypeBase):
     """Schema for creating a new ticket type"""
-    pass
+
+    @model_validator(mode='after')
+    def check_bring_a_friend(self):
+        if bring_a_friend_conflicts(self.bring_a_friend, self.requires_team, self.group_payment_mode, self.is_free_for_members):
+            raise ValueError(BRING_A_FRIEND_CONFLICT)
+        return self
 
 
 class TicketTypeUpdate(BaseModel):
@@ -461,6 +483,7 @@ class TicketTypeUpdate(BaseModel):
     group_payment_mode: str | None = None
     group_size: int | None = Field(None, gt=1)
     group_price_euros: Decimal | None = Field(None, ge=0)
+    bring_a_friend: bool | None = None
 
 
 class TicketTypeResponse(TicketTypeBase):
@@ -491,11 +514,13 @@ class TicketTypeResponse(TicketTypeBase):
             "display_order": ticket_type.display_order,
             "is_active": ticket_type.is_active,
             "is_free_for_members": ticket_type.is_free_for_members,
+            "show_availability": ticket_type.show_availability,
             "requires_team": ticket_type.requires_team,
             "team_max_members": ticket_type.team_max_members,
             "group_payment_mode": ticket_type.group_payment_mode,
             "group_size": ticket_type.group_size,
             "group_price_euros": ticket_type.group_price_euros,
+            "bring_a_friend": ticket_type.bring_a_friend,
             "created_at": ticket_type.created_at,
             "updated_at": ticket_type.updated_at,
             "deleted_at": ticket_type.deleted_at,
@@ -627,6 +652,57 @@ class RefundBatchResponse(BaseModel):
     total_refunded_euros: Decimal
     emails_failed: int
     ticket_type_price_updated: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Bring a friend
+# ---------------------------------------------------------------------------
+
+FriendTicketStatus = Literal['awaiting_payment', 'sent', 'claimed']
+
+
+class FriendTicketSummary(BaseModel):
+    """The friend's ticket on the buyer's registration, for the attendee list."""
+    friend_email: str
+    status: FriendTicketStatus
+    claimed_at: datetime | None = None
+    last_emailed_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MyFriendTicket(BaseModel):
+    """What the buyer sees about the ticket they bought for their friend."""
+    event_id: int
+    friend_email: str
+    status: FriendTicketStatus
+    friend_name: str | None = Field(None, description="Set once the friend has the ticket")
+    emailed: bool = Field(description="An email has reached the friend since the ticket was released")
+    needs_new_friend: bool = Field(description="The friend already has their own ticket, so this one needs someone else")
+    can_change: bool
+    can_resend: bool
+
+
+class FriendTicketChange(BaseModel):
+    friend_email: EmailStr
+
+
+class FriendTicketPreview(BaseModel):
+    """Public: what the friend sees when they open their link."""
+    event_id: int
+    event_name: str
+    event_date_start: datetime
+    buyer_name: str
+    friend_email: str
+    status: Literal['awaiting_payment', 'sent', 'claimed', 'unavailable']
+
+
+class FriendTicketClaim(BaseModel):
+    token: str = Field(..., min_length=1, max_length=128)
+
+
+class FriendTicketClaimResponse(BaseModel):
+    registration_id: int
 
 
 TicketTypeResponse.model_rebuild()

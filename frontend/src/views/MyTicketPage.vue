@@ -98,6 +98,13 @@
           </v-btn>
         </v-card-actions>
       </v-card>
+
+      <FriendTicketCard
+        :event-id="route.params.id"
+        :buyer-email="authStore.user?.email || ''"
+        class="mx-auto mt-6"
+        style="max-width: 520px"
+      />
     </div>
   </div>
 </template>
@@ -107,6 +114,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { TicketService } from '@/services/TicketService';
 import { useAuthStore } from '@/stores/auth.store';
+import FriendTicketCard from '@/components/events/FriendTicketCard.vue';
 
 const route = useRoute();
 const authStore = useAuthStore();

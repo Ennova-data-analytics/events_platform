@@ -128,6 +128,30 @@ class TicketTypeUseCases:
                 )
 
         update_data = ticket_type_data.model_dump(exclude_unset=True)
+        if update_data.get('bring_a_friend') is None:
+            update_data.pop('bring_a_friend', None)
+
+        merged = {
+            field: update_data.get(field, getattr(db_ticket_type, field))
+            for field in ('bring_a_friend', 'requires_team', 'group_payment_mode', 'is_free_for_members')
+        }
+        if schemas.bring_a_friend_conflicts(**merged):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=schemas.BRING_A_FRIEND_CONFLICT
+            )
+
+        if 'bring_a_friend' in update_data and update_data['bring_a_friend'] != db_ticket_type.bring_a_friend:
+            sold = db.query(models.Registration).filter(
+                models.Registration.ticket_type_id == ticket_type_id
+            ).count()
+            if sold:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="People have already registered with this ticket type, so it can't be switched "
+                           "to or from 'bring a friend'. Create a new ticket type instead."
+                )
+
         for field, value in update_data.items():
             setattr(db_ticket_type, field, value)
 

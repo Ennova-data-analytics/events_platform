@@ -5,7 +5,7 @@ from domain.services import notification_service
 from domain.use_cases.db_discount_codes import DiscountCodeUseCases
 from domain.use_cases.db_ticket_types import TicketTypeUseCases
 from domain.use_cases.db_referral_links import ReferralLinkUseCases
-from domain.use_cases import db_teams
+from domain.use_cases import db_teams, db_friend_tickets
 from domain.schemas import DiscountCodeValidation, TeamSelectionRequest
 from datetime import datetime
 from decimal import Decimal
@@ -66,11 +66,13 @@ def create_registration(
     donation_amount_euros: Decimal | None = None,
     charity_email_consent: bool = False,
     claiming_team_invite: bool = False,
+    friend_email: str | None = None,
 ):
     """Handles db operations for creating a new registration with ticket type support.
 
     claiming_team_invite: the seat was already paid for by a team leader, so the
     invite can still be claimed after its ticket type was deleted.
+    friend_email: who gets the second ticket of a 'bring a friend' ticket type.
     """
     existing_registration = db.query(models.Registration).filter(
         models.Registration.event_id == event_id,
@@ -143,16 +145,27 @@ def create_registration(
                 detail="This ticket type is no longer available"
             )
 
+        db_friend_tickets.check_bring_a_friend(
+            db, event_id, ticket_type, user.email, friend_email, discount_code
+        )
+
         if ticket_type.capacity is not None:
-            current_ticket_sales = db.query(models.Registration).filter(
+            # Friends' seats count from checkout, before they have a registration.
+            seats_taken = db.query(models.Registration).filter(
                 models.Registration.ticket_type_id == ticket_type_id,
                 models.Registration.status != 'Cancelled'
-            ).count()
+            ).count() + db_friend_tickets.held_friend_seats(db, ticket_type_id)
+            seats_needed = 2 if ticket_type.bring_a_friend else 1
 
-            if current_ticket_sales >= ticket_type.capacity:
+            if seats_taken >= ticket_type.capacity:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"The '{ticket_type.name}' ticket type is sold out"
+                )
+            if seats_taken + seats_needed > ticket_type.capacity:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Only one '{ticket_type.name}' seat is left, and this deal needs two"
                 )
 
         price_euros = ticket_type.price_euros
@@ -193,6 +206,7 @@ def create_registration(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="This event does not use ticket types"
             )
+        db_friend_tickets.check_bring_a_friend(db, event_id, None, user.email, friend_email, discount_code)
 
         is_member_free = event.is_free_for_members and user.is_ennova_member
 
@@ -297,6 +311,9 @@ def create_registration(
     db.add(db_registration)
     db.flush() 
 
+    if db_friend_tickets.is_bring_a_friend(ticket_type):
+        db_friend_tickets.attach_friend_ticket(db, db_registration, friend_email)
+
     created_team = None
     if team_selection and team_selection.action != "skip":
         team_id = None
@@ -321,7 +338,8 @@ def create_registration(
     db.commit()
     db.refresh(db_registration)
 
-    # Send team invites if team lead is creating a group-priced team (leader pays mode)
+    # Team lead creating a group-priced team (leader pays mode): the invites
+    # are stored now and emailed once the lead's ticket is valid.
     if (
         created_team is not None
         and ticket_type is not None
@@ -330,7 +348,7 @@ def create_registration(
         and team_selection
         and team_selection.teammate_emails
     ):
-        _create_and_send_team_invites(
+        _create_team_invites(
             db=db,
             team=created_team,
             event=event,
@@ -341,6 +359,10 @@ def create_registration(
     # Increment tickets_sold counter if registration is immediately marked as Paid
     if initial_status == 'Paid' and ticket_type_id:
         TicketTypeUseCases.increment_tickets_sold(db, ticket_type_id)
+
+    # Nothing to pay (free, or free for members): the friend's ticket and the
+    # team invites go out now. Otherwise they wait for the payment.
+    on_ticket_valid(db, db_registration)
 
     try:
         if is_member_free or is_completely_free_event:
@@ -379,37 +401,73 @@ def set_charity_email_consent(db: Session, event_id: int, user_id: uuid.UUID, co
     return registration
 
 
-def _create_and_send_team_invites(db: Session, team, event, ticket_type, teammate_emails: list):
-    """Create invite tokens for each teammate and send email invitations."""
-    from domain.services import notification_service
-
+def _create_team_invites(db: Session, team, event, ticket_type, teammate_emails: list):
+    """Store an invite token for each teammate. They are emailed by
+    send_pending_team_invites once the lead's ticket is valid."""
     # Cap invites so total team size does not exceed group_size (leader already occupies 1 slot)
     max_invites = (ticket_type.group_size or 0) - 1
-    emails_to_invite = list(teammate_emails)[:max_invites]
-
-    for email in emails_to_invite:
-        token = secrets.token_urlsafe(32)
-        invite = models.TeamInvite(
+    for email in list(teammate_emails)[:max_invites]:
+        db.add(models.TeamInvite(
             team_id=team.team_id,
             event_id=event.event_id,
             ticket_type_id=ticket_type.ticket_type_id,
             invited_email=email.lower(),
-            token=token,
-        )
-        db.add(invite)
-        db.flush()
-
-        try:
-            notification_service.send_team_invite_email(
-                to_email=email,
-                team_name=team.team_name,
-                event=event,
-                invite_token=token,
-            )
-        except Exception as e:
-            logger.error(f"Failed to send team invite email to {email}: {str(e)}")
-
+            token=secrets.token_urlsafe(32),
+        ))
     db.commit()
+
+
+def team_lead_registration(team: models.EventTeam) -> models.Registration | None:
+    """The registration of the person who created (and pays for) the team."""
+    for member in team.members:
+        if member.registration.user_id == team.created_by_user_id:
+            return member.registration
+    return None
+
+
+def send_pending_team_invites(db: Session, registration: models.Registration) -> None:
+    """
+    Email the invites of a leader-pays team whose lead now has a valid ticket.
+    Before, they went out at checkout, so an abandoned checkout still handed
+    out free spots. An invite that fails to send is logged and stays unsent,
+    so the next call tries it again.
+    """
+    if not registration.has_valid_ticket or registration.paid_by_team_leader:
+        return
+    membership = registration.team_membership
+    if membership is None:
+        return
+    team = membership.team
+    if team.created_by_user_id != registration.user_id:
+        return
+
+    for invite in team.invites:
+        if invite.claimed or invite.sent_at is not None:
+            continue
+        if notification_service.send_team_invite_email(
+            to_email=invite.invited_email,
+            team_name=team.team_name,
+            event=registration.event,
+            invite_token=invite.token,
+        ):
+            invite.sent_at = datetime.utcnow()
+    db.commit()
+
+
+def on_ticket_valid(db: Session, registration: models.Registration) -> None:
+    """
+    Things that wait for a registration's ticket to become valid: the friend's
+    ticket of a 'bring a friend' purchase, and a team lead's invites. Called
+    after a payment, an organiser marking it paid or approving it, and at
+    checkout for tickets with nothing to pay. Never raises, since the
+    registration change itself has already been saved; failures are logged.
+    """
+    db_friend_tickets.release_if_ready(db, registration)
+    try:
+        send_pending_team_invites(db, registration)
+    except Exception:
+        db.rollback()
+        logger.exception(f"Failed to send team invites for registration {registration.registration_id}")
 
 
 def get_registrations_for_event(db: Session, event_id: int):
@@ -417,6 +475,10 @@ def get_registrations_for_event(db: Session, event_id: int):
     return db.query(models.Registration).options(
         joinedload(models.Registration.ticket_type),
         selectinload(models.Registration.refunds),
+        selectinload(models.Registration.friend_ticket),
+        selectinload(models.Registration.received_friend_ticket)
+        .joinedload(models.FriendTicket.buyer_registration)
+        .joinedload(models.Registration.user),
     ).filter(models.Registration.event_id == event_id).all()
 
 

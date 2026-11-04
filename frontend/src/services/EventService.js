@@ -66,6 +66,28 @@ export const EventService = {
     return ApiClient.post(`/events/${eventId}/claim-invite`, null, { params: { token } });
   },
 
+  // "Bring a friend": the friend's side
+  getFriendTicketPreview(eventId, token) {
+    return ApiClient.get(`/events/${eventId}/friend-ticket`, { params: { token } });
+  },
+
+  claimFriendTicket(eventId, token) {
+    return ApiClient.post(`/events/${eventId}/friend-ticket/claim`, { token });
+  },
+
+  // "Bring a friend": the buyer's side
+  getMyFriendTicket(eventId) {
+    return ApiClient.get(`/events/${eventId}/my-friend-ticket`);
+  },
+
+  changeFriendEmail(eventId, friendEmail) {
+    return ApiClient.put(`/events/${eventId}/my-friend-ticket`, { friend_email: friendEmail });
+  },
+
+  resendFriendTicket(eventId) {
+    return ApiClient.post(`/events/${eventId}/my-friend-ticket/resend`);
+  },
+
   getEventRegistrations(eventId) {
     return ApiClient.get(`/events/${eventId}/registrations`);
   },
