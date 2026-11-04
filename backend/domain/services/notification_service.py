@@ -265,3 +265,56 @@ def send_team_invite_email(to_email: str, team_name: str, event: models.Event, i
     except Exception as e:
         logger.error(f"Failed to send team invite email to {to_email}: {str(e)}")
 
+
+
+def send_partial_refund_notification(db: Session, refund: models.Refund) -> bool:
+    """
+    Tell the ticket holder about a partial refund: an in-app notification and
+    an email. Returns whether the email went out, so the caller can record it
+    and offer a resend. The in-app notice failing only logs: the email is what
+    the organiser was promised.
+    """
+    registration = refund.registration
+    event = registration.event
+    user = registration.user
+    user_name = user.full_name or user.email.split("@")[0]
+    amount = float(refund.amount_euros)
+
+    try:
+        db_notifications.create_notification(
+            db=db,
+            user_id=user.user_id,
+            title="Partial refund issued",
+            message=f"€{amount:.2f} of your payment for '{event.event_name}' is being refunded. Your ticket is still valid.",
+            notification_type="registration_update",
+            related_entity_type="registration",
+            related_entity_id=registration.registration_id,
+        )
+    except Exception:
+        db.rollback()
+        logger.exception(f"Failed to create in-app notification for refund {refund.refund_id}")
+
+    html_content, text_content = email_templates.render_partial_refund_email(
+        user_name=user_name,
+        event_name=event.event_name,
+        amount=amount,
+        reason=refund.reason,
+        method=refund.method,
+        ticket_url=f"{settings.FRONTEND_URL}/event/{event.event_id}/ticket/{registration.registration_id}",
+    )
+
+    try:
+        sent = email_service.send_email(
+            to_email=user.email,
+            to_name=user_name,
+            subject=f"Partial refund for {event.event_name}",
+            html_content=html_content,
+            text_content=text_content,
+        )
+    except Exception:
+        logger.exception(f"Failed to send refund email for refund {refund.refund_id} to {user.email}")
+        return False
+
+    if not sent:
+        logger.error(f"Refund email for refund {refund.refund_id} to {user.email} was not sent")
+    return bool(sent)

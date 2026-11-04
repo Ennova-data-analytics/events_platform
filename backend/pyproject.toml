@@ -78,6 +78,7 @@ url = "https://download.pytorch.org/whl/cpu"
 priority = "explicit"
 
 [tool.poetry.group.dev.dependencies]
+pytest = "^8.3.0"
 # Linters and formatters can be added here in the future
 # black = "^24.4.2"
 # ruff = "^0.4.4"
@@ -86,3 +87,8 @@ priority = "explicit"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"

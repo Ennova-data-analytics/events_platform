@@ -1,6 +1,7 @@
 import uuid
 import secrets
 from datetime import datetime
+from decimal import Decimal
 from sqlalchemy import (
     Boolean, Column, ForeignKey, Integer, String, TIMESTAMP, Table,
     Text, DECIMAL, ARRAY, JSON, Enum, CheckConstraint, Float, UniqueConstraint
@@ -235,7 +236,16 @@ class Event(Base):
     discount_codes = relationship("DiscountCode", back_populates="event", cascade="all, delete-orphan")
     referral_links = relationship("ReferralLink", back_populates="event", cascade="all, delete-orphan")
     attachments = relationship("EventAttachment", back_populates="event", cascade="all, delete-orphan", order_by="EventAttachment.display_order")
-    ticket_types = relationship("TicketType", back_populates="event", cascade="all, delete-orphan", order_by="TicketType.display_order")
+    # Deleted ticket types are left out everywhere an event's ticket types are
+    # listed (event page, registration, duplication). Their holders still reach
+    # them through Registration.ticket_type.
+    ticket_types = relationship(
+        "TicketType",
+        primaryjoin="and_(Event.event_id == TicketType.event_id, TicketType.deleted_at.is_(None))",
+        back_populates="event",
+        cascade="all, delete-orphan",
+        order_by="TicketType.display_order",
+    )
     teams = relationship("EventTeam", back_populates="event", cascade="all, delete-orphan", order_by="EventTeam.created_at")
     bulk_email_logs = relationship("BulkEmailLog", back_populates="event", cascade="all, delete-orphan", order_by="desc(BulkEmailLog.sent_at)")
     donations = relationship("Donation", back_populates="event", cascade="all, delete-orphan", order_by="desc(Donation.created_at)")
@@ -276,6 +286,11 @@ class TicketType(Base):
     group_payment_mode = Column(String(20), nullable=True)  # 'leader' | 'individual' | None
     group_size = Column(Integer, nullable=True)          # required group size for group pricing
     group_price_euros = Column(DECIMAL(10, 2), nullable=True)  # total price charged to leader
+
+    # Set when an organiser deletes a ticket type that people already hold. It
+    # is then off sale and hidden from listings, but the row stays so those
+    # tickets keep their type. A type nobody registered for is deleted outright.
+    deleted_at = Column(TIMESTAMP(timezone=True), nullable=True)
 
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -336,6 +351,7 @@ class Registration(Base):
     discount_code = relationship("DiscountCode", back_populates="registrations")
     ticket_type = relationship("TicketType", back_populates="registrations")
     referral_link = relationship("ReferralLink", back_populates="registrations")
+    refunds = relationship("Refund", back_populates="registration", cascade="all, delete-orphan", order_by="Refund.created_at")
 
     __table_args__ = (
         CheckConstraint(
@@ -352,6 +368,15 @@ class Registration(Base):
         if self.final_amount_euros is not None:
             return self.final_amount_euros
         return self.event.price_euros or 0
+
+    @property
+    def refunded_amount_euros(self):
+        """Money given back on this ticket. A pending refund counts: it is
+        already promised. A failed one doesn't."""
+        return sum(
+            (refund.amount_euros for refund in self.refunds if refund.status in Refund.COUNTED_STATUSES),
+            Decimal('0.00'),
+        )
 
     @property
     def has_valid_ticket(self) -> bool:
@@ -391,6 +416,51 @@ class Donation(Base):
     __table_args__ = (
         CheckConstraint("amount_euros > 0", name='check_donation_amount_positive'),
         CheckConstraint("status IN ('Pending', 'Paid')", name='check_donation_status_valid'),
+    )
+
+
+class Refund(Base):
+    """
+    Money given back on a ticket the holder keeps, e.g. after the wrong price
+    was charged. The registration stays 'Paid'. A ticket can be refunded more
+    than once, up to what was paid for it; donations are never refunded here.
+
+    method 'stripe' refunds the original card payment. 'manual' only records
+    money the organisers returned some other way: the ticket was marked paid by
+    hand, so there is no Stripe payment to refund.
+    """
+    __tablename__ = "refunds"
+
+    COUNTED_STATUSES = ('pending', 'succeeded')
+
+    refund_id = Column(Integer, primary_key=True)
+    registration_id = Column(Integer, ForeignKey('registrations.registration_id', ondelete="CASCADE"), nullable=False, index=True)
+    event_id = Column(Integer, ForeignKey('events.event_id', ondelete="CASCADE"), nullable=False, index=True)
+    amount_euros = Column(DECIMAL(10, 2), nullable=False)
+    reason = Column(Text, nullable=False)  # the organiser's explanation, sent in the email
+
+    method = Column(String(20), nullable=False)
+    status = Column(String(20), nullable=False, default='pending')
+    stripe_refund_id = Column(String(255), unique=True, nullable=True)
+    failure_reason = Column(Text, nullable=True)
+    email_sent = Column(Boolean, nullable=False, default=False)
+
+    # One submit of the refund dialog. With registration_id it makes a
+    # resubmitted batch (double click, retry after a timeout) a no-op.
+    batch_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    created_by_user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="SET NULL"), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    registration = relationship("Registration", back_populates="refunds")
+    event = relationship("Event")
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+
+    __table_args__ = (
+        CheckConstraint("amount_euros > 0", name='check_refund_amount_positive'),
+        CheckConstraint("method IN ('stripe', 'manual')", name='check_refund_method_valid'),
+        CheckConstraint("status IN ('pending', 'succeeded', 'failed')", name='check_refund_status_valid'),
+        UniqueConstraint('batch_id', 'registration_id', name='uq_refund_batch_registration'),
     )
 
 

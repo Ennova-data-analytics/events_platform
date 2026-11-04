@@ -412,6 +412,7 @@ def claim_team_invite(
         user_id=current_user.user_id,
         ticket_type_id=invite.ticket_type_id,
         team_selection=TeamSelectionRequest(action="join", team_id=invite.team_id),
+        claiming_team_invite=True,
     )
 
     invite.claimed = True

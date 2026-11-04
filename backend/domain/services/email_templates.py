@@ -1,3 +1,4 @@
+import html
 from jinja2 import Template
 from domain import models
 import markdown
@@ -859,5 +860,67 @@ Claim your spot here: {invite_url}
 
 This invite link is personal to you. Please do not share it.
 """.strip()
+
+    return html_content, text_content
+
+def render_partial_refund_email(
+    user_name: str,
+    event_name: str,
+    amount: float,
+    reason: str,
+    method: str,
+    ticket_url: str,
+) -> tuple[str, str]:
+    """
+    Tell someone part of their payment is coming back and their ticket still
+    stands. reason is the organiser's own explanation. Everything is escaped:
+    the base template inserts content as raw HTML.
+    """
+    if method == 'stripe':
+        how = ("It will go back to the card you paid with. Depending on your bank, "
+               "it can take 5–10 business days to show on your statement.")
+    else:
+        how = ("You paid outside our online checkout, so the organisers will return "
+               "this amount to you directly. Contact them if you have any questions about how.")
+
+    paragraphs = [p.strip() for p in reason.strip().split('\n\n') if p.strip()]
+    reason_html = ''.join(f'<p>{html.escape(p).replace(chr(10), "<br>")}</p>' for p in paragraphs)
+    amount_text = f"€{amount:.2f}"
+
+    content = f"""
+        <h2>Hi {html.escape(user_name)},</h2>
+        {reason_html}
+        <div class="event-details">
+            <p><strong>Event:</strong> {html.escape(event_name)}</p>
+            <p><strong>Refund:</strong> {amount_text}</p>
+        </div>
+        <p>{how}</p>
+        <p><strong>Your ticket is still valid</strong> and you don't need to do anything. See you at the event!</p>
+        <p style="text-align: center;">
+            <a href="{html.escape(ticket_url, quote=True)}" class="button">View your ticket</a>
+        </p>
+    """
+
+    base = Template(get_base_template())
+    html_content = base.render(
+        header_title="Partial Refund",
+        content=content
+    )
+
+    text_content = f"""Partial Refund
+
+Hi {user_name},
+
+{reason.strip()}
+
+Event: {event_name}
+Refund: {amount_text}
+
+{how}
+
+Your ticket is still valid and you don't need to do anything. See you at the event!
+
+View your ticket: {ticket_url}
+"""
 
     return html_content, text_content

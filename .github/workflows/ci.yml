@@ -17,6 +17,22 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      # Disposable database for the test suite, which drops and rebuilds the
+      # schema from the migrations on every run.
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: events_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d events_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -36,7 +52,7 @@ jobs:
           pip install poetry
           poetry config virtualenvs.create false
           poetry check --lock
-          poetry install --no-interaction --no-ansi --no-root --only main
+          poetry install --no-interaction --no-ansi --no-root --with dev
 
       - name: Migrations have a single head
         # Two migrations branching off the same parent would make
@@ -77,6 +93,12 @@ jobs:
           RECRUITMENT_SCHEDULER_ENABLED: "false"
         run: python -c "from app_setup import create_app; app = create_app(); print(f'{len(app.routes)} routes')"
 
+      - name: Tests
+        # tests/conftest.py sets its own dummy settings and fakes Stripe and email.
+        env:
+          TEST_DATABASE_URL: postgresql://test:test@localhost:5432/events_test
+        run: pytest
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -92,6 +114,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - run: npm ci
+
+      - run: npm test
 
       - run: npm run build
 

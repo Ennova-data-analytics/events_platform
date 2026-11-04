@@ -10,7 +10,10 @@ import sys
 from dotenv import load_dotenv
 
 
-load_dotenv()
+# The test suite sets APP_ENV=test and its own DATABASE_URL; .env points at
+# the live database and must never be read there.
+if os.getenv("APP_ENV") != "test":
+    load_dotenv()
 database_url = os.getenv("DATABASE_URL")
 if not database_url:
     raise ValueError("DB_URL is not set in the env file")

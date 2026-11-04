@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from domain import models, schemas
 from domain.services.stripe_service import stripe_service
 from domain.use_cases.db_registrations import resolve_donation
+from domain.use_cases import db_refunds
 from api import deps
 from core.config import settings
 import stripe
@@ -97,6 +98,11 @@ def create_checkout_session(
         )
 
 
+# Stripe sends a refund's status changes as refund.* events on recent API
+# versions and as charge.refund.updated on older ones.
+REFUND_EVENTS = ('refund.created', 'refund.updated', 'refund.failed', 'charge.refund.updated')
+
+
 @router.post("/webhook/stripe")
 async def stripe_webhook(request: Request, db: Session = Depends(deps.get_db)):
     """
@@ -153,6 +159,15 @@ async def stripe_webhook(request: Request, db: Session = Depends(deps.get_db)):
                 logger.info(f"Successfully processed payment for registration {registration_id}")
             except Exception as e:
                 logger.error(f"Error handling payment success: {str(e)}")
+
+    elif event['type'] in REFUND_EVENTS:
+        # A refund that was pending settled, or failed after it was issued. A
+        # failure here returns 500 so Stripe retries.
+        try:
+            db_refunds.apply_stripe_refund_update(db, event['data']['object'])
+        except Exception:
+            logger.exception(f"Error recording Stripe refund update {event['data']['object'].get('id')}")
+            raise HTTPException(status_code=500, detail="Failed to record refund update")
 
     elif event['type'] == 'payment_intent.payment_failed':
         payment_intent = event['data']['object']
