@@ -11,7 +11,8 @@ from domain.use_cases import db_events, db_event_duplication, db_registrations, 
 from domain.use_cases.calendar_export import GenerateEventCalendarUseCase
 from domain.exceptions import EventNotFoundException, RegistrationNotFoundException, UnauthorizedCalendarAccessException
 from api import deps
-from core import s3_service, security
+from core import s3_service, security, qr_service
+from core.config import settings
 from core.image_processing_service import image_processing_service
 
 logger = logging.getLogger(__name__)
@@ -269,6 +270,38 @@ def read_event_donations(event_id: int, db: Session = Depends(deps.get_db), curr
     if not db_events.get_event(db, event_id=event_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
     return db_donations.get_paid_donations_for_event(db, event_id=event_id)
+
+def _charity_event_or_error(db: Session, event_id: int) -> models.Event:
+    db_event = db_events.get_event(db, event_id=event_id)
+    if not db_event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+    if not db_event.is_charitable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This event does not accept donations. Mark it as a charity event first."
+        )
+    return db_event
+
+@router.get("/{event_id}/donate/url", response_model=schemas.DonationLinkResponse)
+def read_event_donation_url(event_id: int, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
+    """The shareable link to a charity event's donation page (organisers only)."""
+    _charity_event_or_error(db, event_id)
+    return {"donation_url": qr_service.generate_donation_url(event_id, settings.FRONTEND_URL)}
+
+@router.get("/{event_id}/donate/qr")
+def read_event_donation_qr(event_id: int, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
+    """
+    A QR code PNG for a charity event's donation page (organisers only), to
+    print and put up at the event: scanning it goes straight to the payment,
+    with no login and no ticket.
+    """
+    _charity_event_or_error(db, event_id)
+    qr_buffer = qr_service.generate_donation_qr_png(event_id, settings.FRONTEND_URL)
+    return Response(
+        content=qr_buffer.getvalue(),
+        media_type="image/png",
+        headers={"Content-Disposition": f"inline; filename=event_{event_id}_donation_qr.png"},
+    )
 
 @router.patch("/{event_id}/registration/form-responses", response_model=schemas.Registration)
 def update_registration_form_responses(

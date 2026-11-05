@@ -4,13 +4,16 @@
       <div>
         <h3 class="text-subtitle-1 font-weight-bold">Donations</h3>
         <p class="text-caption text-grey">
-          Paid donations made without registering. Donations added to a ticket are in the Donation column of the attendee tabs.
+          Paid donations made without registering, including through the donation link and QR code. Donations added to a ticket are in the Donation column of the attendee tabs.
         </p>
       </div>
       <v-spacer />
-      <v-chip color="pink-darken-1" variant="tonal" prepend-icon="mdi-hand-heart">
-        {{ donations.length }} donation{{ donations.length === 1 ? '' : 's' }} · €{{ total.toFixed(2) }}
-      </v-chip>
+      <div class="d-flex flex-wrap align-center ga-2">
+        <v-chip color="pink-darken-1" variant="tonal" prepend-icon="mdi-hand-heart">
+          {{ donations.length }} donation{{ donations.length === 1 ? '' : 's' }} · €{{ total.toFixed(2) }}
+        </v-chip>
+        <DonationLinkDialog :event-id="eventId" />
+      </div>
     </div>
 
     <v-alert v-if="loadError" type="error" variant="tonal" class="mx-4 mb-4">
@@ -30,6 +33,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { EventService } from '@/services/EventService.js';
+import DonationLinkDialog from './DonationLinkDialog.vue';
 
 const props = defineProps({
   eventId: { type: Number, required: true },

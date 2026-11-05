@@ -46,6 +46,15 @@ export const EventService = {
     return ApiClient.get(`/events/${eventId}/donations`);
   },
 
+  // The public donation page's link and a printable QR code for it (organisers only).
+  getDonationUrl(eventId) {
+    return ApiClient.get(`/events/${eventId}/donate/url`);
+  },
+
+  getDonationQrCode(eventId) {
+    return ApiClient.get(`/events/${eventId}/donate/qr`, { responseType: 'blob' });
+  },
+
   updateRegistrationFormResponses(eventId, formResponses) {
     return ApiClient.patch(`/events/${eventId}/registration/form-responses`, { form_responses: formResponses });
   },
