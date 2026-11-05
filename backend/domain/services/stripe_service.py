@@ -124,8 +124,10 @@ class StripeService:
                     'quantity': 1,
                 }],
                 mode='payment',
-                success_url=f"{settings.FRONTEND_URL}/event/{event.event_id}?donation=success",
-                cancel_url=f"{settings.FRONTEND_URL}/event/{event.event_id}?donation=cancelled",
+                # Back to the donation page, so a donor at the event who
+                # scanned the QR code lands on the thank-you there.
+                success_url=f"{settings.FRONTEND_URL}/event/{event.event_id}/donate?donation=success",
+                cancel_url=f"{settings.FRONTEND_URL}/event/{event.event_id}/donate?donation=cancelled",
                 client_reference_id=f"donation-{donation.donation_id}",
                 customer_email=donation.email,
                 metadata={

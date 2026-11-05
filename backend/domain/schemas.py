@@ -326,6 +326,9 @@ class DonationCreate(BaseModel):
     email: EmailStr
     amount_euros: Decimal = Field(..., ge=MIN_STANDALONE_DONATION_EUROS, le=MAX_DONATION_EUROS, decimal_places=2)
 
+class DonationLinkResponse(BaseModel):
+    donation_url: str
+
 class DonationCheckoutResponse(BaseModel):
     donation_id: int
     checkout_url: str

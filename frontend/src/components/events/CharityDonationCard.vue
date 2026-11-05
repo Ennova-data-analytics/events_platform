@@ -9,7 +9,7 @@
           </div>
           <div class="text-body-2">
             <template v-if="donationOnly">
-              Support <strong>{{ charityLabel }}</strong> without attending the event. No account needed.
+              Your donation goes to <strong>{{ charityLabel }}</strong>. No account needed.
             </template>
             <template v-else-if="ticketPrice > 0">
               Your ticket price of <strong>€{{ formatAmount(ticketPrice) }}</strong> goes to

@@ -20,6 +20,12 @@ const routes = [
     component: () => import('../views/EventRegistrationPage.vue')
   },
   {
+    // Public donation page for charity events; organisers print its QR code
+    path: '/event/:id/donate',
+    name: 'event-donate',
+    component: () => import('../views/EventDonatePage.vue')
+  },
+  {
     path: '/event/:id/registered',
     name: 'event-registered',
     component: () => import('../views/EventRegistrationConfirmationPage.vue')

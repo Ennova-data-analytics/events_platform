@@ -57,3 +57,32 @@ def generate_ticket_qr_png(token: str, base_url: str, box_size: int = 10, border
     buffer.seek(0)
     return buffer
 
+
+
+def generate_donation_url(event_id: int, base_url: str) -> str:
+    """The public page where anyone can donate to a charity event, no account needed."""
+    return f"{base_url}/event/{event_id}/donate"
+
+
+def generate_donation_qr_png(event_id: int, base_url: str, box_size: int = 20, border: int = 4) -> BytesIO:
+    """Generate a QR code PNG for an event's donation page.
+
+    Meant to be printed and put up at the event, so it is rendered large and
+    with medium error correction to survive a scuffed or glossy print.
+    Returns a BytesIO buffer positioned at 0.
+    """
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=box_size,
+        border=border,
+    )
+    qr.add_data(generate_donation_url(event_id, base_url))
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    buffer = BytesIO()
+    img.save(buffer, format='PNG')
+    buffer.seek(0)
+    return buffer
