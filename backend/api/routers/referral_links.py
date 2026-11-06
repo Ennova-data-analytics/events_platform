@@ -18,7 +18,7 @@ def create_referral_link(
     """Create a new referral link for an event (organizer only)"""
     try:
         return ReferralLinkUseCases.create_referral_link(
-            db=db, data=data, created_by_user_id=str(current_user.user_id)
+            db=db, data=data, user=current_user
         )
     except HTTPException:
         raise
@@ -68,7 +68,7 @@ def update_referral_link(
     """Update a referral link (organizer only)"""
     try:
         return ReferralLinkUseCases.update_referral_link(
-            db=db, link_id=link_id, update_data=update_data, user_id=str(current_user.user_id)
+            db=db, link_id=link_id, update_data=update_data, user=current_user
         )
     except HTTPException:
         raise
@@ -85,7 +85,7 @@ def delete_referral_link(
     """Delete a referral link (organizer only)"""
     try:
         ReferralLinkUseCases.delete_referral_link(
-            db=db, link_id=link_id, user_id=str(current_user.user_id)
+            db=db, link_id=link_id, user=current_user
         )
         return None
     except HTTPException:

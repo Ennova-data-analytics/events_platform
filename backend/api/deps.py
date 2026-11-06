@@ -6,6 +6,7 @@ from jose import jwt, JWTError
 
 from domain import models
 from domain.use_cases import db_users
+from domain.use_cases.event_permissions import can_manage_event, is_super_admin  # noqa: F401 (re-exported)
 from core.config import settings
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -82,8 +83,14 @@ def get_current_active_recruiter(current_user: models.User = Depends(get_current
     return current_user
 
 
-def is_super_admin(user: models.User) -> bool:
-    return any(role.role_name == 'super_admin' for role in user.roles)
+def ensure_can_manage_event(event: models.Event, user: models.User) -> None:
+    """Only the event's creator or a super admin may change an event's content."""
+    if can_manage_event(event, user):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Not authorized to modify this event"
+    )
 
 
 def recruiter_department_ids(db: Session, user: models.User) -> list[int] | None:

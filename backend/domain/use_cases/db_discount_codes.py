@@ -6,6 +6,7 @@ from decimal import Decimal
 from fastapi import HTTPException, status
 
 from domain.models import DiscountCode, Event, Registration, User
+from domain.use_cases.event_permissions import check_can_manage_event
 from domain.schemas import (
     DiscountCodeCreate,
     DiscountCodeUpdate,
@@ -20,7 +21,7 @@ from domain.schemas import (
 class DiscountCodeUseCases:
 
     @staticmethod
-    def create_discount_code(db: Session, discount_data: DiscountCodeCreate, created_by_user_id: str) -> DiscountCode:
+    def create_discount_code(db: Session, discount_data: DiscountCodeCreate, user: User) -> DiscountCode:
         """Create a new discount code for an event"""
 
         event = db.query(Event).filter(Event.event_id == discount_data.event_id).first()
@@ -30,11 +31,7 @@ class DiscountCodeUseCases:
                 detail=f"Event with ID {discount_data.event_id} not found"
             )
 
-        if str(event.created_by_user_id) != created_by_user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to create discount codes for this event"
-            )
+        check_can_manage_event(event, user, "create discount codes for this event")
 
         normalized_code = discount_data.code.upper().strip().replace(' ', '')
 
@@ -75,7 +72,7 @@ class DiscountCodeUseCases:
         return discount_code
 
     @staticmethod
-    def get_event_discount_codes(db: Session, event_id: int, user_id: str) -> List[DiscountCode]:
+    def get_event_discount_codes(db: Session, event_id: int, user: User) -> List[DiscountCode]:
         """Get all discount codes for an event"""
 
         event = db.query(Event).filter(Event.event_id == event_id).first()
@@ -85,11 +82,7 @@ class DiscountCodeUseCases:
                 detail=f"Event with ID {event_id} not found"
             )
 
-        if str(event.created_by_user_id) != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to view discount codes for this event"
-            )
+        check_can_manage_event(event, user, "view discount codes for this event")
 
         discount_codes = db.query(DiscountCode).filter(
             DiscountCode.event_id == event_id
@@ -102,7 +95,7 @@ class DiscountCodeUseCases:
         db: Session,
         code_id: int,
         update_data: DiscountCodeUpdate,
-        user_id: str
+        user: User
     ) -> DiscountCode:
         """Update a discount code"""
 
@@ -114,11 +107,7 @@ class DiscountCodeUseCases:
             )
 
         event = discount_code.event
-        if str(event.created_by_user_id) != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to update this discount code"
-            )
+        check_can_manage_event(event, user, "update this discount code")
 
         update_dict = update_data.model_dump(exclude_unset=True)
 
@@ -140,7 +129,7 @@ class DiscountCodeUseCases:
         return discount_code
 
     @staticmethod
-    def delete_discount_code(db: Session, code_id: int, user_id: str) -> bool:
+    def delete_discount_code(db: Session, code_id: int, user: User) -> bool:
         """Delete a discount code"""
 
         discount_code = db.query(DiscountCode).filter(DiscountCode.code_id == code_id).first()
@@ -151,11 +140,7 @@ class DiscountCodeUseCases:
             )
 
         event = discount_code.event
-        if str(event.created_by_user_id) != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to delete this discount code"
-            )
+        check_can_manage_event(event, user, "delete this discount code")
 
         db.delete(discount_code)
         db.commit()
@@ -245,7 +230,7 @@ class DiscountCodeUseCases:
             db.commit()
 
     @staticmethod
-    def get_discount_code_usages(db: Session, code_id: int, user_id: str) -> DiscountCodeUsageResponse:
+    def get_discount_code_usages(db: Session, code_id: int, user: User) -> DiscountCodeUsageResponse:
         """Get all registrations that used a specific discount code"""
         discount_code = db.query(DiscountCode).filter(DiscountCode.code_id == code_id).first()
         if not discount_code:
@@ -255,11 +240,7 @@ class DiscountCodeUseCases:
             )
 
         event = discount_code.event
-        if str(event.created_by_user_id) != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to view this discount code's usage"
-            )
+        check_can_manage_event(event, user, "view this discount code's usage")
 
         registrations = (
             db.query(Registration)
@@ -290,7 +271,7 @@ class DiscountCodeUseCases:
         )
 
     @staticmethod
-    def backpopulate_discount_code(db: Session, code_id: int, user_id: str) -> DiscountCodeBackpopulateResponse:
+    def backpopulate_discount_code(db: Session, code_id: int, user: User) -> DiscountCodeBackpopulateResponse:
         """
         Find paid registrations that likely used this discount code by comparing
         the amount paid (via Stripe) against the event/ticket price.
@@ -304,11 +285,7 @@ class DiscountCodeUseCases:
             )
 
         event = discount_code.event
-        if str(event.created_by_user_id) != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to manage this discount code"
-            )
+        check_can_manage_event(event, user, "manage this discount code")
 
         def calc_expected(base_price):
             bp = Decimal(str(base_price))
