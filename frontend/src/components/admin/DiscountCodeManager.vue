@@ -293,7 +293,7 @@
     </v-dialog>
 
     <!-- Snackbar for notifications -->
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000">
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="snackbar.color === 'error' ? 6000 : 3000">
       {{ snackbar.text }}
     </v-snackbar>
 
@@ -340,6 +340,7 @@ import {
   getDiscountCodeUsages,
   backpopulateDiscountCode
 } from '@/services/EventService'
+import { apiErrorMessage } from '@/utils/apiErrors.js'
 
 const props = defineProps({
   eventId: {
@@ -404,7 +405,7 @@ const loadDiscountCodes = async () => {
     discountCodes.value = response.data
   } catch (error) {
     console.error('Error loading discount codes:', error)
-    showSnackbar('Failed to load discount codes', 'error')
+    showSnackbar(apiErrorMessage(error, 'Failed to load discount codes'), 'error')
   } finally {
     isLoading.value = false
   }
@@ -428,7 +429,7 @@ const viewUsages = async (code) => {
     usageDialog.value.usedCount = response.data.used_count
   } catch (error) {
     console.error('Error loading usage details:', error)
-    showSnackbar('Failed to load usage details', 'error')
+    showSnackbar(apiErrorMessage(error, 'Failed to load usage details'), 'error')
   } finally {
     usageDialog.value.loading = false
   }
@@ -451,7 +452,7 @@ const runBackpopulate = async () => {
     }
   } catch (error) {
     console.error('Error backpopulating:', error)
-    showSnackbar('Failed to backpopulate discount code usage', 'error')
+    showSnackbar(apiErrorMessage(error, 'Failed to backpopulate discount code usage'), 'error')
   } finally {
     usageDialog.value.backpopulating = false
   }
@@ -485,7 +486,7 @@ const submitForm = async () => {
     closeModal()
   } catch (error) {
     console.error('Error saving discount code:', error)
-    showSnackbar(`Failed to ${editingCode.value ? 'update' : 'create'} discount code`, 'error')
+    showSnackbar(apiErrorMessage(error, `Failed to ${editingCode.value ? 'update' : 'create'} discount code`), 'error')
   } finally {
     isSubmitting.value = false
   }
@@ -530,7 +531,7 @@ const confirmDelete = async () => {
     showSnackbar('Discount code deleted successfully', 'success')
   } catch (error) {
     console.error('Error deleting discount code:', error)
-    showSnackbar('Failed to delete discount code', 'error')
+    showSnackbar(apiErrorMessage(error, 'Failed to delete discount code'), 'error')
   } finally {
     deleteDialog.value.show = false
   }

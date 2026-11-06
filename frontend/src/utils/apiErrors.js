@@ -77,3 +77,31 @@ export function describeSubmissionError(err, what) {
       return detail || 'Something went wrong. Please try again.';
   }
 }
+
+/**
+ * A one-line message for admin screens: what failed, plus the server's reason
+ * when it gave one, e.g. "Failed to create discount code: Discount code
+ * 'SAVE10' already exists for this event".
+ *
+ * @param {Error} err         axios error
+ * @param {string} fallback   what failed, e.g. "Failed to create discount code"
+ */
+export function apiErrorMessage(err, fallback) {
+  if (!err?.response) return `${fallback}: couldn't reach the server. Check your connection and try again.`;
+
+  const { status, data } = err.response;
+  if (status >= 500) return `${fallback}: something went wrong on the server. Please try again.`;
+
+  let reason = null;
+  if (typeof data?.detail === 'string') {
+    reason = data.detail;
+  } else if (Array.isArray(data?.detail) && data.detail.length) {
+    reason = data.detail
+      .map((e) => {
+        const field = (e.loc || []).filter((p) => p !== 'body').pop();
+        return field ? `${String(field).replace(/_/g, ' ')}: ${e.msg}` : e.msg;
+      })
+      .join('; ');
+  }
+  return reason ? `${fallback}: ${reason}` : fallback;
+}

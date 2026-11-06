@@ -629,8 +629,7 @@ def upload_sponsor_logos(
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    if db_event.created_by_user_id != current_organiser.user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to modify this event")
+    deps.ensure_can_manage_event(db_event, current_organiser)
 
     uploaded_logos = []
     errors = []
@@ -710,8 +709,7 @@ def delete_sponsor_logo(
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    if db_event.created_by_user_id != current_organiser.user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to modify this event")
+    deps.ensure_can_manage_event(db_event, current_organiser)
 
     if not db_event.sponsor_logos or logo_index >= len(db_event.sponsor_logos):
         raise HTTPException(status_code=404, detail="Logo not found")
@@ -731,8 +729,7 @@ def upload_event_photos(event_id: int, photo_files: list[UploadFile] = File(...,
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    if db_event.created_by_user_id != current_organiser.user_id:
-        raise HTTPException(status_code=403, detail="Not authorised to modify this event")
+    deps.ensure_can_manage_event(db_event, current_organiser)
 
     try:
         uploaded_photos, errors = db_event_photos.upload_multiple_photos(
@@ -779,8 +776,7 @@ def update_event_photo(event_id: int, photo_id: int, photo_update: schemas.Event
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    if db_event.created_by_user_id != current_organiser.user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to modify this event")
+    deps.ensure_can_manage_event(db_event, current_organiser)
     
     photo = db_event_photos.get_event_photo(db, photo_id, event_id)
     if not photo:
@@ -798,8 +794,7 @@ def delete_event_photo(event_id: int, photo_id: int, db: Session = Depends(deps.
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    if db_event.created_by_user_id != current_organiser.user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to modify this event")
+    deps.ensure_can_manage_event(db_event, current_organiser)
     
     photo = db_event_photos.get_event_photo(db, photo_id, event_id)
     if not photo:
@@ -821,8 +816,7 @@ def reorder_event_photos(event_id: int, photo_ids: list[int], db: Session = Depe
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    if db_event.created_by_user_id != current_organiser.user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to modify this event")
+    deps.ensure_can_manage_event(db_event, current_organiser)
     
     photos = db_event_photos.get_event_photos(db, event_id)
     if len(photo_ids) != len(photos):
@@ -852,8 +846,7 @@ def upload_event_attachment(
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    if db_event.created_by_user_id != current_organiser.user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to modify this event")
+    deps.ensure_can_manage_event(db_event, current_organiser)
 
     try:
         s3_key, file_type, file_size = db_event_attachments.upload_attachment_to_s3(file, event_id)
@@ -900,8 +893,7 @@ def update_event_attachment(
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    if db_event.created_by_user_id != current_organiser.user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to modify this event")
+    deps.ensure_can_manage_event(db_event, current_organiser)
 
     attachment = db_event_attachments.get_event_attachment(db, attachment_id, event_id)
     if not attachment:
@@ -923,8 +915,7 @@ def delete_event_attachment(
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    if db_event.created_by_user_id != current_organiser.user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to modify this event")
+    deps.ensure_can_manage_event(db_event, current_organiser)
 
     attachment = db_event_attachments.get_event_attachment(db, attachment_id, event_id)
     if not attachment:
@@ -947,8 +938,7 @@ def reorder_event_attachments(
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    if db_event.created_by_user_id != current_organiser.user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to modify this event")
+    deps.ensure_can_manage_event(db_event, current_organiser)
 
     attachments = db_event_attachments.get_event_attachments(db, event_id)
     if len(attachment_ids) != len(attachments):

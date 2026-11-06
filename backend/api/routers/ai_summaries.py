@@ -6,6 +6,7 @@ from api import deps
 from domain import models, schemas
 from domain.use_cases import db_events, db_feedback
 from domain.use_cases.ai import db_ai_summaries
+from domain.use_cases.event_permissions import can_manage_event
 from domain.services.ai.feedback_summary_service import FeedbackSummaryService
 from domain.services.email_service import email_service
 from domain.services.email_templates import render_feedback_summary_email
@@ -22,7 +23,7 @@ def verify_event_organizer(
     db: Session
 ) -> models.Event:
     """
-    Verify that the current user is the organizer of the event.
+    Verify that the current user is the event's organiser or a super admin.
     """
     event = db_events.get_event(db, event_id=event_id)
 
@@ -32,10 +33,10 @@ def verify_event_organizer(
             detail="Event not found"
         )
 
-    if event.created_by_user_id != current_user.user_id:
+    if not can_manage_event(event, current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the event organizer can access AI summaries"
+            detail="Only the event organiser or a super admin can access AI summaries"
         )
 
     return event
