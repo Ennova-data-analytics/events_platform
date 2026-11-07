@@ -85,6 +85,7 @@ def _registration_stats(db: Session, event_ids: list[int]) -> dict:
         func.count().filter(or_(is_paid, reg.status == 'Approved'), amount == 0).label('free_tickets'),
         func.coalesce(func.sum(amount).filter(is_paid), 0).label('tickets'),
         func.coalesce(func.sum(reg.donation_amount_euros).filter(is_paid), 0).label('donations'),
+        func.count().filter(is_paid, reg.donation_amount_euros > 0).label('donation_count'),
         func.coalesce(func.sum(reg.discount_amount_euros).filter(is_paid), 0).label('discounts'),
         func.coalesce(func.sum(amount).filter(reg.status == 'Approved', amount > 0), 0).label('awaiting'),
     ).join(models.Event, models.Event.event_id == reg.event_id).filter(
@@ -268,4 +269,44 @@ def get_revenue_overview(db: Session, fiscal_year: int | None = None, now: datet
             'current': _totals(rows_compared),
             'previous': _totals(previous_compared),
         },
+    }
+
+
+def get_charity_summary(db: Session, event: models.Event) -> dict:
+    """
+    Everything a charity event has raised, i.e. what is owed to the charity:
+    ticket sales net of refunds, donations added on top of a ticket, and
+    donations made on their own through the donation page, link or QR code.
+
+    Uses the same figures as the Revenue page, so the two agree to the cent.
+    Like that page, it is before Stripe fees and counts only money received.
+    """
+    event_ids = [event.event_id]
+    reg = _registration_stats(db, event_ids).get(event.event_id)
+    refunds_given = _refunds_given(db, event_ids).get(event.event_id, ZERO)
+
+    standalone_count, standalone_total = db.query(
+        func.count(),
+        func.coalesce(func.sum(models.Donation.amount_euros), 0),
+    ).filter(
+        models.Donation.event_id == event.event_id,
+        models.Donation.status == 'Paid',
+    ).one()
+
+    ticket_sales = (reg.tickets if reg else ZERO) - refunds_given
+    ticket_donations = reg.donations if reg else ZERO
+
+    return {
+        'event_id': event.event_id,
+        'charity_name': event.charity_name,
+        'ticket_sales': ticket_sales,
+        'paid_tickets': reg.paid_tickets if reg else 0,
+        'refunds_given': refunds_given,
+        'ticket_donations': ticket_donations,
+        'ticket_donation_count': reg.donation_count if reg else 0,
+        'standalone_donations': standalone_total,
+        'standalone_donation_count': standalone_count,
+        'total_to_donate': ticket_sales + ticket_donations + standalone_total,
+        'awaiting_payment': reg.awaiting if reg else ZERO,
+        'commission_owed': _commissions_owed(db, event_ids)[event.event_id],
     }

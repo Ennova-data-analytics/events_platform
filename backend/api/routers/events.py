@@ -7,7 +7,7 @@ import logging
 import os
 
 from domain import schemas, models
-from domain.use_cases import db_events, db_event_duplication, db_registrations, db_donations, db_event_photos, db_event_attachments, users_uc, db_friend_tickets
+from domain.use_cases import db_events, db_event_duplication, db_registrations, db_donations, db_revenue, db_event_photos, db_event_attachments, users_uc, db_friend_tickets
 from domain.use_cases.calendar_export import GenerateEventCalendarUseCase
 from domain.exceptions import EventNotFoundException, RegistrationNotFoundException, UnauthorizedCalendarAccessException
 from api import deps
@@ -281,6 +281,16 @@ def _charity_event_or_error(db: Session, event_id: int) -> models.Event:
             detail="This event does not accept donations. Mark it as a charity event first."
         )
     return db_event
+
+@router.get("/{event_id}/charity-summary", response_model=schemas.CharitySummary)
+def read_event_charity_summary(event_id: int, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
+    """
+    The full amount a charity event has raised for its charity (organisers
+    only): ticket sales, donations on tickets, and donations from the donation
+    page, link and QR code.
+    """
+    db_event = _charity_event_or_error(db, event_id)
+    return db_revenue.get_charity_summary(db, db_event)
 
 @router.get("/{event_id}/donate/url", response_model=schemas.DonationLinkResponse)
 def read_event_donation_url(event_id: int, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):

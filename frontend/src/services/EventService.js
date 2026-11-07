@@ -46,6 +46,11 @@ export const EventService = {
     return ApiClient.get(`/events/${eventId}/donations`);
   },
 
+  // Everything a charity event has raised for its charity, by source (organisers only).
+  getCharitySummary(eventId) {
+    return ApiClient.get(`/events/${eventId}/charity-summary`);
+  },
+
   // The public donation page's link and a printable QR code for it (organisers only).
   getDonationUrl(eventId) {
     return ApiClient.get(`/events/${eventId}/donate/url`);

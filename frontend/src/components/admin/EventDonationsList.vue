@@ -1,5 +1,7 @@
 <template>
   <div>
+    <CharityTotalCard :event-id="eventId" class="mt-4" />
+
     <div class="d-flex align-center mb-4 pa-4">
       <div>
         <h3 class="text-subtitle-1 font-weight-bold">Donations</h3>
@@ -34,6 +36,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { EventService } from '@/services/EventService.js';
 import DonationLinkDialog from './DonationLinkDialog.vue';
+import CharityTotalCard from './CharityTotalCard.vue';
 
 const props = defineProps({
   eventId: { type: Number, required: true },

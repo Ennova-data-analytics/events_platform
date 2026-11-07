@@ -344,6 +344,21 @@ class Donation(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class CharitySummary(BaseModel):
+    """What a charity event has raised for its charity, broken down by source."""
+    event_id: int
+    charity_name: str | None = None
+    ticket_sales: Decimal
+    paid_tickets: int
+    refunds_given: Decimal
+    ticket_donations: Decimal
+    ticket_donation_count: int
+    standalone_donations: Decimal
+    standalone_donation_count: int
+    total_to_donate: Decimal
+    awaiting_payment: Decimal
+    commission_owed: Decimal
+
 class RevenueFigures(BaseModel):
     ticket_revenue: Decimal
     charity_ticket_revenue: Decimal
