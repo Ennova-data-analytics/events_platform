@@ -46,6 +46,24 @@ main() {
   fi
   docker compose build backend
 
+  docker network inspect ennova-shared >/dev/null 2>&1 || {
+    log "Creating the ennova-shared network (used to reach Finnova)"
+    docker network create ennova-shared >/dev/null
+  }
+
+  # nginx refuses to start if a certificate it names is missing, which would
+  # take the whole site down when "up" recreates it. Check before touching it.
+  log "Checking TLS certificates named in nginx.conf"
+  local cert
+  for cert in $(grep -oE 'ssl_certificate +/etc/letsencrypt/[^;]+' nginx/nginx.conf | awk '{print $2}' | sort -u); do
+    docker compose run --rm -T --no-deps --entrypoint test certbot -f "$cert" \
+      || fail "Certificate $cert does not exist. Issue it with certbot before deploying this nginx.conf."
+  done
+
+  log "Testing the nginx config before restarting nginx"
+  docker compose run --rm -T --no-deps nginx nginx -t \
+    || fail "nginx -t failed; the running nginx was left untouched."
+
   log "Running database migrations"
   docker compose run --rm -T --no-deps backend alembic upgrade head
 

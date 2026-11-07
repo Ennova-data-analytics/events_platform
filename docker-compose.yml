@@ -46,8 +46,14 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
       - ./frontend/dist:/usr/share/nginx/html
+      # Finnova's static frontend, published by Finnova's own deploy.
+      - /root/finnova/frontend:/usr/share/nginx/finnova:ro
       - certbot_conf:/etc/letsencrypt
       - certbot_www:/var/www/certbot
+    # ennova-shared lets nginx reach Finnova's API container (finnova-api).
+    networks:
+      - default
+      - ennova-shared
     depends_on:
       - backend
 
@@ -59,6 +65,11 @@ services:
       - certbot_www:/var/www/certbot
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
+
+networks:
+  # Created by deploy/remote-deploy.sh (and Finnova's deploy) if missing.
+  ennova-shared:
+    external: true
 
 volumes:
   certbot_conf:
