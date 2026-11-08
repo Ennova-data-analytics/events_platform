@@ -93,9 +93,23 @@ main() {
   mkdir -p frontend/dist
   rsync -a --delay-updates frontend/dist-incoming/ frontend/dist/
 
-  log "Reloading nginx"
-  docker compose exec -T nginx nginx -t
-  docker compose exec -T nginx nginx -s reload
+  # nginx.conf is bind-mounted as a single file. git replaces the file rather
+  # than editing it, so a running container keeps reading the old copy and a
+  # reload changes nothing. When what nginx runs differs from the repo, recreate
+  # nginx (a second or two; the config already passed nginx -t above).
+  local running wanted
+  running=$(docker compose exec -T nginx cat /etc/nginx/conf.d/default.conf | sha256sum)
+  wanted=$(sha256sum < nginx/nginx.conf)
+  if [ "$running" != "$wanted" ]; then
+    log "nginx.conf changed: recreating nginx"
+    docker compose up -d --force-recreate --no-deps nginx
+    running=$(docker compose exec -T nginx cat /etc/nginx/conf.d/default.conf | sha256sum)
+    [ "$running" = "$wanted" ] || fail "nginx is still running an old nginx.conf after recreating it."
+  else
+    log "Reloading nginx"
+    docker compose exec -T nginx nginx -t
+    docker compose exec -T nginx nginx -s reload
+  fi
 
   docker image prune -f >/dev/null
   log "Deployed $SHA"
