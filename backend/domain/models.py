@@ -354,6 +354,14 @@ class Registration(Base):
     ticket_token = Column(String(64), unique=True, nullable=True, index=True)
     checked_in = Column(Boolean, default=False, nullable=False)
     checked_in_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    # When the ticket became 'Paid'. Set from Nov 2026 on; older tickets get it
+    # from Stripe (scripts/backfill_payments.py) or, with no Stripe payment to
+    # read it from, an estimate (registration date) flagged by paid_at_estimated.
+    paid_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    paid_at_estimated = Column(Boolean, default=False, nullable=False, server_default='false')
+    # The Stripe charge and Stripe's fee on it (the whole charge, donation included).
+    stripe_charge_id = Column(String(255), nullable=True)
+    stripe_fee_cents = Column(Integer, nullable=True)
 
     user = relationship("User", back_populates="registrations")
     event = relationship("Event", back_populates="registrations")

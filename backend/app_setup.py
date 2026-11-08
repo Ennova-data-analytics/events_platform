@@ -1,7 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from api.routers import users, auth, events, admin, form_templates, uploads, notifications, payments, email_templates, feedback_templates, feedback, ai_summaries, discount_codes, chat, ticket_types, teams, referral_links, tickets, hr_recruitment, recruitment
+from api.routers import users, auth, events, admin, form_templates, uploads, notifications, payments, email_templates, feedback_templates, feedback, ai_summaries, discount_codes, chat, ticket_types, teams, referral_links, tickets, hr_recruitment, recruitment, finance_export
 from middleware import setup_middleware
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,7 @@ def create_app() -> FastAPI:
     app.include_router(tickets.router, tags=["Tickets"])
     app.include_router(hr_recruitment.router, prefix="/hr/recruitment", tags=["Recruitment (HR)"])
     app.include_router(recruitment.router, prefix="/recruitment", tags=["Recruitment (Public)"])
+    app.include_router(finance_export.router)
 
 
     @app.get("/")

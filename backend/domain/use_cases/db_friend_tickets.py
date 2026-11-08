@@ -273,6 +273,7 @@ def _give_ticket(db: Session, friend_ticket: models.FriendTicket, user: models.U
         # revenue go through the buyer.
         paid_by_team_leader=True,
         ticket_token=secrets.token_urlsafe(32),
+        paid_at=_now(),
     )
     db.add(registration)
     db.flush()

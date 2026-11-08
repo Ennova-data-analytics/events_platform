@@ -303,6 +303,7 @@ def create_registration(
         charity_email_consent=charity_email_consent,
         charity_email_consent_at=datetime.utcnow() if charity_email_consent else None,
         member_discount_applied=member_discount_applied,
+        paid_at=datetime.utcnow() if initial_status == 'Paid' else None,
         paid_by_team_leader=is_paid_by_leader,
         referral_link_id=referral_link_id,
         ticket_token=ticket_token,

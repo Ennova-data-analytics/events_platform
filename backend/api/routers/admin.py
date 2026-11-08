@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
 from sqlalchemy.orm import Session
 import pandas as pd
@@ -161,6 +162,8 @@ def mark_registration_paid(
         )
 
     reg.status = 'Paid'
+    reg.paid_at = datetime.now(timezone.utc)
+    reg.paid_at_estimated = False
 
     if not reg.ticket_token:
         reg.ticket_token = secrets.token_urlsafe(32)

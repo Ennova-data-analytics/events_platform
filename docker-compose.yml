@@ -24,6 +24,13 @@ services:
     volumes:
       - model_cache:/root/.cache
       - model_cache_rembg:/root/.u2net
+    # Finnova reads the finance export over the private ennova-shared network as
+    # http://events-backend:8000/internal/finance/... (never through nginx).
+    networks:
+      default:
+      ennova-shared:
+        aliases:
+          - events-backend
     # Cap log growth. Note this only takes effect when the container is
     # recreated, and recreating it discards the existing log.
     logging:
