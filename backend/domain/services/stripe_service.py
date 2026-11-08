@@ -198,6 +198,16 @@ class StripeService:
 
         registration.status = 'Paid'
         registration.stripe_payment_intent_id = payment_intent_id
+        registration.paid_at = datetime.now(timezone.utc)
+        registration.paid_at_estimated = False
+        # Stripe's fee, for the finance app's net revenue. Best effort: the payment
+        # is confirmed either way, and scripts/backfill_payments.py fills gaps.
+        try:
+            charge = StripeService.charge_and_fee(payment_intent_id)
+            if charge:
+                registration.stripe_charge_id, registration.stripe_fee_cents = charge
+        except Exception:
+            logger.warning(f"Couldn't read the Stripe fee for {payment_intent_id}; backfill will fill it", exc_info=True)
 
         # Generate ticket token on payment if not already present
         if not registration.ticket_token:
@@ -221,6 +231,22 @@ class StripeService:
         from domain.use_cases.db_registrations import on_ticket_valid
         on_ticket_valid(db, registration)
 
+
+    @staticmethod
+    def charge_and_fee(payment_intent_id: str) -> tuple[str, int] | None:
+        """The charge behind a payment and Stripe's fee on it, in cents. None when
+        nothing was charged. Raises StripeError if Stripe can't be asked."""
+        intent = stripe.PaymentIntent.retrieve(
+            payment_intent_id, expand=['latest_charge.balance_transaction']
+        )
+        charge = intent.get('latest_charge') if intent.get('status') == 'succeeded' else None
+        if not charge:
+            return None
+        if isinstance(charge, str):  # not expanded: the id only
+            return charge, None
+        balance = charge.get('balance_transaction') or {}
+        fee = balance.get('fee') if not isinstance(balance, str) else None
+        return charge.get('id'), (int(fee) if fee is not None else None)
 
     @staticmethod
     def payment_was_collected(payment_intent_id: str) -> bool:

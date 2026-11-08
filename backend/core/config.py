@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: str 
     STRIPE_PUBLISHABLE_KEY: str 
     STRIPE_WEBHOOK_SECRET: str
+    # Shared with Finnova; reading /internal/finance needs it. Empty = export off.
+    FINANCE_EXPORT_TOKEN: str = ""
     FRONTEND_URL: str = "http://localhost:5173"
 
     APP_TIMEZONE: str = "Europe/Madrid"
