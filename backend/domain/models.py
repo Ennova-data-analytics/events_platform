@@ -49,6 +49,19 @@ class User(Base):
     notifications = relationship("InAppNotification", back_populates="user", cascade="all, delete-orphan", order_by="desc(InAppNotification.created_at)")
     chats = relationship("Chat", back_populates="user", cascade="all, delete-orphan")
 
+class PendingEnnovaMember(Base):
+    """An email from the imported members list that has no account yet."""
+    __tablename__ = "pending_ennova_members"
+    __table_args__ = (
+        CheckConstraint('email = lower(email)', name='check_pending_ennova_member_email_lowercase'),
+    )
+    pending_member_id = Column(Integer, primary_key=True)
+    email = Column(String(255), nullable=False, unique=True, index=True)
+    source_filename = Column(String(255))
+    added_by_user_id = Column(UUID(as_uuid=True), ForeignKey('users.user_id', ondelete="SET NULL"))
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
+
+
 class Role(Base):
     __tablename__ = "roles"
     role_id = Column(Integer, primary_key=True)

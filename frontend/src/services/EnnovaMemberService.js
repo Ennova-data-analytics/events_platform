@@ -51,5 +51,31 @@ export const EnnovaMemberService = {
         return ApiClient.post('/admin/ennova-members/import-excel', formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
         });
+    },
+
+    /**
+     * Emails from imported lists that don't have an account yet;
+     * they become members automatically when they sign up
+     */
+    getPendingMembers(skip = 0, limit = 100, search = null) {
+        const params = { skip, limit };
+        if (search) {
+            params.search = search;
+        }
+        return ApiClient.get('/admin/ennova-members/pending', { params });
+    },
+
+    /**
+     * Take one email off the pending list
+     */
+    removePendingMember(pendingMemberId) {
+        return ApiClient.delete(`/admin/ennova-members/pending/${pendingMemberId}`);
+    },
+
+    /**
+     * Empty the pending list (existing members are not affected)
+     */
+    clearPendingMembers() {
+        return ApiClient.delete('/admin/ennova-members/pending');
     }
 };

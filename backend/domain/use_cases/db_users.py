@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session, joinedload
 from domain import models, schemas 
 from core.security import get_password_hash
+from domain.use_cases import db_ennova_members
 import uuid
 
 def get_user_by_email(db: Session, email: str):
@@ -26,8 +27,9 @@ def create_user(db: Session, user: schemas.UserCreate):
         raise Exception("Default 'attendee' role not found in the db")
 
     db_user.roles.append(attendee_role)
-    
+
     db.add(db_user)
+    db_ennova_members.claim_pending_membership(db, db_user)
     db.commit()
     db.refresh(db_user)
     return db_user
