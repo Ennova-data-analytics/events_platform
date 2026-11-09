@@ -1169,6 +1169,23 @@ class ExcelImportResponse(BaseModel):
     matched_emails: list[str]
     unmatched_emails: list[str]
     already_members: list[str]
+    # Unmatched emails newly saved, so those people become members when they sign up
+    pending_saved_count: int = 0
+
+class PendingEnnovaMemberResponse(BaseModel):
+    pending_member_id: int
+    email: str
+    source_filename: str | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class PendingEnnovaMemberListResponse(BaseModel):
+    pending: list[PendingEnnovaMemberResponse]
+    total_count: int
+
+class PendingEnnovaMembersClearedResponse(BaseModel):
+    removed_count: int
 
 class ChatCreate(BaseModel):
     first_message: str | None = Field(None, max_length=2000)

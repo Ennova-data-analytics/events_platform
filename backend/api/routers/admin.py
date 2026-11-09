@@ -11,7 +11,7 @@ from domain import schemas, models
 from domain.services import notification_service, email_service, email_templates
 from core.config import settings
 from domain.use_cases.db_ticket_types import TicketTypeUseCases
-from domain.use_cases import db_refunds, db_revenue, db_friend_tickets
+from domain.use_cases import db_refunds, db_revenue, db_friend_tickets, db_ennova_members
 from domain.use_cases.db_registrations import on_ticket_valid
 from api import deps
 
@@ -531,6 +531,34 @@ def get_ennova_members(skip: int = 0, limit: int = 100, search: str | None = Non
         total_count=total_count
     )
 
+@router.get("/ennova-members/pending", response_model=schemas.PendingEnnovaMemberListResponse)
+def get_pending_ennova_members(skip: int = 0, limit: int = 100, search: str | None = None, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
+    """Emails from imported member lists that don't have an account yet"""
+    pending, total_count = db_ennova_members.list_pending(db, search=search, skip=skip, limit=limit)
+    return schemas.PendingEnnovaMemberListResponse(
+        pending=[schemas.PendingEnnovaMemberResponse.model_validate(p) for p in pending],
+        total_count=total_count,
+    )
+
+
+@router.delete("/ennova-members/pending", response_model=schemas.PendingEnnovaMembersClearedResponse)
+def clear_pending_ennova_members(db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
+    """Empty the list of emails waiting to sign up (existing members are not affected)"""
+    removed_count = db_ennova_members.clear_pending(db)
+    logger.info(f"{removed_count} pending Ennova member emails cleared by organiser {current_organiser.email}")
+    return schemas.PendingEnnovaMembersClearedResponse(removed_count=removed_count)
+
+
+@router.delete("/ennova-members/pending/{pending_member_id}", response_model=schemas.PendingEnnovaMemberResponse)
+def remove_pending_ennova_member(pending_member_id: int, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
+    """Take one email off the list of people who become members when they sign up"""
+    pending = db_ennova_members.remove_pending(db, pending_member_id)
+    if pending is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pending member not found")
+    logger.info(f"Pending Ennova member {pending.email} removed by organiser {current_organiser.email}")
+    return schemas.PendingEnnovaMemberResponse.model_validate(pending)
+
+
 @router.get("/users/search", response_model=schemas.UserSearchResponse)
 def search_users(q: str, skip: int = 0, limit: int = 50, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
     """Search all users by email or name for adding to Ennova members"""
@@ -694,11 +722,7 @@ async def import_ennova_members_from_excel(
                 f"from Excel import by {current_organiser.email}"
             )
         
-        existing_users = db.query(models.User).filter(
-            models.User.email.in_(valid_emails)
-        ).all()
-        
-        existing_users_dict = {user.email.lower(): user for user in existing_users}
+        existing_users_dict = db_ennova_members.find_users_by_emails(db, valid_emails)
         matched_emails = []
         unmatched_emails = []
         already_members = []
@@ -717,14 +741,22 @@ async def import_ennova_members_from_excel(
                     added_count += 1
             else:
                 unmatched_emails.append(email)
-        
+
+        pending_saved_count = db_ennova_members.save_pending(
+            db,
+            unmatched_emails,
+            source_filename=file.filename,
+            added_by_user_id=current_organiser.user_id,
+        )
+
         db.commit()
-        
+
         logger.info(
             f"Excel import by {current_organiser.email}: "
             f"{added_count} new members added, "
             f"{len(already_members)} already members, "
-            f"{len(unmatched_emails)} unmatched emails. "
+            f"{len(unmatched_emails)} unmatched emails "
+            f"({pending_saved_count} newly saved to join on sign-up). "
             f"Email column used: '{email_column}'"
         )
         
@@ -735,9 +767,12 @@ async def import_ennova_members_from_excel(
             added_count=added_count,
             matched_emails=matched_emails,
             unmatched_emails=unmatched_emails,
-            already_members=already_members
+            already_members=already_members,
+            pending_saved_count=pending_saved_count,
         )
-        
+
+    except HTTPException:
+        raise
     except pd.errors.EmptyDataError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -749,7 +784,8 @@ async def import_ennova_members_from_excel(
             detail=f"Error parsing file: {str(e)}. Please ensure it's a valid Excel or CSV file."
         )
     except Exception as e:
-        logger.error(f"Error importing Excel file: {str(e)}")
+        db.rollback()
+        logger.exception(f"Error importing Excel file: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing file: {str(e)}"

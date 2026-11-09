@@ -79,6 +79,76 @@
       </v-col>
     </v-row>
 
+    <!-- Pending Members (on the list, no account yet) -->
+    <v-row class="mt-4">
+      <v-col cols="12">
+        <v-card data-test="pending-members">
+          <v-card-title class="d-flex flex-wrap align-center ga-2">
+            <span class="text-h6">Waiting for sign-up ({{ totalPending }})</span>
+            <v-spacer></v-spacer>
+            <v-btn
+              v-if="totalPending > 0"
+              color="error"
+              variant="text"
+              prepend-icon="mdi-delete-sweep"
+              @click="clearPendingDialog = true"
+            >
+              Clear list
+            </v-btn>
+          </v-card-title>
+          <v-card-subtitle class="text-wrap">
+            Emails from imported member lists that don't have an account yet. When someone signs up with one of these emails they become an Ennova member automatically.
+          </v-card-subtitle>
+          <v-card-text>
+            <v-text-field
+              v-model="pendingSearchQuery"
+              prepend-inner-icon="mdi-magnify"
+              label="Search emails"
+              variant="outlined"
+              density="compact"
+              clearable
+              class="mt-2"
+              @input="debouncedPendingSearch"
+              @click:clear="loadPendingMembers"
+            ></v-text-field>
+            <v-alert v-if="pendingError" type="error" variant="tonal" class="mb-4">
+              {{ pendingError }}
+            </v-alert>
+            <v-data-table
+              :headers="pendingHeaders"
+              :items="pendingMembers"
+              :loading="loadingPending"
+              :items-per-page="itemsPerPage"
+              class="elevation-1"
+            >
+              <template v-slot:item.created_at="{ item }">
+                {{ formatDate(item.created_at) }}
+              </template>
+              <template v-slot:item.source_filename="{ item }">
+                {{ item.source_filename || '—' }}
+              </template>
+              <template v-slot:item.actions="{ item }">
+                <v-btn
+                  size="small"
+                  color="error"
+                  variant="text"
+                  icon="mdi-delete"
+                  :aria-label="`Remove ${item.email} from the list`"
+                  :loading="removingPendingId === item.pending_member_id"
+                  @click="removePendingMember(item)"
+                ></v-btn>
+              </template>
+              <template v-slot:no-data>
+                <v-alert type="info" variant="tonal" class="ma-4">
+                  No emails waiting. Emails in an imported list that don't have an account yet will show up here.
+                </v-alert>
+              </template>
+            </v-data-table>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+
     <!-- Add Member Dialog -->
     <v-dialog v-model="addMemberDialog" :max-width="$vuetify.display.mobile ? '95vw' : '600px'">
       <v-card>
@@ -132,6 +202,7 @@
           <v-alert type="info" variant="tonal" class="mb-4">
             Upload an Excel file (.xlsx, .xls) or CSV file containing a column with member emails.
             The file should have a column named "email" or "Esade email".
+            Emails without an account yet are saved, and those people become members as soon as they sign up.
           </v-alert>
 
           <v-file-input
@@ -170,17 +241,28 @@
                 </v-col>
                 <v-col cols="6">
                   <v-list-item>
-                    <v-list-item-title class="text-subtitle-2">Not Found</v-list-item-title>
+                    <v-list-item-title class="text-subtitle-2">No Account Yet</v-list-item-title>
                     <v-list-item-subtitle class="text-h6 text-warning">{{ importResults.unmatched_count }}</v-list-item-subtitle>
                   </v-list-item>
                 </v-col>
               </v-row>
 
+              <v-alert
+                v-if="importResults.unmatched_count > 0"
+                type="info"
+                variant="tonal"
+                density="compact"
+                class="mt-2"
+                data-test="pending-saved"
+              >
+                {{ pendingSavedMessage(importResults) }}
+              </v-alert>
+
               <v-expansion-panels v-if="importResults.unmatched_emails.length > 0" class="mt-4">
                 <v-expansion-panel>
                   <v-expansion-panel-title>
                     <v-icon class="mr-2">mdi-alert-circle</v-icon>
-                    Unmatched Emails ({{ importResults.unmatched_emails.length }})
+                    Emails Without an Account ({{ importResults.unmatched_emails.length }})
                   </v-expansion-panel-title>
                   <v-expansion-panel-text>
                     <v-chip
@@ -228,6 +310,22 @@
       </v-card>
     </v-dialog>
 
+    <!-- Clear Pending Confirmation Dialog -->
+    <v-dialog v-model="clearPendingDialog" :max-width="$vuetify.display.mobile ? '90vw' : '500px'">
+      <v-card>
+        <v-card-title class="text-h5">Clear the list?</v-card-title>
+        <v-card-text>
+          The {{ totalPending }} email{{ totalPending === 1 ? '' : 's' }} waiting for sign-up will be removed, and those people won't become members when they create an account.
+          Current members are not affected.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="clearPendingDialog = false">Cancel</v-btn>
+          <v-btn color="error" :loading="clearingPending" @click="clearPendingMembers">Clear list</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Snackbar for notifications -->
     <v-snackbar v-model="snackbar" :color="snackbarColor" :timeout="3000">
       {{ snackbarMessage }}
@@ -266,6 +364,17 @@ export default {
       memberToRemove: null,
       removing: false,
 
+      // Pending members (on the list, no account yet)
+      pendingMembers: [],
+      totalPending: 0,
+      loadingPending: false,
+      pendingError: '',
+      pendingSearchQuery: '',
+      pendingSearchTimeout: null,
+      removingPendingId: null,
+      clearPendingDialog: false,
+      clearingPending: false,
+
       // Snackbar
       snackbar: false,
       snackbarMessage: '',
@@ -278,11 +387,19 @@ export default {
         { title: 'Study Year', key: 'study_year', sortable: false },
         { title: 'Member Since', key: 'created_at', sortable: true },
         { title: 'Actions', key: 'actions', sortable: false, align: 'end' }
+      ],
+
+      pendingHeaders: [
+        { title: 'Email', key: 'email', sortable: true },
+        { title: 'Imported From', key: 'source_filename', sortable: false },
+        { title: 'Added', key: 'created_at', sortable: true },
+        { title: 'Actions', key: 'actions', sortable: false, align: 'end' }
       ]
     };
   },
   mounted() {
     this.loadMembers();
+    this.loadPendingMembers();
   },
   methods: {
     async loadMembers() {
@@ -364,6 +481,7 @@ export default {
       this.excelFile = null;
       this.importResults = null;
       this.loadMembers();
+      this.loadPendingMembers();
     },
 
     async uploadExcelFile() {
@@ -412,6 +530,77 @@ export default {
       } finally {
         this.removing = false;
       }
+    },
+
+    async loadPendingMembers() {
+      this.loadingPending = true;
+      this.pendingError = '';
+      try {
+        const response = await EnnovaMemberService.getPendingMembers(0, 1000, this.pendingSearchQuery || null);
+        this.pendingMembers = response.data.pending;
+        this.totalPending = response.data.total_count;
+      } catch (error) {
+        this.pendingError = `Failed to load the emails waiting for sign-up: ${error.response?.data?.detail || error.message}`;
+        console.error('Error loading pending members:', error);
+      } finally {
+        this.loadingPending = false;
+      }
+    },
+
+    debouncedPendingSearch() {
+      clearTimeout(this.pendingSearchTimeout);
+      this.pendingSearchTimeout = setTimeout(() => {
+        this.loadPendingMembers();
+      }, 500);
+    },
+
+    async removePendingMember(item) {
+      this.removingPendingId = item.pending_member_id;
+      try {
+        await EnnovaMemberService.removePendingMember(item.pending_member_id);
+        this.showSnackbar(`${item.email} removed from the list`, 'success');
+        await this.loadPendingMembers();
+      } catch (error) {
+        this.showSnackbar(
+          `Failed to remove ${item.email}: ${error.response?.data?.detail || error.message}`,
+          'error'
+        );
+        console.error('Error removing pending member:', error);
+      } finally {
+        this.removingPendingId = null;
+      }
+    },
+
+    async clearPendingMembers() {
+      this.clearingPending = true;
+      try {
+        const response = await EnnovaMemberService.clearPendingMembers();
+        const removed = response.data.removed_count;
+        this.showSnackbar(`Removed ${removed} email${removed === 1 ? '' : 's'} from the list`, 'success');
+        this.clearPendingDialog = false;
+        await this.loadPendingMembers();
+      } catch (error) {
+        this.showSnackbar(
+          `Failed to clear the list: ${error.response?.data?.detail || error.message}`,
+          'error'
+        );
+        console.error('Error clearing pending members:', error);
+      } finally {
+        this.clearingPending = false;
+      }
+    },
+
+    pendingSavedMessage(results) {
+      const saved = results.pending_saved_count ?? 0;
+      const alreadySaved = results.unmatched_count - saved;
+      const people = (n) => `${n} ${n === 1 ? 'person' : 'people'}`;
+      const count = results.unmatched_count;
+      let message = `${people(count)} ${count === 1 ? "doesn't" : "don't"} have an account yet. ` +
+        `${count === 1 ? "They'll become a member" : "They'll become members"} automatically when they sign up.`;
+      if (alreadySaved > 0) {
+        message += ` (${alreadySaved} ${alreadySaved === 1 ? 'was' : 'were'} already on the list from an earlier import.)`;
+      }
+      return message;
     },
 
     formatDate(dateString) {
