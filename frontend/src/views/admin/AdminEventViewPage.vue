@@ -35,6 +35,7 @@
           <span class="d-none d-sm-inline">Time Change Email</span>
           <span class="d-sm-none">Time Change</span>
         </v-btn>
+        <RegistrationsExportButton :event-id="eventId" :event-title="eventTitle" />
         <v-btn
           :color="signupsEnabled ? 'success' : 'error'"
           variant="tonal"
@@ -1023,6 +1024,7 @@ import GuestTicketManager from '@/components/tickets/GuestTicketManager.vue';
 import EventDonationsList from '@/components/admin/EventDonationsList.vue';
 import CharityEmailConsentList from '@/components/admin/CharityEmailConsentList.vue';
 import RefundDialog from '@/components/admin/RefundDialog.vue';
+import RegistrationsExportButton from '@/components/admin/RegistrationsExportButton.vue';
 import { batchColor, canRefund, formatEuros, priceNote, refundBadge, summarizeBatch, ticketAmount } from '@/utils/refunds.js';
 import { TicketService } from '@/services/TicketService';
 

@@ -106,6 +106,11 @@ export const EventService = {
     return ApiClient.get(`/events/${eventId}/registrations`);
   },
 
+  // Every registration as an Excel workbook (one sheet per status).
+  exportEventRegistrations(eventId) {
+    return ApiClient.get(`/events/${eventId}/registrations/export`, { responseType: 'blob' });
+  },
+
   toggleSignups(eventId) {
     return ApiClient.patch(`/events/${eventId}/toggle-signups`);
   },
@@ -230,6 +235,7 @@ export const {
   registerForEvent,
   updateRegistrationFormResponses,
   getEventRegistrations,
+  exportEventRegistrations,
   toggleSignups,
   uploadEventPhotos,
   getEventPhotos,

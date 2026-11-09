@@ -9,6 +9,8 @@ import os
 from domain import schemas, models
 from domain.use_cases import db_events, db_event_duplication, db_registrations, db_donations, db_revenue, db_event_photos, db_event_attachments, users_uc, db_friend_tickets
 from domain.use_cases.calendar_export import GenerateEventCalendarUseCase
+from domain.use_cases import registrations_export
+from domain.use_cases.event_permissions import check_can_manage_event
 from domain.exceptions import EventNotFoundException, RegistrationNotFoundException, UnauthorizedCalendarAccessException
 from api import deps
 from core import s3_service, security, qr_service
@@ -538,6 +540,27 @@ def read_event_registrations(event_id: int, db: Session = Depends(deps.get_db), 
     """Retrieve a list of all registered attendees for a specific event"""
     registrations = db_registrations.get_registrations_for_event(db=db, event_id=event_id)
     return registrations
+
+@router.get("/{event_id}/registrations/export", tags=["Admin"])
+def export_event_registrations(event_id: int, db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
+    """Download every registration for the event as an Excel workbook, one sheet per status"""
+    db_event = db_events.get_event(db, event_id=event_id)
+    if not db_event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+    check_can_manage_event(db_event, current_organiser, "export this event's attendees")
+
+    registrations = registrations_export.registrations_for_export(db, event_id)
+    content = registrations_export.build_registrations_workbook(db_event, registrations)
+    filename = registrations_export.export_filename(db_event)
+    logger.info(f"Organiser {current_organiser.email} exported {len(registrations)} registrations for event {event_id}")
+    return Response(
+        content=content,
+        media_type=registrations_export.XLSX_MEDIA_TYPE,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 @router.post("/{event_id}/image", response_model=schemas.Event, tags=["Admin"])
 def upload_event_image(event_id: int, file: UploadFile = File(...), db: Session = Depends(deps.get_db), current_organiser: models.User = Depends(deps.get_current_active_organiser)):
