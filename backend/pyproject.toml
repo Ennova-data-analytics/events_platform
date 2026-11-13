@@ -9,7 +9,7 @@ packages = [{include = "api"}, {include = "core"}, {include = "domain"}, {includ
 [tool.poetry.dependencies]
 python = ">=3.11,<3.14" 
 
-fastapi = "^0.111.0"
+fastapi = "^0.162.0"
 uvicorn = {extras = ["standard"], version = "^0.29.0"}
 
 sqlalchemy = "^2.0.30"
@@ -17,7 +17,7 @@ psycopg2-binary = "^2.9.9" # Binary version for easy installation
 alembic = "^1.13.1"
 
 bcrypt = "^4.2.0"
-python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+pyjwt = "^2.15.0"
 
 python-dotenv = "^1.0.1"
 pydantic-settings = "^2.2.1"
@@ -26,7 +26,7 @@ email-validator = "^2.1.1"
 
 boto3 = "^1.34.113"
 
-python-multipart = "^0.0.9"
+python-multipart = "^0.0.33"
 
 stripe = "^7.0.0"
 resend = "^2.16.0"
@@ -36,25 +36,26 @@ rembg = "^2.0.50"
 onnxruntime = "^1.16.0"
 jinja2 = "^3.1.0"
 
-langchain = "^0.3.0"
-langchain-openai = "^0.2.0"
-langchain-core = "^0.3.0"
-openai = "^1.54.0"
+langchain-openai = "^1.7.0"
+langchain-core = "^1.8.0"
+openai = "^2.45.0"
 markdown = "^3.7"
 
 pandas = "^2.2.0"
 openpyxl = "^3.1.0"
 
-sentence-transformers = "^3.3.0"
+sentence-transformers = "^6.3.0"
 
 qdrant-client = "^1.7.0"
 python-docx = "^1.1.0"
-langchain-text-splitters = "^0.3.0"
+langchain-text-splitters = "^1.1.0"
 
 icalendar = "^6.3.2"
 reportlab = "^4.4.10"
 
-pypdf = "^5.1.0"
+# crypto: CVs saved with editing restrictions are AES-encrypted (empty password);
+# without it pypdf cannot read them. python-jose used to pull cryptography in.
+pypdf = {version = "^7.1.0", extras = ["crypto"]}
 apscheduler = "^3.11.0"
 
 # Pulled in by sentence-transformers. Pinned to PyTorch's CPU-only index: the
@@ -79,6 +80,8 @@ priority = "explicit"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.0"
+# fastapi.testclient needs it; FastAPI no longer installs it by default.
+httpx2 = "^2.16.0"
 # Linters and formatters can be added here in the future
 # black = "^24.4.2"
 # ruff = "^0.4.4"

@@ -2,7 +2,8 @@ from db.session import SessionLocal
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from jose import jwt, JWTError
+import jwt
+from jwt import InvalidTokenError
 
 from domain import models
 from domain.use_cases import db_users
@@ -41,7 +42,7 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
-    except JWTError:
+    except InvalidTokenError:
         raise credentials_exception
     
     user = db_users.get_user_by_email(db, email=email)
@@ -120,7 +121,7 @@ def get_current_user_optional(
         email: str = payload.get("sub")
         if email is None:
             return None
-    except JWTError:
+    except InvalidTokenError:
         return None
 
     user = db_users.get_user_by_email(db, email=email)
@@ -146,7 +147,7 @@ def get_optional_current_user(
         email: str = payload.get("sub")
         if email is None:
             return None
-    except JWTError:
+    except InvalidTokenError:
         return None
 
     user = db_users.get_user_by_email(db, email=email)
