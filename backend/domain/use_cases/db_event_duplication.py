@@ -50,8 +50,6 @@ def _copy_ticket_types(db: Session, source: models.Event, new_event_id: int) -> 
             description=tt.description,
             price_euros=tt.price_euros,
             capacity=tt.capacity,
-            # A fresh run starts with nothing sold.
-            tickets_sold=0,
             form_template_id=tt.form_template_id,
             display_order=tt.display_order,
             is_active=tt.is_active,

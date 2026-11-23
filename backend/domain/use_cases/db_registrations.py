@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
 from fastapi import HTTPException, status
 from domain import models
@@ -51,6 +52,59 @@ def check_charity_email_consent(event: models.Event, consent: bool) -> None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This event is no longer asking for consent to charity emails. Please refresh the page."
+        )
+
+
+def lock_event_seats_left(db: Session, event: models.Event) -> int | None:
+    """
+    Seats left on an event without ticket types (None if unlimited), counted
+    the same way as on a ticket type (see models.SEAT_HOLDING_STATUSES).
+    Locks the event's row until the caller commits.
+    """
+    capacity = db.query(models.Event.capacity).filter(
+        models.Event.event_id == event.event_id
+    ).with_for_update().scalar()
+    if capacity is None:
+        return None
+    taken = db.query(func.count(models.Registration.registration_id)).filter(
+        models.Registration.event_id == event.event_id,
+        models.Registration.status.in_(models.SEAT_HOLDING_STATUSES),
+    ).scalar()
+    return capacity - taken
+
+
+def seats_needed(registration: models.Registration) -> int:
+    """Seats a registration takes once accepted: its own, plus a bring-a-friend
+    seat the friend hasn't yet turned into a registration of their own."""
+    friend_ticket = registration.friend_ticket
+    return 2 if friend_ticket is not None and friend_ticket.status != 'claimed' else 1
+
+
+def check_seats_to_accept(db: Session, registration: models.Registration) -> None:
+    """
+    Refuse to accept (approve) a registration that doesn't hold a seat yet
+    when there isn't room for it. Locks the ticket type or event until the
+    caller commits.
+    """
+    if registration.status in models.SEAT_HOLDING_STATUSES:
+        return
+    needed = seats_needed(registration)
+    if registration.ticket_type is not None:
+        left = TicketTypeUseCases.lock_seats_left(db, registration.ticket_type)
+        where = f"The '{registration.ticket_type.name}' ticket type"
+        fix = "Raise its capacity"
+    else:
+        left = lock_event_seats_left(db, registration.event)
+        where = "This event"
+        fix = "Raise the event's capacity"
+    if left is not None and left < needed:
+        seats = "1 seat" if needed == 1 else f"{needed} seats"
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"{where} is full: approving this registration needs {seats} "
+                f"and {max(left, 0)} left. {fix} or free a seat first."
+            ),
         )
 
 
@@ -149,20 +203,18 @@ def create_registration(
             db, event_id, ticket_type, user.email, friend_email, discount_code
         )
 
-        if ticket_type.capacity is not None:
-            # Friends' seats count from checkout, before they have a registration.
-            seats_taken = db.query(models.Registration).filter(
-                models.Registration.ticket_type_id == ticket_type_id,
-                models.Registration.status != 'Cancelled'
-            ).count() + db_friend_tickets.held_friend_seats(db, ticket_type_id)
+        # Refused when full even if the sign-up would wait for approval:
+        # there would be no seat to approve it into. Holds the ticket type's
+        # lock until the registration is committed.
+        seats_left = TicketTypeUseCases.lock_seats_left(db, ticket_type)
+        if seats_left is not None:
             seats_needed = 2 if ticket_type.bring_a_friend else 1
-
-            if seats_taken >= ticket_type.capacity:
+            if seats_left <= 0:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"The '{ticket_type.name}' ticket type is sold out"
                 )
-            if seats_taken + seats_needed > ticket_type.capacity:
+            if seats_left < seats_needed:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Only one '{ticket_type.name}' seat is left, and this deal needs two"
@@ -218,17 +270,12 @@ def create_registration(
                     detail=f"Team '{team.team_name}' is full"
                 )
 
-        if event.capacity is not None:
-            current_registrations = db.query(models.Registration).filter(
-                models.Registration.event_id == event_id,
-                models.Registration.status != 'Cancelled'
-            ).count()
-
-            if current_registrations >= event.capacity:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="This event is full"
-                )
+        seats_left = lock_event_seats_left(db, event)
+        if seats_left is not None and seats_left <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This event is full"
+            )
 
  
     is_completely_free_event = price_euros is None or price_euros == 0
@@ -357,10 +404,6 @@ def create_registration(
             teammate_emails=team_selection.teammate_emails,
         )
 
-    # Increment tickets_sold counter if registration is immediately marked as Paid
-    if initial_status == 'Paid' and ticket_type_id:
-        TicketTypeUseCases.increment_tickets_sold(db, ticket_type_id)
-
     # Nothing to pay (free, or free for members): the friend's ticket and the
     # team invites go out now. Otherwise they wait for the payment.
     on_ticket_valid(db, db_registration)
@@ -484,7 +527,7 @@ def get_registrations_for_event(db: Session, event_id: int):
 
 
 def cancel_registration(db: Session, registration_id: int):
-    """Cancel a registration and free up ticket capacity"""
+    """Cancel a registration. Its seat, if it held one, is free again."""
     registration = db.query(models.Registration).filter(
         models.Registration.registration_id == registration_id
     ).first()
@@ -500,9 +543,6 @@ def cancel_registration(db: Session, registration_id: int):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Registration already cancelled"
         )
-
-    if registration.ticket_type_id:
-        TicketTypeUseCases.decrement_tickets_sold(db, registration.ticket_type_id)
 
     registration.status = 'Cancelled'
     db.commit()

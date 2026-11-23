@@ -47,7 +47,7 @@ class TestStripeRefund:
     def test_refunds_the_card_and_the_ticket_stays_valid(
         self, client, db, organiser_headers, event, make_ticket_type, make_registration, stripe_fake, sent_emails
     ):
-        ticket_type = make_ticket_type(event, tickets_sold=1)
+        ticket_type = make_ticket_type(event)
         reg = make_registration(event, ticket_type=ticket_type, ticket_token='tok-123')
 
         response = refund(client, organiser_headers, event, [reg])

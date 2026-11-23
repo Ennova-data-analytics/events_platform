@@ -10,9 +10,8 @@ import secrets
 from domain import schemas, models
 from domain.services import notification_service, email_service, email_templates
 from core.config import settings
-from domain.use_cases.db_ticket_types import TicketTypeUseCases
 from domain.use_cases import db_refunds, db_revenue, db_friend_tickets, db_ennova_members
-from domain.use_cases.db_registrations import on_ticket_valid
+from domain.use_cases.db_registrations import on_ticket_valid, check_seats_to_accept
 from api import deps
 
 logger = logging.getLogger(__name__)
@@ -79,6 +78,7 @@ def approve_registration(
     if not reg:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration not found")
 
+    check_seats_to_accept(db, reg)
     reg.status = 'Approved'
 
     if approval_data.custom_amount_euros is not None:
@@ -130,10 +130,6 @@ def revert_registration_to_pending(registration_id: int, db: Session = Depends(d
     if reg.status not in ['Approved', 'Rejected', 'Paid']:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Can only revert approved, rejected, or paid registrations")
 
-    # If reverting from Paid status, decrement tickets_sold counter
-    if reg.status == 'Paid' and reg.ticket_type_id:
-        TicketTypeUseCases.decrement_tickets_sold(db, reg.ticket_type_id)
-
     # A friend's ticket that hasn't been claimed waits for the buyer again.
     db_friend_tickets.unrelease(db, reg)
 
@@ -167,10 +163,6 @@ def mark_registration_paid(
 
     if not reg.ticket_token:
         reg.ticket_token = secrets.token_urlsafe(32)
-
-    # Increment tickets_sold counter if this registration has a ticket type
-    if reg.ticket_type_id:
-        TicketTypeUseCases.increment_tickets_sold(db, reg.ticket_type_id)
 
     db.commit()
     db.refresh(reg)
@@ -206,10 +198,6 @@ def delete_registration(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to delete this registration"
         )
-
-    # If deleting a Paid registration, decrement tickets_sold counter
-    if reg.status == 'Paid' and reg.ticket_type_id:
-        TicketTypeUseCases.decrement_tickets_sold(db, reg.ticket_type_id)
 
     # The unclaimed friend's seat goes with it. A friend who already has their
     # ticket keeps it.

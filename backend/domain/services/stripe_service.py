@@ -213,11 +213,6 @@ class StripeService:
         if not registration.ticket_token:
             registration.ticket_token = secrets.token_urlsafe(32)
 
-        # Increment tickets_sold counter if this registration has a ticket type
-        if registration.ticket_type_id:
-            from domain.use_cases.db_ticket_types import TicketTypeUseCases
-            TicketTypeUseCases.increment_tickets_sold(db, registration.ticket_type_id)
-
         db.commit()
 
         logger.info(f"Registration {registration_id} marked as paid")
