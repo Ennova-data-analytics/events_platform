@@ -223,11 +223,12 @@ class DiscountCodeUseCases:
 
     @staticmethod
     def increment_usage_count(db: Session, code_id: int) -> None:
-        """Increment the usage count for a discount code"""
+        """Count a use of a discount code. The caller commits, so the use is
+        saved together with the registration that used it."""
         discount_code = db.query(DiscountCode).filter(DiscountCode.code_id == code_id).first()
         if discount_code:
             discount_code.used_count += 1
-            db.commit()
+            db.flush()
 
     @staticmethod
     def get_discount_code_usages(db: Session, code_id: int, user: User) -> DiscountCodeUsageResponse:

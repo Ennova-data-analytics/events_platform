@@ -15,9 +15,9 @@ Until the friend has the ticket, the buyer can change the email (the old link
 stops working) or resend it, up to the start of the event. A ticket nobody
 claims is not refunded.
 
-Seats: a held friend seat counts against the ticket type's capacity from
-checkout. tickets_sold counts it from release, the same moment the buyer's own
-seat is counted, so the friend's registration doesn't count it again.
+Seats: the friend's seat is held whenever the buyer's registration holds
+one (approved or paid), until the friend has a registration of their own,
+which is then counted instead (see models.seats_taken_expression).
 """
 import logging
 import secrets
@@ -57,19 +57,6 @@ def _new_token() -> str:
 
 
 # --- checkout ---------------------------------------------------------------
-
-def held_friend_seats(db: Session, ticket_type_id: int) -> int:
-    """Friend seats bought but not yet turned into registrations. Once the
-    friend has their registration it is counted like any other."""
-    return db.query(func.count(models.FriendTicket.friend_ticket_id)).join(
-        models.Registration,
-        models.Registration.registration_id == models.FriendTicket.buyer_registration_id,
-    ).filter(
-        models.Registration.ticket_type_id == ticket_type_id,
-        models.Registration.status != 'Cancelled',
-        models.FriendTicket.status != 'claimed',
-    ).scalar() or 0
-
 
 def _registration_for_email(db: Session, event_id: int, email: str) -> models.Registration | None:
     return db.query(models.Registration).join(models.User).filter(
@@ -186,17 +173,14 @@ def release_if_ready(db: Session, registration: models.Registration) -> None:
 def unrelease(db: Session, registration: models.Registration) -> None:
     """
     The buyer's ticket stopped being valid (an organiser reverted or deleted
-    it). An unclaimed friend ticket goes back to waiting, and its seat comes
-    off tickets_sold, so paying again releases it again. The caller commits.
+    it). An unclaimed friend ticket goes back to waiting, so paying again
+    releases it again. The caller commits.
     """
     friend_ticket = registration.friend_ticket
     if friend_ticket is None or friend_ticket.status != 'sent':
         return
     friend_ticket.status = 'awaiting_payment'
     friend_ticket.released_at = None
-    ticket_type = registration.ticket_type
-    if ticket_type is not None and ticket_type.tickets_sold > 0:
-        ticket_type.tickets_sold -= 1
 
 
 def _lock(db: Session, friend_ticket_id: int) -> models.FriendTicket:
@@ -213,10 +197,6 @@ def _release(db: Session, friend_ticket_id: int) -> None:
 
     friend_ticket.status = 'sent'
     friend_ticket.released_at = _now()
-    ticket_type = friend_ticket.buyer_registration.ticket_type
-    if ticket_type is not None:
-        # The friend's seat, counted alongside the buyer's.
-        ticket_type.tickets_sold += 1
     db.commit()
     logger.info(f"Released friend ticket {friend_ticket_id} to {friend_ticket.friend_email}")
 

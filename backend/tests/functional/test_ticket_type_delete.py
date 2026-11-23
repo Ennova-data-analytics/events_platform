@@ -34,7 +34,7 @@ class TestDelete:
     def test_held_ticket_type_is_hidden_and_holders_keep_it(
         self, client, db, organiser_headers, event, make_ticket_type, make_registration
     ):
-        ticket_type = make_ticket_type(event, name='Early Bird', tickets_sold=1)
+        ticket_type = make_ticket_type(event, name='Early Bird')
         paid = make_registration(event, ticket_type=ticket_type, ticket_token='tok-early')
         pending = make_registration(event, ticket_type=ticket_type, status='Pending Approval')
 

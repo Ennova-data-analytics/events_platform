@@ -124,7 +124,7 @@ class TicketTypeUseCases:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Cannot reduce capacity to {ticket_type_data.capacity}. "
-                           f"Already sold {db_ticket_type.tickets_sold} tickets."
+                           f"{db_ticket_type.tickets_sold} seats are already taken."
                 )
 
         update_data = ticket_type_data.model_dump(exclude_unset=True)
@@ -253,33 +253,18 @@ class TicketTypeUseCases:
         }
 
     @staticmethod
-    def increment_tickets_sold(db: Session, ticket_type_id: int, quantity: int = 1) -> None:
-        """Increment the tickets_sold counter (called when registration is confirmed)"""
-        db_ticket_type = TicketTypeUseCases.get_ticket_type(db, ticket_type_id)
+    def lock_seats_left(db: Session, ticket_type: models.TicketType) -> int | None:
+        """
+        Seats left on a ticket type (None if its capacity is unlimited).
 
-        if db_ticket_type.capacity is not None:
-            if db_ticket_type.tickets_sold + quantity > db_ticket_type.capacity:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Not enough tickets available"
-                )
-
-        db_ticket_type.tickets_sold += quantity
-        db.commit()
-
-        logger.info(f"Incremented tickets_sold for ticket type {ticket_type_id} by {quantity}")
-
-    @staticmethod
-    def decrement_tickets_sold(db: Session, ticket_type_id: int, quantity: int = 1) -> None:
-        """Decrement the tickets_sold counter (called when registration is cancelled)"""
-        db_ticket_type = TicketTypeUseCases.get_ticket_type(db, ticket_type_id)
-
-        if db_ticket_type.tickets_sold - quantity < 0:
-            logger.warning(f"Attempted to decrement tickets_sold below 0 for ticket type {ticket_type_id}")
-            db_ticket_type.tickets_sold = 0
-        else:
-            db_ticket_type.tickets_sold -= quantity
-
-        db.commit()
-
-        logger.info(f"Decremented tickets_sold for ticket type {ticket_type_id} by {quantity}")
+        Locks the ticket type's row until the caller commits, so two people
+        can't both take the last seat. Call it right before the change that
+        takes a seat, in the same transaction.
+        """
+        capacity = db.query(models.TicketType.capacity).filter(
+            models.TicketType.ticket_type_id == ticket_type.ticket_type_id
+        ).with_for_update().scalar()
+        if capacity is None:
+            return None
+        taken = db.query(models.seats_taken_expression(ticket_type.ticket_type_id)).scalar()
+        return capacity - taken

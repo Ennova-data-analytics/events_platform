@@ -4,10 +4,11 @@ from datetime import datetime
 from decimal import Decimal
 from sqlalchemy import (
     Boolean, Column, ForeignKey, Integer, String, TIMESTAMP, Table,
-    Text, DECIMAL, ARRAY, JSON, Enum, CheckConstraint, Float, UniqueConstraint
+    Text, DECIMAL, ARRAY, JSON, Enum, CheckConstraint, Float, UniqueConstraint,
+    func, select,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import relationship, declarative_base, backref as orm_backref
+from sqlalchemy.orm import relationship, declarative_base, backref as orm_backref, aliased, column_property
 from sqlalchemy.ext.hybrid import hybrid_property
 
 Base = declarative_base()
@@ -280,7 +281,8 @@ class TicketType(Base):
     price_euros = Column(DECIMAL(10, 2), nullable=False, default=0.00)
 
     capacity = Column(Integer, nullable=True)
-    tickets_sold = Column(Integer, nullable=False, default=0)
+    # tickets_sold (seats taken) is computed from the registrations; it is
+    # attached below, once Registration and FriendTicket exist.
 
     form_template_id = Column(Integer, ForeignKey('form_templates.template_id', ondelete="SET NULL"), nullable=True)
     display_order = Column(Integer, nullable=False, default=0)
@@ -317,9 +319,9 @@ class TicketType(Base):
     registrations = relationship("Registration", back_populates="ticket_type")
     form_template = relationship("FormTemplate", foreign_keys=[form_template_id])
 
-    @hybrid_property
+    @property
     def tickets_available(self):
-        """Compute remaining tickets (None if unlimited capacity)"""
+        """Seats left (None if unlimited capacity)"""
         if self.capacity is None:
             return None
         return self.capacity - self.tickets_sold
@@ -327,7 +329,6 @@ class TicketType(Base):
     __table_args__ = (
         CheckConstraint("price_euros >= 0", name='check_ticket_price_non_negative'),
         CheckConstraint("capacity IS NULL OR capacity > 0", name='check_ticket_capacity_positive'),
-        CheckConstraint("tickets_sold >= 0", name='check_tickets_sold_non_negative'),
         CheckConstraint("display_order >= 0", name='check_display_order_non_negative'),
         CheckConstraint("team_max_members IS NULL OR team_max_members > 0", name='check_ticket_team_max_members_positive'),
         CheckConstraint("group_size IS NULL OR group_size > 1", name='check_group_size_gt_one'),
@@ -1134,3 +1135,48 @@ class RecruitmentToken(Base):
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
 
     application = relationship("Application", back_populates="tokens")
+
+
+# --- seats ------------------------------------------------------------------
+#
+# A seat is held by a registration that has been accepted: 'Approved' (free,
+# or offered and awaiting payment) or 'Paid'. Applications waiting for review
+# and rejected or cancelled ones don't hold one, so organisers can take more
+# applications than there are seats and choose. A "bring a friend" purchase
+# also holds the friend's seat until the friend has their own registration,
+# which is then counted like any other.
+#
+# Seats are always counted from the registrations, never kept as a running
+# total, so the number shown on the event page and the number checked at
+# sign-up and approval are the same.
+
+SEAT_HOLDING_STATUSES = ('Approved', 'Paid')
+
+
+def seats_taken_expression(ticket_type_id):
+    """SQL for the seats taken on a ticket type, given its id column or value."""
+    buyer = aliased(Registration)
+    registrations = (
+        select(func.count(Registration.registration_id))
+        .where(
+            Registration.ticket_type_id == ticket_type_id,
+            Registration.status.in_(SEAT_HOLDING_STATUSES),
+        )
+        .correlate_except(Registration)
+        .scalar_subquery()
+    )
+    held_friend_seats = (
+        select(func.count(FriendTicket.friend_ticket_id))
+        .join(buyer, buyer.registration_id == FriendTicket.buyer_registration_id)
+        .where(
+            buyer.ticket_type_id == ticket_type_id,
+            buyer.status.in_(SEAT_HOLDING_STATUSES),
+            FriendTicket.status != 'claimed',
+        )
+        .correlate_except(FriendTicket, buyer)
+        .scalar_subquery()
+    )
+    return registrations + held_friend_seats
+
+
+TicketType.tickets_sold = column_property(seats_taken_expression(TicketType.ticket_type_id))

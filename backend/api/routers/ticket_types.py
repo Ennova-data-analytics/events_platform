@@ -107,7 +107,7 @@ def update_ticket_type(
 ):
     """
     Update a ticket type (Organizer only).
-    Note: Cannot reduce capacity below current tickets_sold.
+    Note: Cannot reduce capacity below the seats already taken.
     """
     _ticket_type_of_event(db, event_id, ticket_type_id)
 

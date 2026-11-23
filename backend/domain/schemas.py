@@ -508,7 +508,7 @@ class TicketTypeResponse(TicketTypeBase):
     """Schema for ticket type in responses (includes computed fields)"""
     ticket_type_id: int
     event_id: int
-    tickets_sold: int
+    tickets_sold: int = Field(description="Seats taken: approved or paid registrations, plus friend seats they hold")
     tickets_available: int | None = Field(None, description="Remaining tickets (null if unlimited)")
     created_at: datetime
     updated_at: datetime
@@ -527,7 +527,7 @@ class TicketTypeResponse(TicketTypeBase):
             "price_euros": ticket_type.price_euros,
             "capacity": ticket_type.capacity,
             "tickets_sold": ticket_type.tickets_sold,
-            "tickets_available": ticket_type.capacity - ticket_type.tickets_sold if ticket_type.capacity else None,
+            "tickets_available": ticket_type.tickets_available,
             "form_template_id": ticket_type.form_template_id,
             "display_order": ticket_type.display_order,
             "is_active": ticket_type.is_active,
